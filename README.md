@@ -95,7 +95,7 @@ sealed interface PartUpload {
 
 ### 서버 통신
 
-서현이 `ApiClient` 하나(Retrofit, 서버 주소, `Authorization: Bearer` 붙이기, 오류 `{code, message}` 풀기)를 만들고, 지원은 그 위에 업로드 함수 하나만 써요. 주소, 필드, 오류 코드의 기준은 [LOLog-docs API 명세](https://github.com/LOLog-2026/LOLog-docs/blob/main/spec/api-spec.md)예요.
+서현이 `ApiClient` 하나(Retrofit, 서버 주소, `Authorization: Bearer` 붙이기, 오류 `{code, message}` 풀기)를 만들고, 지원은 그 위에 업로드 함수 하나만 써요. 주소와 오류 코드의 기준은 [API 명세](https://github.com/LOLog-2026/LOLog-docs/blob/main/spec/api-spec.md), 요청·응답 필드의 기준은 [API DTO](https://github.com/LOLog-2026/LOLog-docs/blob/main/spec/api-dto.md)예요.
 
 | API | 부르는 사람 |
 | --- | --- |
