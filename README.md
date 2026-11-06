@@ -123,7 +123,6 @@ sealed interface PartUpload {
 - 처음에는 **목업 모드**(`app/build.gradle.kts`의 `USE_MOCK=true`)라 서버 없이 모든 화면이 돌아가요. 녹음도 가짜(`data/mock/MockRecordingController`)라 마이크·STT 없이 시간만 흘러요.
 - 실제 서버로 바꾸려면 `local.properties`에 `LOLOG_BASE_URL`(없으면 `http://10.0.2.2:8080/`), 필요하면 `LOLOG_TEST_TOKEN`을 적고 `USE_MOCK`을 `false`로 바꿔요.
 - 실제 녹음은 지원 님 PR #3이 머지된 뒤 `AppContainer.recorder`를 `RealRecordingController`로 바꿔요(코드에 TODO).
-- 백엔드와 같이 정할 것은 [`docs/백엔드-프론트-같이-정할-것.md`](docs/백엔드-프론트-같이-정할-것.md)에 모았어요.
 - 글꼴 Pretendard, Nanum Pen Script는 SIL Open Font License 1.1이에요(`licenses/`).
 
 ### 목업에서 오류 화면 보기
