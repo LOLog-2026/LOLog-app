@@ -9,6 +9,8 @@
     <!-- 3시간 녹음을 이어가려면 포그라운드 서비스로 옮겨야 해요 (README 참고) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- 화면이 꺼져도 녹음 인식이 멈추지 않게 해요 (녹음 서비스) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
@@ -50,5 +52,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 녹음 서비스(지원). 화면이 꺼지거나 다른 앱을 써도 녹음이 이어져요 -->
+        <service
+            android:name=".recording.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
 </manifest>
