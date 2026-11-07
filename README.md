@@ -117,3 +117,23 @@ sealed interface PartUpload {
 | `recording` | 녹음 중 | 지원 | 녹음 중 상단 고정 알림 | 낮음 (소리 없음) |
 | `recording_end` | 녹음 종료 | 지원 | 3시간이 되어 녹음을 끝냈다는 알림 | 기본 |
 | `push` | 분석·만화 완료 | 서현 | FCM 푸시 | 기본 |
+
+## 화면 쪽 실행 안내 (서현)
+
+- 처음에는 **목업 모드**(`app/build.gradle.kts`의 `USE_MOCK=true`)라 서버 없이 모든 화면이 돌아가요. 녹음도 가짜(`data/mock/MockRecordingController`)라 마이크·STT 없이 시간만 흘러요.
+- 실제 서버로 바꾸려면 `local.properties`에 `LOLOG_BASE_URL`(없으면 `http://10.0.2.2:8080/`), 필요하면 `LOLOG_TEST_TOKEN`을 적고 `USE_MOCK`을 `false`로 바꿔요.
+- 실제 녹음은 지원 님 PR #3이 머지된 뒤 `AppContainer.recorder`를 `RealRecordingController`로 바꿔요(코드에 TODO).
+- 글꼴 Pretendard, Nanum Pen Script는 SIL Open Font License 1.1이에요(`licenses/`).
+
+### 목업에서 오류 화면 보기
+
+| 하는 것 | 결과 |
+| --- | --- |
+| 네이버로 시작하기 | 409 ACCOUNT_EXISTS 창 |
+| 회원가입에 `taken@lolog.app` | 409 ACCOUNT_EXISTS 창 |
+| 비밀번호 4자 미만 로그인 | INVALID_CREDENTIALS |
+| `offline@…`로 로그인 | 인터넷 끊김 |
+| 설정 → Google 연결하기 | 409 SOCIAL_ALREADY_LINKED |
+| 녹음 15초 안에 끝내기 | 이야기를 못 찾았어요 |
+| 만드는 중인 만화가 있는 카드 고치기 | CARD_LOCKED |
+| "택시 기사님의 인생 상담" 카드 | 3/3번, 버튼 잠김 (서버는 409 COMIC_LIMIT) |
