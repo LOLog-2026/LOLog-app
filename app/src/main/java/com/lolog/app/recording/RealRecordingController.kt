@@ -1,12 +1,12 @@
 package com.lolog.app.recording
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.lolog.app.data.remote.UploadRecordingRequest
 import com.lolog.app.data.remote.UploadRecordingResponse
+import com.lolog.app.notification.NotificationChannels
 import com.lolog.app.recording.stt.MicPcmSource
 import com.lolog.app.recording.stt.PcmSource
 import com.lolog.app.recording.stt.SttEngine
@@ -187,12 +187,9 @@ class RealRecordingController(
 
     private fun notifyLimitReached() {
         val manager = app.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(RecordingChannels.RECORDING_END, "녹음 종료", NotificationManager.IMPORTANCE_DEFAULT),
-        )
         manager.notify(
             LIMIT_NOTIFICATION_ID,
-            android.app.Notification.Builder(app, RecordingChannels.RECORDING_END)
+            android.app.Notification.Builder(app, NotificationChannels.RECORDING_END)
                 .setContentTitle("3시간이 지나 녹음을 끝냈어요")
                 .setContentText("계속하려면 다시 시작해 주세요")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)

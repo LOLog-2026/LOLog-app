@@ -1,8 +1,6 @@
 package com.lolog.app.recording
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -11,6 +9,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import com.lolog.app.notification.NotificationChannels
 
 /** 화면이 꺼지거나 다른 앱을 써도 녹음이 이어지게 한다. 실제 일은 RealRecordingController가 한다. */
 class RecordingService : Service() {
@@ -44,15 +43,11 @@ class RecordingService : Service() {
     }
 
     private fun notification(): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(RecordingChannels.RECORDING, "녹음 중", NotificationManager.IMPORTANCE_LOW),
-        )
         val stop = PendingIntent.getService(
             this, 0, Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        return Notification.Builder(this, RecordingChannels.RECORDING)
+        return Notification.Builder(this, NotificationChannels.RECORDING)
             .setContentTitle("녹음 중이에요")
             .setContentText("대화를 글자로 바꾸고 있어요. 음성은 폰 밖으로 나가지 않아요.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
@@ -74,9 +69,4 @@ class RecordingService : Service() {
             context.stopService(Intent(context, RecordingService::class.java))
         }
     }
-}
-
-object RecordingChannels {
-    const val RECORDING = "recording"
-    const val RECORDING_END = "recording_end"
 }
