@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LOLog</string>
+    <string name="channel_recording">녹음 중</string>
+    <string name="channel_recording_end">녹음 종료</string>
+    <string name="channel_push">새 카드·만화 알림</string>
+</resources>

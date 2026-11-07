@@ -109,23 +109,7 @@ Closes #
 
 위 공통 규칙에 더해, 이 레포에서는 아래를 따른다.
 
-## 8. 기준 문서
-
-작업 전에 아래 문서를 기준으로 삼는다. 코드와 문서가 다르면 고치기 전에 사람에게 묻는다.
-
-- 앱 구현 약속(담당, 앱 뼈대, 녹음↔화면 인터페이스, 알림 채널): https://claude.ai/artifact/XWyKc21kEBujTrHYNPGNwg
-- 서버 API 형식(최종 기준): https://claude.ai/artifact/SDcGuVd7Y4MHhmLYLvY95U
-- 기능·API 명세: https://github.com/LOLog-2026/LOLog-docs
-
-## 9. 프로젝트 설정
-
-- 패키지 `com.lolog.app`, Kotlin, minSdk 26, compileSdk·targetSdk 36
-- 화면: Jetpack Compose + Navigation Compose
-- 비동기: Coroutines + Flow / 서버 통신: Retrofit + OkHttp + kotlinx.serialization / 이미지: Coil
-- DI 라이브러리는 쓰지 않는다. 객체는 `AppContainer` 하나에 모은다.
-- 시험 기기: LG LMG900N (Android 13, API 33, arm64-v8a). 에뮬레이터는 없다.
-
-## 10. 폴더와 담당
+## 8. 폴더와 담당
 
 | 폴더 | 담당 | 내용 |
 | --- | --- | --- |
@@ -134,22 +118,5 @@ Closes #
 | `recording/` | 지원 | 녹음 서비스, 업로드 |
 | `recording/stt/` | 지원 | sherpa-onnx Kotlin API |
 
-- 두 사람이 같이 쓰는 약속 파일은 `recording/RecordingController.kt`(녹음 상태 인터페이스)와 `data/remote/ApiClient.kt`(서버 통신 연결부)다. 이 두 파일의 공개 모양(함수, 상태 값, 필드)을 바꿀 때는 먼저 사람에게 묻고, 앱 구현 약속 문서도 같이 고치도록 알린다.
+- 두 사람이 같이 쓰는 약속 파일은 `recording/RecordingController.kt`(녹음 상태 인터페이스)와 `data/remote/ApiClient.kt`(서버 통신 연결부)다. 이 두 파일의 공개 모양(함수, 상태 값, 필드)을 바꿀 때는 먼저 사람에게 묻는다.
 - 요청한 사람의 폴더 밖 코드는 고치지 않는다 (규칙 6).
-
-## 11. 비밀 값과 큰 파일
-
-- 서버 주소와 테스트 토큰은 `local.properties`의 `LOLOG_BASE_URL`, `LOLOG_TEST_TOKEN`에 두고 BuildConfig로 읽는다. `local.properties`는 커밋하지 않는다.
-- sherpa-onnx `.so` 파일(`app/src/main/jniLibs/arm64-v8a/`)과 모델 파일(`app/src/main/assets/`)은 크기가 커서 커밋하지 않는다. 받는 방법은 README에 적는다.
-- `google-services.json`(FCM)도 커밋하지 않는다.
-
-## 12. 빌드·실행
-
-```bash
-./gradlew assembleDebug          # 빌드
-./gradlew installDebug           # 연결된 폰에 설치
-adb devices                      # 폰 연결 확인 (adb는 ~/Library/Android/sdk/platform-tools)
-adb logcat | grep -i lolog       # 로그 보기
-```
-
-- 코드를 고친 뒤에는 최소한 `./gradlew assembleDebug`가 통과하는지 확인하고 결과를 알린다.
