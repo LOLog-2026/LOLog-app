@@ -21,7 +21,7 @@ import kotlinx.serialization.Serializable
 data class ErrorDto(
     val code: String = "",
     val message: String = "",
-    val field: String? = null, // 명세에 없음(제안): 틀린 칸 이름. 없으면 앱이 화면에서 직접 검사해요
+    val field: String? = null, // 400 INVALID_REQUEST일 때 틀린 칸 경로(예: lines[2].text). 다른 오류는 null
 )
 
 // ── 인증 (/auth) ──
@@ -116,7 +116,7 @@ data class CardSummaryDto(
     val endMs: Long = 0,
     val comicCount: Int = 0, // 실패한 것 빼고, 만드는 중 포함
     val createdAt: String = "",
-    // 아래는 명세에 없음(제안): 목록에 "장소 · 대사 N개"를 보여 주려고. 없으면 녹음 날짜만 보여요
+    // 목록에 "장소 · 대사 N개"를 보여 줘요. lineCount는 명세상 필수지만 서버가 빼도 화면이 깨지지 않게 null을 받아요
     val place: String? = null,
     val lineCount: Int? = null,
 )
@@ -139,7 +139,7 @@ data class CardDetailDto(
     val lines: List<LineDto> = emptyList(),
     val comics: List<ComicRefDto> = emptyList(), // 최신순
     val createdAt: String = "",
-    val comicRemaining: Int? = null, // 명세에 없음(제안): 남은 횟수. 없으면 앱이 comics에서 실패를 빼고 계산
+    val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
 )
 
 // PATCH /api/cards/{id} 본문(CardUpdateRequest)은 "null을 보내면 지움" 규칙이 있어서
@@ -159,11 +159,11 @@ data class ComicDto(
     val status: String? = null,
     val imageUrl: String? = null, // DONE일 때만. 10분짜리 서명 주소라 저장하지 않고, 403이면 다시 조회
     val createdAt: String? = null,
-    // 아래는 명세에 없음(제안). 없으면: 크기는 1024×4096으로 보고, 목록 썸네일은 imageUrl 첫 칸을 잘라 써요
+    // thumbnailUrl·width·height는 명세에 없어요(제안). 서버가 안 주면 크기는 기본값으로 보고, 목록 썸네일은 imageUrl 첫 칸을 잘라 써요
     val thumbnailUrl: String? = null,
     val width: Int? = null,
     val height: Int? = null,
-    val cardSummary: String? = null,
+    val cardSummary: String? = null, // 명세상 필수. 서버가 빼도 화면이 깨지지 않게 null을 받아요
 )
 
 @Serializable

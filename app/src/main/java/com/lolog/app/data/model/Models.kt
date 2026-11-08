@@ -35,7 +35,7 @@ object ErrorCodes {
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
 }
 
-/** 글자 수 제한 (11/5 프론트 확정). 명세 서버 한도는 이름 20·장소 50·대사 500자라 앱이 더 짧게 막아요 */
+/** 글자 수 제한 (11/5 프론트 확정). 명세·서버 한도와 같아요(화자 이름 10·장소 20·대사 200자) */
 object TextLimits {
     const val SPEAKER_NAME = 10
     const val PLACE = 20
