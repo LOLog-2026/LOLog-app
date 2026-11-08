@@ -68,6 +68,8 @@ class SttEngine(
         var capture: Thread? = null
         var error: Throwable? = null
         try {
+            // 마이크는 이미 켜져 있다. 모델을 불러오는 몇 초 동안의 말도 링버퍼에 담기게 먼저 읽기 시작한다.
+            capture = startCapture()
             recognizer = OfflineRecognizer(
                 assetManager = assets,
                 config = OfflineRecognizerConfig(
@@ -100,7 +102,6 @@ class SttEngine(
                     provider = "cpu",
                 ),
             )
-            capture = startCapture()
             process(vad, recognizer)
         } catch (t: Throwable) {
             error = t
