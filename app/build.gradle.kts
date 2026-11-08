@@ -7,6 +7,13 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// FCM: app/google-services.json이 있을 때만 Firebase 설정을 넣어요. 이 파일은 커밋하지 않아요(.gitignore).
+// 파일이 없는 PC에서도 빌드는 되고, 그때는 푸시만 꺼져요(PushTokens가 Firebase가 없으면 건너뜀).
+// 파일은 Firebase 콘솔 → 프로젝트 설정 → 내 앱(com.lolog.app)에서 받아요.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // 서버 주소·테스트 토큰은 local.properties에 둬요(커밋 안 함, CLAUDE.md 11번)
 //   LOLOG_BASE_URL=http://10.0.2.2:8080/
 //   LOLOG_TEST_TOKEN=...
@@ -84,6 +91,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
 }
