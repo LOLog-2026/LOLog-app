@@ -32,7 +32,11 @@ import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Account
 import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.repo.LologException
+import com.lolog.app.BuildConfig
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.recording.RecordingController
+import com.lolog.app.recording.RecordingState
+import kotlinx.coroutines.flow.first
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -41,7 +45,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class SettingsViewModel(private val repo: LologRepository) : ViewModel() {
+class SettingsViewModel(
+    private val repo: LologRepository,
+    private val recorder: RecordingController,
+) : ViewModel() {
     data class State(
         val me: Account? = null,
         val linking: SocialProvider? = null,
@@ -74,6 +81,11 @@ class SettingsViewModel(private val repo: LologRepository) : ViewModel() {
     /** POST /auth/logout + DELETE /api/devices/fcm-token */
     fun logout() = viewModelScope.launch {
         _state.update { it.copy(busy = true) }
+        // 녹음 중이면 마감해 올린 뒤 로그아웃해요(FR-AUTH-04)
+        recorder.stop()
+        recorder.state.first { it !is RecordingState.Recording && it !is RecordingState.Uploading }
+        // 그래도 못 올린 글은 다음에 로그인한 계정으로 올라가지 않게 토큰을 지우기 전에 버려요
+        recorder.discardAll()
         repo.logout()
         _state.update { it.copy(busy = false, loggedOut = true) }
     }
@@ -81,7 +93,12 @@ class SettingsViewModel(private val repo: LologRepository) : ViewModel() {
     /** DELETE /auth/me — 회원 정보 소프트 삭제, 서버가 카드·만화를 모두 지움 */
     fun withdraw() = viewModelScope.launch {
         _state.update { it.copy(busy = true) }
-        try { repo.withdraw(); _state.update { it.copy(busy = false, loggedOut = true) } }
+        try {
+            repo.withdraw()
+            // 진행 중인 녹음은 올리지 않고 버려요(FR-AUTH-05)
+            recorder.discardAll()
+            _state.update { it.copy(busy = false, loggedOut = true) }
+        }
         catch (e: LologException) { _state.update { it.copy(busy = false, toast = e.message) } }
     }
 
@@ -93,11 +110,13 @@ class SettingsViewModel(private val repo: LologRepository) : ViewModel() {
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
     val container = LocalContainer.current
-    val vm = viewModel { SettingsViewModel(container.repository) }
+    val vm = viewModel { SettingsViewModel(container.repository, container.recorder) }
     val state by vm.state.collectAsState()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var askLogout by remember { mutableStateOf(false) }
+    val recorderState by container.recorder.state.collectAsState()
+    val recording = recorderState is RecordingState.Recording
     var askWithdraw by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.load() }
@@ -140,6 +159,9 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                         when {
                             linked -> Text("연결됨", fontSize = 13.sp, color = LologColors.Muted)
                             state.linking == p -> TypingDots(dot = 6.dp)
+                            // 소셜 SDK가 붙기 전에는 실제 서버에 가짜 토큰을 보내면 401 INVALID_TOKEN으로 로그인이 풀려요.
+                            // 로그인 화면처럼 "준비 중"으로 두고 눌리지 않게 해요(목업에서는 그대로 시험할 수 있어요)
+                            !BuildConfig.USE_MOCK -> Text("준비 중", fontSize = 13.sp, color = LologColors.Muted)
                             else -> SmallPillButton("연결하기", { vm.link(p) })
                         }
                     }
@@ -171,7 +193,11 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
     if (askLogout) {
         LologDialog(
             title = "로그아웃할까요?",
-            body = "이 폰에서는 알림이 오지 않아요. 카드와 만화는 그대로 남아 있어요.",
+            body = if (recording) {
+                "녹음 중이에요. 로그아웃하면 녹음이 멈추고, 지금까지 녹음한 내용은 올린 뒤 로그아웃돼요"
+            } else {
+                "이 폰에서는 알림이 오지 않아요. 카드와 만화는 그대로 남아 있어요."
+            },
             confirmText = "로그아웃",
             loading = state.busy,
             onConfirm = { vm.logout() },
