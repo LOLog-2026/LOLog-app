@@ -51,7 +51,7 @@ class LibraryViewModel(private val repo: LologRepository) : ViewModel() {
             val page = repo.cards(null, 20)
             _state.update { it.copy(cards = page.cards, nextCursor = page.nextCursor, loading = false) }
         } catch (e: LologException) {
-            _state.update { it.copy(loading = false, error = e.message.ifBlank { "카드를 불러오지 못했어요" }) }
+            _state.update { it.copy(loading = false, error = errorText(e)) }
         }
     }
 

@@ -27,6 +27,8 @@ interface LologRepository {
     // 녹음
     suspend fun uploadRecording(part: RecordingPart): RecordingAccepted
     suspend fun recordingStatus(recordingId: Long): RecordingProgress
+    /** 앱을 다시 켰을 때 아직 "분석 중"인 가장 최근 녹음(GET /api/recordings?status=RECEIVED,DETECTING). 없으면 null */
+    suspend fun analyzingRecordingId(): Long?
 
     // 카드
     suspend fun cards(cursor: String? = null, size: Int = 20): CardPage

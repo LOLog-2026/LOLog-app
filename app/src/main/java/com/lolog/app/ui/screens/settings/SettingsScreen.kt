@@ -73,7 +73,7 @@ class SettingsViewModel(
             val linked = repo.linkSocial(provider, "mock-${provider.name.lowercase()}-token")
             _state.update { s -> s.copy(linking = null, me = s.me?.copy(linkedProviders = linked), toast = "${provider.label} 계정을 연결했어요") }
         } catch (e: LologException) {
-            val msg = if (e.code == ErrorCodes.SOCIAL_ALREADY_LINKED) "이미 다른 LOLog 계정에 연결된 ${provider.label} 계정이에요" else e.message
+            val msg = errorText(e)
             _state.update { it.copy(linking = null, toast = msg) }
         }
     }
@@ -99,7 +99,7 @@ class SettingsViewModel(
             recorder.discardAll()
             _state.update { it.copy(busy = false, loggedOut = true) }
         }
-        catch (e: LologException) { _state.update { it.copy(busy = false, toast = e.message) } }
+        catch (e: LologException) { _state.update { it.copy(busy = false, toast = errorText(e)) } }
     }
 
     fun toastShown() = _state.update { it.copy(toast = null) }

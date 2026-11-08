@@ -1,5 +1,7 @@
 package com.lolog.app.ui.components
 
+import com.lolog.app.data.model.COMIC_HEIGHT
+import com.lolog.app.data.model.COMIC_WIDTH
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -21,7 +23,7 @@ import com.lolog.app.ui.theme.LologColors
 private val panelColors = listOf(Color(0xFFFFF4DB), Color(0xFFE7ECFF), Color(0xFFE1F5F1), Color(0xFFFFE9E6))
 
 /**
- * 완성된 4컷 한 장. 컷 배치는 세로 4칸이라 이미지가 세로로 길어요(11/5 확정: 1024×4096).
+ * 완성된 4컷 한 장. 컷 배치는 세로 4칸이라 이미지가 세로로 길어요(명세: 800×3152).
  * 서버가 준 width/height 비율(ratio)만큼 자리를 먼저 잡고 회색으로 채워 둬요. 그림이 들어와도 화면이 출렁이지 않아요.
  * 목업 주소(mock://)면 대사로 임시 그림을 그려요.
  * small = true(목록 썸네일)면 1컷 정사각형만 보여요. 명세엔 썸네일이 없어서 imageUrl 위쪽 첫 칸을 잘라 보여요.
@@ -85,8 +87,8 @@ fun ComicImage(
     }
 }
 
-/** 세로 4칸 한 장의 가로:세로 (컷이 정사각형이라고 가정. 실제 이미지 크기가 정해지면 맞춰요) */
-const val COMIC_RATIO = 1f / 4f
+/** 세로 4칸 한 장의 가로:세로(명세 800×3152) */
+const val COMIC_RATIO = COMIC_WIDTH.toFloat() / COMIC_HEIGHT
 
 /** 임시 그림의 사람 실루엣 */
 @Composable

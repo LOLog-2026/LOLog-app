@@ -42,10 +42,15 @@ object TextLimits {
     const val LINE = 200
 }
 
-/** FR-AUTH-01 + api-dto.md: 8~64자, 영문·숫자 포함 */
+/** FR-AUTH-01 + api-dto.md: 8~64자, 영문·숫자 포함, UTF-8로 72바이트 이하(BCrypt 한도) */
 const val PASSWORD_MIN = 8
 const val PASSWORD_MAX = 64
-fun isValidPassword(pw: String): Boolean = pw.length in PASSWORD_MIN..PASSWORD_MAX && pw.any { it.isLetter() } && pw.any { it.isDigit() }
+const val PASSWORD_MAX_BYTES = 72
+fun isValidPassword(pw: String): Boolean =
+    pw.length in PASSWORD_MIN..PASSWORD_MAX &&
+        pw.toByteArray(Charsets.UTF_8).size <= PASSWORD_MAX_BYTES &&
+        pw.any { it in 'a'..'z' || it in 'A'..'Z' } && // isLetter()는 한글도 문자로 쳐서 영문만 봐요
+        pw.any { it in '0'..'9' }
 
 enum class SocialProvider(val label: String) { KAKAO("카카오"), GOOGLE("Google"), NAVER("네이버") }
 
@@ -129,9 +134,15 @@ data class CardDetail(
  * 카드 고치기(PATCH): 바꾼 것만 채워요(null = 안 바꿈).
  *  speakers = 이름을 바꾼 화자만(name null = 이름 지움), lines = 고친 대사만, place = 장소를 지우면 ""
  */
+/**
+ * 고친 대사 하나(api-dto LineUpdate). speaker·text는 바꾼 것만 넣어요.
+ * 화자만 바꾼 대사에 원래 text를 같이 보내면, LLM이 만든 200자 넘는 대사는 서버가 400으로 거절해요.
+ */
+data class LineEdit(val id: Long, val speaker: String? = null, val text: String? = null)
+
 data class CardEdit(
     val speakers: List<Speaker>? = null,
-    val lines: List<Line>? = null,
+    val lines: List<LineEdit>? = null,
     val place: String? = null,
 ) {
     val isEmpty: Boolean get() = speakers == null && lines == null && place == null
@@ -142,9 +153,9 @@ data class CardEdit(
 /** 설계 문서 FR-COMIC-04: 한 카드로 만화는 3번까지 (넘으면 409 COMIC_LIMIT). 실패는 안 세요 */
 const val COMIC_LIMIT_PER_CARD = 3
 
-/** 만화 그림 크기 (11/5 프론트 확정): 컷 1024×1024, 세로 4칸 → 1024×4096 */
-const val COMIC_WIDTH = 1024
-const val COMIC_HEIGHT = 4096
+/** 만화 그림 크기(api-dto ComicResponse, storyboard.md): 세로 4칸 PNG 한 장 800×3152 */
+const val COMIC_WIDTH = 800
+const val COMIC_HEIGHT = 3152
 
 enum class ComicStatus { QUEUED, STORYBOARD, DRAWING, DONE, FAILED, UNKNOWN }
 
@@ -193,7 +204,7 @@ data class ComicDetail(
     val cardDeleted: Boolean = false,
     val cardSummary: String? = null,
 ) {
-    /** 세로 4칸 한 장의 가로:세로 비율. 서버 크기가 없으면 1024×4096 */
+    /** 세로 4칸 한 장의 가로:세로 비율. 서버 크기가 없으면 명세 크기 800×3152 */
     val ratio: Float get() = (width ?: COMIC_WIDTH).toFloat() / (height ?: COMIC_HEIGHT).toFloat()
 }
 

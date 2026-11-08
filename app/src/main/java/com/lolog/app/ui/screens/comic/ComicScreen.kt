@@ -76,7 +76,7 @@ class ComicViewModel(private val repo: LologRepository, private val id: Long) : 
                     _state.update { it.copy(comic = c, card = card, error = null) }
                     if (!c.status.inProgress) break
                 } catch (e: LologException) {
-                    _state.update { it.copy(error = e.message) }
+                    _state.update { it.copy(error = errorText(e)) }
                     if (e.code == ErrorCodes.COMIC_NOT_FOUND) break
                 }
                 delay(interval)
@@ -102,10 +102,14 @@ class ComicViewModel(private val repo: LologRepository, private val id: Long) : 
     fun delete() = viewModelScope.launch {
         _state.update { it.copy(busy = true) }
         try { repo.deleteComic(id); _state.update { it.copy(busy = false, deleted = true) } }
-        catch (e: LologException) { _state.update { it.copy(busy = false, toast = e.message) } }
+        catch (e: LologException) { _state.update { it.copy(busy = false, toast = errorText(e)) } }
     }
 
     fun toast(msg: String?) = _state.update { it.copy(toast = msg) }
+
+    /** 저장·공유하다 주소가 만료(403)되면 만화를 다시 조회해 새 imageUrl을 받아요 */
+    suspend fun freshImageUrl(): String? =
+        runCatching { repo.comic(id) }.getOrNull()?.also { c -> _state.update { it.copy(comic = c) } }?.imageUrl
 
     /** imageUrl은 10분 뒤 만료돼요(명세). 그림을 못 받으면 만화를 다시 조회해 새 주소를 받아요. 같은 주소로는 한 번만 */
     private var refreshedFor: String? = null
@@ -156,7 +160,8 @@ fun ComicScreen(
                 },
                 onBack,
             ) {
-                if (stage == ComicStage.DONE || stage == ComicStage.FAILED) {
+                // 만드는 중인 만화도 지울 수 있어요(FR-LIB-03). 작업이 멈췄을 때 카드를 풀 수 있게요
+                if (comic != null) {
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "더 보기") }
                         DropdownMenu(menu, { menu = false }) {
@@ -177,7 +182,7 @@ fun ComicScreen(
                     // 저장: 바로 갤러리에 넣고 "갤러리에 저장했어요"
                     scope.launch {
                         val lines = state.card?.lines?.map { it.text }.orEmpty()
-                        val bytes = comic.imageUrl?.let { ComicExport.pngBytes(it, lines, container.network) }
+                        val bytes = comic.imageUrl?.let { ComicExport.pngBytes(it, lines, container.network, vm::freshImageUrl) }
                         vm.toast(
                             when {
                                 bytes == null -> "이미지를 받지 못했어요"
@@ -200,12 +205,16 @@ fun ComicScreen(
     }
 
     if (shareSheet && comic != null) {
-        ShareSheet(comic, state.card, container.network, onDone = { msg -> shareSheet = false; vm.toast(msg) }, onDismiss = { shareSheet = false })
+        ShareSheet(comic, state.card, container.network, vm::freshImageUrl, onDone = { msg -> shareSheet = false; vm.toast(msg) }, onDismiss = { shareSheet = false })
     }
     if (askDelete) {
         LologDialog(
             title = "이 만화를 지울까요?",
-            body = "지운 만화는 되돌릴 수 없어요.",
+            body = if (comic?.status?.inProgress == true) {
+                "만들고 있는 만화도 멈추고 지워요. 되돌릴 수 없고, 지운 만화도 만들기 횟수에 세요."
+            } else {
+                "지운 만화는 되돌릴 수 없어요."
+            },
             confirmText = "지우기",
             danger = true,
             loading = state.busy,
@@ -340,14 +349,21 @@ private fun Viewer(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShareSheet(comic: ComicDetail, card: CardDetail?, network: ApiClient?, onDone: (String?) -> Unit, onDismiss: () -> Unit) {
+private fun ShareSheet(
+    comic: ComicDetail,
+    card: CardDetail?,
+    network: ApiClient?,
+    freshUrl: suspend () -> String?,
+    onDone: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lines = card?.lines?.map { it.text }.orEmpty()
     val name = "lolog_comic_${comic.id}"
 
     fun withBytes(block: suspend (ByteArray) -> String?) = scope.launch {
-        val bytes = comic.imageUrl?.let { ComicExport.pngBytes(it, lines, network) }
+        val bytes = comic.imageUrl?.let { ComicExport.pngBytes(it, lines, network, freshUrl) }
         onDone(if (bytes == null) "이미지를 받지 못했어요" else block(bytes))
     }
 
@@ -407,8 +423,7 @@ private fun Failed(comic: ComicDetail, left: Int?, busy: Boolean, onRetry: () ->
         StepList(
             listOf(
                 StepItem("대기", comic.createdAt?.let { "${timeOnly(it)} 요청 받음" } ?: "", StepState.DONE),
-                // 어느 단계에서 멈췄는지는 API에 없어서 "만드는 중"까지 지난 것으로 보여 줘요
-                StepItem("만드는 중", "콘티까지 짰어요", StepState.DONE),
+                // 어느 단계에서 멈췄는지는 앱에 오지 않아요(명세: 실패 이유는 앱에 보내지 않음). 지난 단계를 지어내지 않아요
                 StepItem("실패", "다시 시도하면 새로 그려요. 대사를 줄이거나 등장인물을 정리하면 더 잘 그려져요", StepState.FAILED),
             ),
         )

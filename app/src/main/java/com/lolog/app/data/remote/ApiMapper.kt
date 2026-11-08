@@ -89,7 +89,7 @@ object ApiMapper {
     /**
      * PATCH /api/cards/{id} 본문(CardUpdateRequest). 바꾼 것만 넣어요.
      *  - speakers: [{ key, name }] 바꾼 화자만. name이 null이면 이름 지움 → JSON에 "name": null 을 꼭 넣어요
-     *  - lines: [{ id, speaker, text }] 바꾼 대사만
+     *  - lines: [{ id, speaker?, text? }] 바꾼 대사만, 그 안에서도 바꾼 칸만
      *  - place: 바꿨을 때만. 지웠으면 "place": null
      * Json 설정(explicitNulls=false)이 null을 빼 버려서 DTO 대신 직접 만들어요.
      */
@@ -101,7 +101,13 @@ object ApiMapper {
         }
         lines?.let { list ->
             put("lines", buildJsonArray {
-                list.forEach { l -> add(buildJsonObject { put("id", l.id); put("speaker", l.speaker); put("text", l.text) }) }
+                list.forEach { l ->
+                    add(buildJsonObject {
+                        put("id", l.id)
+                        l.speaker?.let { put("speaker", it) }
+                        l.text?.let { put("text", it) }
+                    })
+                }
             })
         }
         place?.let { p -> put("place", p.ifBlank { null }) }

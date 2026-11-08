@@ -61,7 +61,7 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
             val p = repo.comics(null, 20)
             _state.update { it.copy(comics = p.comics, nextCursor = p.nextCursor, loading = false, error = null) }
         } catch (e: LologException) {
-            _state.update { it.copy(loading = false, error = e.message) }
+            _state.update { it.copy(loading = false, error = errorText(e)) }
         }
     }
 

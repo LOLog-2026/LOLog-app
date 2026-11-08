@@ -22,12 +22,28 @@ import java.io.File
  */
 object ComicExport {
 
-    suspend fun pngBytes(imageUrl: String, mockLines: List<String>, network: ApiClient?): ByteArray? = withContext(Dispatchers.IO) {
+    /**
+     * @param freshUrl 서명 주소가 만료(403)됐을 때 GET /api/comics/{id}로 새 주소를 받아 와요(명세 imageUrl). 한 번만 다시 받아요
+     */
+    suspend fun pngBytes(
+        imageUrl: String,
+        mockLines: List<String>,
+        network: ApiClient?,
+        freshUrl: suspend () -> String?,
+    ): ByteArray? = withContext(Dispatchers.IO) {
         if (imageUrl.startsWith("mock://") || network == null) {
             val out = ByteArrayOutputStream()
             ComicBitmap.render(mockLines).compress(Bitmap.CompressFormat.PNG, 100, out)
-            out.toByteArray()
-        } else network.download(imageUrl)
+            return@withContext out.toByteArray()
+        }
+        when (val first = network.download(imageUrl)) {
+            is ApiClient.Download.Ok -> first.bytes
+            ApiClient.Download.Failed -> null
+            ApiClient.Download.Expired -> {
+                val again = freshUrl()?.let { network.download(it) }
+                (again as? ApiClient.Download.Ok)?.bytes
+            }
+        }
     }
 
     /** 갤러리(Pictures/LOLog)에 저장 */

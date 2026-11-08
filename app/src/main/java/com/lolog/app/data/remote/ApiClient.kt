@@ -63,7 +63,9 @@ class ApiClient(private val tokens: TokenStore) {
                 LologJson.decodeFromString(ErrorDto.serializer(), response.peekBody(4096).string()).code
             }.getOrDefault("")
             if (code != "TOKEN_EXPIRED") {
-                if (code == "INVALID_TOKEN" || code == "UNAUTHORIZED") tokens.expire()
+                // 소셜 연결의 INVALID_TOKEN은 그 회사가 providerToken을 거절한 것일 수 있어요(api-dto 오류 표). 로그인은 그대로 두고 화면에 알려요
+                val socialLink = path.startsWith("/auth/me/social")
+                if ((code == "INVALID_TOKEN" && !socialLink) || code == "UNAUTHORIZED") tokens.expire()
                 return null
             }
             val usedToken = response.request.header("Authorization")?.removePrefix("Bearer ")
@@ -83,7 +85,12 @@ class ApiClient(private val tokens: TokenStore) {
                 )
                 val res = runCatching { call.execute() }.getOrNull() ?: return null // 인터넷 끊김: 로그아웃하지 않음
                 res.use {
-                    if (!it.isSuccessful) { tokens.expire(); return null }
+                    // 리프레시 토큰이 만료·무효(401, 400)일 때만 로그인 화면으로 보내요(FR-AUTH-03).
+                    // 서버 오류(5xx)나 요청 제한(429)이면 로그인은 그대로 두고 이번 요청만 실패해요
+                    if (!it.isSuccessful) {
+                        if (it.code == 401 || it.code == 400) tokens.expire()
+                        return null
+                    }
                     val t = LologJson.decodeFromString(TokenDto.serializer(), it.body!!.string())
                     tokens.save(t.accessToken, t.refreshToken)
                     return response.request.newBuilder()
@@ -120,9 +127,27 @@ class ApiClient(private val tokens: TokenStore) {
     val auth: AuthApi = retrofit.create(AuthApi::class.java)
     val main: MainApi = retrofit.create(MainApi::class.java)
 
-    /** 만화 이미지 받기(저장·공유용). imageUrl은 10분짜리 서명 주소라 토큰을 붙이지 않아도 돼요 */
-    fun download(url: String): ByteArray? {
+    /**
+     * 만화 이미지 받기(저장·공유용). imageUrl은 10분짜리 서명 주소라 토큰 없이 받아요.
+     * 같은 호스트(Nginx의 /lolog-comics/)여도 토큰을 붙이면 저장소가 서명 요청을 거절할 수 있어서 plainClient를 써요.
+     */
+    fun download(url: String): Download {
         val req = Request.Builder().url(url).build()
-        return runCatching { client.newCall(req).execute().use { if (it.isSuccessful) it.body?.bytes() else null } }.getOrNull()
+        return runCatching {
+            plainClient.newCall(req).execute().use {
+                when {
+                    it.isSuccessful -> it.body?.bytes()?.let(Download::Ok) ?: Download.Failed
+                    it.code == 403 -> Download.Expired
+                    else -> Download.Failed
+                }
+            }
+        }.getOrDefault(Download.Failed)
+    }
+
+    sealed interface Download {
+        class Ok(val bytes: ByteArray) : Download
+        /** 서명 주소가 만료됨(403). GET /api/comics/{id}로 새 주소를 받아 다시 받아요 */
+        data object Expired : Download
+        data object Failed : Download
     }
 }
