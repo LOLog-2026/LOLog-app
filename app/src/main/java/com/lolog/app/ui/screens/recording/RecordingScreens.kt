@@ -352,7 +352,8 @@ private fun NoStory(failed: Boolean, onHome: () -> Unit) {
         if (failed) {
             Text("분석하지 못했어요", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("잠시 후 다시 확인해 주세요.", fontSize = 14.sp, color = LologColors.Muted, textAlign = TextAlign.Center)
+            // FAILED는 끝난 상태예요. 서버가 여러 번 시도한 뒤라 기다려도 바뀌지 않아요(FR-CARD 예외)
+            Text("여러 번 시도했지만 이번 녹음은 정리하지 못했어요.\n다음 녹음부터 다시 찾아볼게요.", fontSize = 14.sp, color = LologColors.Muted, textAlign = TextAlign.Center)
         } else {
             Text("이번 대화에서는", fontSize = 16.sp, color = LologColors.Muted)
             Text("카드로 남길 이야기를 못 찾았어요", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)

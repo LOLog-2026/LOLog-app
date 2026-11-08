@@ -53,10 +53,10 @@ fun errorText(e: Throwable): String {
     val ex = e as? LologException ?: return "잠시 후 다시 시도해 주세요"
     return when (ex.code) {
         ErrorCodes.COMIC_LIMIT -> "이 카드는 ${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
-        ErrorCodes.ACCOUNT_EXISTS -> "이미 가입된 이메일이에요. 로그인해 주세요"
-        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이 계정은 다른 LOLog 계정에 연결돼 있어요"
+        ErrorCodes.ACCOUNT_EXISTS -> "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요"
+        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 계정에 연결된 소셜 계정이에요"
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
-        ErrorCodes.INVALID_CREDENTIALS -> "이메일이나 비밀번호가 맞지 않아요"
+        ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> "입력한 내용을 확인해 주세요"
         ErrorCodes.UNKNOWN_SPEAKER -> "화자를 다시 골라 주세요"
         ErrorCodes.RECORDING_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
@@ -66,7 +66,8 @@ fun errorText(e: Throwable): String {
         ErrorCodes.COMIC_IN_PROGRESS -> "지금 그리는 만화가 끝나면 다시 그릴 수 있어요"
         ErrorCodes.TOKEN_EXPIRED -> "다시 로그인해 주세요"
         ErrorCodes.NETWORK -> "인터넷 연결을 확인하고 다시 시도해 주세요"
-        else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else ex.message.ifBlank { "문제가 생겼어요. 잠시 후 다시 시도해 주세요" }
+        // 서버의 message는 개발자용이라 화면에 그대로 띄우지 않아요(api-dto ErrorResponse)
+        else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else "문제가 생겼어요. 잠시 후 다시 시도해 주세요"
     }
 }
 

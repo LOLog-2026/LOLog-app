@@ -111,6 +111,12 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         return recordings[recordingId] ?: throw LologException("RECORDING_NOT_FOUND", "녹음을 찾지 못했어요")
     }
 
+    override suspend fun analyzingRecordingId(): Long? {
+        net(150)
+        return recordings.filterValues { it.status == RecordingStatus.RECEIVED || it.status == RecordingStatus.DETECTING }
+            .keys.maxOrNull()
+    }
+
     private fun runDetection(recordingId: Long) = scope.launch {
         delay(1_500)
         recordings[recordingId] = RecordingProgress(RecordingStatus.DETECTING, 0)
@@ -166,9 +172,12 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         patch.lines?.forEach { l ->
             val i = card.lines.indexOfFirst { it.id == l.id }
             if (i < 0) bad("lines", "이 카드의 대사가 아니에요")
-            if (l.speaker !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
-            if (l.text.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
-            if (l.text.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
+            if (l.speaker != null && l.speaker !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
+            // 고쳐 보낸 대사에만 글자 수를 검사해요(명세)
+            l.text?.let { t ->
+                if (t.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
+                if (t.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
+            }
         }
         patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
     }
@@ -185,7 +194,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         val ln = patch.lines?.associateBy { it.id }.orEmpty()
         val updated = card.copy(
             speakers = card.speakers.map { sp[it.key] ?: it },
-            lines = card.lines.map { ln[it.id] ?: it },
+            lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old },
             place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
         )
         cardStore[cardStore.indexOf(card)] = updated

@@ -96,7 +96,14 @@ class CardEditViewModel(private val repo: LologRepository, private val id: Long)
         // 명세 PATCH: 바꾼 화자·대사만 보내요
         return CardEdit(
             speakers = speakers.filter { speakerChanged(it) }.ifEmpty { null },
-            lines = lines.filter { lineChanged(it) }.ifEmpty { null },
+            lines = lines.mapNotNull { now ->
+                val before = o.lines.firstOrNull { it.id == now.id } ?: return@mapNotNull LineEdit(now.id, now.speaker, now.text)
+                LineEdit(
+                    id = now.id,
+                    speaker = now.speaker.takeIf { it != before.speaker },
+                    text = now.text.takeIf { it != before.text },
+                ).takeIf { it.speaker != null || it.text != null }
+            }.ifEmpty { null },
             place = place.trim().takeIf { it != o.place.orEmpty() },
         )
     }

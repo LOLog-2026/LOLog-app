@@ -31,7 +31,7 @@ class Notifier(private val context: Context) {
         val (channel, title, body) = when (payload.type) {
             PushType.CARDS_CREATED -> Triple(NotificationChannels.PUSH, "새 이야기 카드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
             PushType.COMIC_DONE -> Triple(NotificationChannels.PUSH, "4컷만화가 완성됐어요 🎉", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
-            PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 그리지 못했어요", "다시 그리거나 카드를 고쳐 볼 수 있어요.")
+            PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 만들지 못했어요", "다시 그리거나 카드를 고쳐 볼 수 있어요.")
         }
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

@@ -101,6 +101,13 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
         }
     }
 
+    /** 앱을 다시 켰을 때 아직 "분석 중"인 녹음이 있으면 이어서 지켜봐요(api-spec GET /api/recordings) */
+    fun resumeAnalysis() = viewModelScope.launch {
+        if (_analysis.value != null) return@launch
+        val id = runCatching { repo.analyzingRecordingId() }.getOrNull() ?: return@launch
+        if (_analysis.value == null) watch(id)
+    }
+
     fun dismiss() { watchJob?.cancel(); _analysis.value = null }
 }
 
@@ -121,7 +128,10 @@ fun HomeScreen(
     val state by vm.state.collectAsState()
     val analysis by vm.analysis.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(Unit) {
+        vm.load()
+        if (finishedRecordingId == null) vm.resumeAnalysis()
+    }
     // 녹음 끝내고 돌아왔을 때: 정리 상태 보기 시작 + 아래 검은 띠 한 번
     LaunchedEffect(finishedRecordingId) {
         val id = finishedRecordingId ?: return@LaunchedEffect

@@ -1,5 +1,6 @@
 package com.lolog.app.ui.screens.start
 
+import com.lolog.app.BuildConfig
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -122,8 +123,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                     val s = it.copy(loading = false)
                     when {
                         code == ErrorCodes.ACCOUNT_EXISTS && provider != null -> s.copy(accountExists = provider)
-                        code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 이메일이에요. 로그인해 주세요")
-                        code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일이나 비밀번호가 맞지 않아요")
+                        code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
+                        code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")
                         (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "email" ->
                             s.copy(emailError = "이메일 형식을 확인해 주세요")
                         (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "password" ->
@@ -398,8 +399,11 @@ fun PermissionScreen(onDone: () -> Unit) {
 
     fun finish() {
         // 허용 후 푸시 토큰 등록 (PUT /api/devices/fcm-token)
-        // TODO(FCM): FirebaseMessaging.getInstance().token 으로 받은 값을 넣기
-        scope.launch { runCatching { container.repository.registerFcmToken("mock-fcm-token") } }
+        // TODO(FCM): FirebaseMessaging.getInstance().token 으로 받은 값을 넣기. 그 전에는 목업에서만 가짜 토큰을 등록해요.
+        //  실제 서버에 가짜 토큰을 넣으면 서버가 FCM에 보낼 때마다 실패해요. 푸시가 없는 동안 앱은 5초 조회로 상태를 알아요.
+        if (BuildConfig.USE_MOCK) {
+            scope.launch { runCatching { container.repository.registerFcmToken("mock-fcm-token") } }
+        }
         onDone()
     }
 

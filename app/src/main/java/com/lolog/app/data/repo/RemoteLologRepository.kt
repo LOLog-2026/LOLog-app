@@ -58,6 +58,9 @@ class RemoteLologRepository(
 
     override suspend fun uploadRecording(part: RecordingPart) = call { api.uploadRecording(part.toDto()).toModel() }
     override suspend fun recordingStatus(recordingId: Long) = call { api.recording(recordingId).toModel() }
+    override suspend fun analyzingRecordingId(): Long? = call {
+        api.recordings(cursor = null, size = 1, status = "RECEIVED,DETECTING").recordings.firstOrNull()?.recordingId
+    }
 
     override suspend fun cards(cursor: String?, size: Int) = call { api.cards(cursor, size).toModel() }
     override suspend fun card(id: Long) = call { api.card(id).toModel() }

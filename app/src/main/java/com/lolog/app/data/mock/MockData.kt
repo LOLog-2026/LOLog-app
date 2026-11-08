@@ -98,10 +98,10 @@ object MockData {
     fun comics(): MutableList<ComicDetail> = mutableListOf(
         ComicDetail(35, 11, ComicStatus.DRAWING, null, "2026-11-05T15:58:00+09:00"),
         ComicDetail(33, 12, ComicStatus.FAILED, null, "2026-11-04T20:10:00+09:00", "말풍선 배치 실패"),
-        ComicDetail(31, 12, ComicStatus.DONE, "mock://comic/31", "2026-11-04T19:32:00+09:00", width = 1024, height = 4096),
+        ComicDetail(31, 12, ComicStatus.DONE, "mock://comic/31", "2026-11-04T19:32:00+09:00", width = 800, height = 3152),
         ComicDetail(28, 10, ComicStatus.FAILED, null, "2026-11-03T14:20:00+09:00", "대사가 말풍선에 들어가지 않아요"),
-        ComicDetail(26, 7, ComicStatus.DONE, "mock://comic/26", "2026-11-01T10:10:00+09:00", width = 1024, height = 4096),
-        ComicDetail(24, 7, ComicStatus.DONE, "mock://comic/24", "2026-10-31T09:00:00+09:00", width = 1024, height = 4096),
-        ComicDetail(22, 7, ComicStatus.DONE, "mock://comic/22", "2026-10-29T23:50:00+09:00", width = 1024, height = 4096),
+        ComicDetail(26, 7, ComicStatus.DONE, "mock://comic/26", "2026-11-01T10:10:00+09:00", width = 800, height = 3152),
+        ComicDetail(24, 7, ComicStatus.DONE, "mock://comic/24", "2026-10-31T09:00:00+09:00", width = 800, height = 3152),
+        ComicDetail(22, 7, ComicStatus.DONE, "mock://comic/22", "2026-10-29T23:50:00+09:00", width = 800, height = 3152),
     )
 }
