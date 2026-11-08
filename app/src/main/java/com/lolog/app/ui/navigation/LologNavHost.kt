@@ -112,9 +112,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             PushType.CARDS_CREATED ->
                 if (p.cardIds.size == 1) nav.navigate(Routes.card(p.cardIds.first())) else nav.goTab(Routes.LIBRARY)
             PushType.COMIC_DONE -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
-            // 실패 → 카드 상세 "다시 시도". 카드를 지웠으면(cardId 빈 값) 그 만화 화면
-            PushType.COMIC_FAILED -> p.cardId?.let { nav.navigate(Routes.card(it)) }
-                ?: p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
+            // 실패 → 그 만화 화면. "만들지 못했어요" 안내와 "다시 시도" 버튼이 거기 있어요
+            PushType.COMIC_FAILED -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
         }
         onPushHandled()
     }
