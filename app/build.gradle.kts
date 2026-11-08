@@ -51,7 +51,13 @@ android {
     }
 
     buildTypes {
+        // 평문(HTTP) 통신은 debug에서만 허용해요. 로컬 서버(http://localhost:8080, 에뮬레이터 10.0.2.2) 시험용이에요.
+        // release는 HTTPS만 써요(deployment.md 6장). 매니페스트의 usesCleartextTraffic 값으로 들어가요.
+        debug {
+            manifestPlaceholders["usesCleartext"] = "true"
+        }
         release {
+            manifestPlaceholders["usesCleartext"] = "false"
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -68,6 +74,15 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+// release는 평문 통신을 막아서 http:// 서버에는 붙지 못해요. 빌드할 때 알려 줘요
+if (!lologBaseUrl.startsWith("https://")) {
+    gradle.taskGraph.whenReady {
+        if (allTasks.any { it.name.contains("Release") }) {
+            logger.warn("경고: release 빌드인데 LOLOG_BASE_URL이 https가 아니에요($lologBaseUrl). 배포 주소는 https://lolog.java21.net/ 예요")
+        }
     }
 }
 
