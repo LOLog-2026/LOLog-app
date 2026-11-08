@@ -80,6 +80,23 @@ class RecordingStore(private val root: File) {
         private var seq = readMeta(dir).sealedSeq
         private val out = FileOutputStream(File(dir, CURRENT), true)
 
+        val clientRecordingId: String = readMeta(dir).clientRecordingId
+
+        /** 쌓은 문장 수(빈 결과 제외). 녹음이 아무것도 못 남겼는지 볼 때 쓴다. */
+        val sentenceCount: Long get() = seq
+
+        /**
+         * 아무것도 올리지 않은 녹음을 없앤다. 마이크나 글자 변환이 시작도 못 했을 때만 부른다.
+         * 이미 올린 묶음이 있으면 서버에 끝을 알려야 하므로 지우지 않고 false를 돌려준다.
+         */
+        fun discardIfUnsent(): Boolean = synchronized(this@RecordingStore) {
+            val meta = readMeta(dir)
+            if (meta.nextPartNo != 1 || seq > 0) return false
+            out.close()
+            dir.deleteRecursively()
+            true
+        }
+
         /** 빈 결과는 쌓지 않는다. */
         fun append(startMs: Long, endMs: Long, text: String) {
             if (text.isBlank()) return

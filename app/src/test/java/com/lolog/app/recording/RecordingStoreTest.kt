@@ -109,4 +109,19 @@ class RecordingStoreTest {
         assertEquals(listOf("앞"), parts[0].request.sentences.map { it.text })
         assertTrue(parts[1].request.sentences.isEmpty())
     }
+
+    @Test
+    fun 아무것도_올리지_않은_녹음만_없앨_수_있다() {
+        val store = store()
+        assertTrue(store.open("t").discardIfUnsent())
+        assertTrue(folder.root.listFiles()!!.isEmpty())
+
+        val spoken = store.open("t")
+        spoken.append(0, 1000, "말")
+        assertFalse(spoken.discardIfUnsent())
+
+        val sent = store.open("t")
+        sent.sealPart(1000, last = false)
+        assertFalse(sent.discardIfUnsent())
+    }
 }

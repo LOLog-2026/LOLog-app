@@ -19,7 +19,8 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            RealRecordingController.active?.stop()
+            // 녹음이 이미 끝났는데 알림이 남아 있었으면 서비스를 바로 닫는다.
+            RealRecordingController.active?.stop() ?: stopSelf()
             return START_NOT_STICKY
         }
         val notification = notification()
@@ -37,6 +38,9 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        // 시스템이 서비스를 끄면 그때까지 쌓인 문장으로 녹음을 마감한다(기능 명세 FR-REC-01·02 예외).
+        // 녹음이 정상으로 끝나 서비스를 닫은 경우에는 이미 멈춰 있어 아무 일도 하지 않는다.
+        RealRecordingController.active?.stop()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()
