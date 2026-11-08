@@ -68,6 +68,24 @@ class Notifier(private val context: Context) {
             p.cardId?.let { putExtra(EXTRA_CARD, it) }
         }
 
+        /**
+         * FCM data(문자열 맵) → PushPayload. 키는 명세(api-dto 3장): type, recordingId, cardCount, comicId, cardId.
+         * 카드를 지웠으면 cardId가 빈 문자열이라 null이 돼요. 모르는 type이면 null.
+         */
+        fun payloadOf(data: Map<String, String>): PushPayload? {
+            val type = data["type"] ?: return null
+            // NEW_CARDS는 11/5 옛 이름. 명세는 CARDS_CREATED
+            val t = runCatching { PushType.valueOf(if (type == "NEW_CARDS") "CARDS_CREATED" else type) }.getOrNull() ?: return null
+            return PushPayload(
+                type = t,
+                recordingId = data["recordingId"]?.toLongOrNull(),
+                cardCount = data["cardCount"]?.toIntOrNull(),
+                cardIds = data["cardIds"]?.split(",")?.mapNotNull { it.trim().toLongOrNull() }.orEmpty(),
+                comicId = data["comicId"]?.toLongOrNull(),
+                cardId = data["cardId"]?.toLongOrNull(),
+            )
+        }
+
         /** 알림을 눌러 들어온 Intent → PushPayload. FCM data(문자열 맵)도 같은 키로 읽어요. */
         fun Intent.readPayload(): PushPayload? {
             val type = getStringExtra(EXTRA_TYPE) ?: getStringExtra("type") ?: return null

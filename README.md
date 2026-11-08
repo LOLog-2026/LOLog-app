@@ -121,8 +121,8 @@ sealed interface PartUpload {
 ## 화면 쪽 실행 안내 (서현)
 
 - 처음에는 **목업 모드**(`app/build.gradle.kts`의 `USE_MOCK=true`)라 서버 없이 모든 화면이 돌아가요. 녹음도 가짜(`data/mock/MockRecordingController`)라 마이크·STT 없이 시간만 흘러요.
-- 실제 서버로 바꾸려면 `local.properties`에 `LOLOG_BASE_URL`(없으면 `http://10.0.2.2:8080/`), 필요하면 `LOLOG_TEST_TOKEN`을 적고 `USE_MOCK`을 `false`로 바꿔요.
-- 실제 녹음은 지원 님 PR #3이 머지된 뒤 `AppContainer.recorder`를 `RealRecordingController`로 바꿔요(코드에 TODO).
+- 실제 서버로 바꾸려면 `local.properties`에 `LOLOG_BASE_URL`(없으면 `http://10.0.2.2:8080/`), 필요하면 `LOLOG_TEST_TOKEN`, 그리고 `LOLOG_USE_MOCK=false`를 적어요. 목업이 아니면 녹음도 실제 녹음(`RealRecordingController`)이에요.
+- 푸시(FCM)는 Firebase 콘솔 → 프로젝트 설정 → 내 앱(`com.lolog.app`)에서 받은 `google-services.json`을 `app/`에 두면 켜져요. 파일이 없어도 빌드는 되고 푸시만 꺼져요. 받기는 `notification/LologMessagingService`, 토큰 등록은 `notification/PushTokens`(로그인할 때, 토큰이 바뀔 때)예요.
 - 글꼴 Pretendard, Nanum Pen Script는 SIL Open Font License 1.1이에요(`licenses/`).
 
 ### 목업에서 오류 화면 보기

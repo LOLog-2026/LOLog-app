@@ -1,6 +1,5 @@
 package com.lolog.app.ui.screens.start
 
-import com.lolog.app.BuildConfig
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -394,16 +393,9 @@ fun LabeledField(
 
 @Composable
 fun PermissionScreen(onDone: () -> Unit) {
-    val container = LocalContainer.current
-    val scope = rememberCoroutineScope()
-
     fun finish() {
-        // 허용 후 푸시 토큰 등록 (PUT /api/devices/fcm-token)
-        // TODO(FCM): FirebaseMessaging.getInstance().token 으로 받은 값을 넣기. 그 전에는 목업에서만 가짜 토큰을 등록해요.
-        //  실제 서버에 가짜 토큰을 넣으면 서버가 FCM에 보낼 때마다 실패해요. 푸시가 없는 동안 앱은 5초 조회로 상태를 알아요.
-        if (BuildConfig.USE_MOCK) {
-            scope.launch { runCatching { container.repository.registerFcmToken("mock-fcm-token") } }
-        }
+        // 푸시 토큰 등록(PUT /api/devices/fcm-token)은 로그인할 때 LologApp이 해요(PushTokens).
+        // 토큰은 알림 권한과 상관없이 받을 수 있고, 권한이 없으면 Notifier가 알림을 띄우지 않을 뿐이에요
         onDone()
     }
 

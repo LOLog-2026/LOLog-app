@@ -58,5 +58,19 @@
             android:name=".recording.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- FCM 받기. 서버는 data 메시지만 보내서 알림은 앱이 직접 만들어요 -->
+        <service
+            android:name=".notification.LologMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- data 메시지 알림은 push 채널을 써요. 혹시 notification 블록이 오면 쓸 기본 채널 -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="push" />
     </application>
 </manifest>
