@@ -103,8 +103,11 @@ class ApiClient(private val tokens: TokenStore) {
     private val client = plainClient.newBuilder()
         .addInterceptor(authHeader)
         .authenticator(refresher)
+        // 디버그에서도 주소·상태 코드·헤더까지만 남겨요. 본문에는 대화 글·카드 대사가 들어 있고,
+        // 토큰은 로그에 남지 않게 가려요(logcat은 다른 앱·버그 리포트로 나갈 수 있어요).
         .addInterceptor(HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS else HttpLoggingInterceptor.Level.NONE
+            redactHeader("Authorization")
         })
         .build()
 

@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,6 +52,8 @@ class RealRecordingController(
     @Volatile private var recording: RecordingStore.OpenRecording? = null
     private var tickerJob: Job? = null
     @Volatile private var endedByLimit = false
+    // 로그아웃·탈퇴로 버리는 중. 이때는 마감·업로드를 하지 않는다.
+    @Volatile private var discarding = false
 
     override val state: StateFlow<RecordingState> = _state.asStateFlow()
 
@@ -99,6 +102,20 @@ class RealRecordingController(
         tickerJob?.cancel()
         _state.value = RecordingState.Uploading
         current.stop()
+    }
+
+    override suspend fun discardAll() {
+        discarding = true
+        try {
+            stop()
+            // 녹음 중이었거나 올리는 중이면 엔진이 멈추고 마감이 끝날 때까지 기다린다(버리는 중이라 재시도는 하지 않는다).
+            state.first { it !is RecordingState.Recording && it !is RecordingState.Uploading }
+            uploadLock.withLock { store.deleteAll() }
+            _state.value = RecordingState.Idle
+            Log.i(TAG, "로그아웃으로 남은 녹음을 지웠습니다")
+        } finally {
+            discarding = false
+        }
     }
 
     private fun startTicker(current: SttEngine) {
@@ -163,6 +180,13 @@ class RealRecordingController(
         engine = null
         _state.value = RecordingState.Uploading
         scope.launch {
+            if (discarding) {
+                open?.discard()
+                RecordingService.stop(app)
+                active = null
+                _state.value = RecordingState.Idle
+                return@launch
+            }
             // 아무것도 안 올린 빈 녹음이면 서버에 녹음을 만들지 않는다.
             val discarded = inputError != null && open?.discardIfUnsent() == true
             if (!discarded) open?.sealPart(positionMs, last = true)
@@ -192,7 +216,7 @@ class RealRecordingController(
         // 먼저 올릴 녹음이 있으면 그 녹음만 본다. 다른 녹음 때문에 화면이 기다리지 않게 한다.
         fun shouldRetry() = if (first != null) result.failureOf(first)?.retryable == true else result.anyRetryable
         repeat(MAX_RETRIES) {
-            if (!shouldRetry()) return result
+            if (discarding || !shouldRetry()) return result
             delay(waitMs)
             waitMs *= 2
             result = uploader.uploadPending(first, onSending)

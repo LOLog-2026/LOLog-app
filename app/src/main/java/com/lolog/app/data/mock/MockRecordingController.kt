@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
-import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
@@ -30,6 +30,7 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
     override val state: StateFlow<RecordingState> = _state.asStateFlow()
 
     private var ticker: Job? = null
+    private var uploadJob: Job? = null
     private var startedAt = ""
     private var elapsedSec = 0L
 
@@ -37,7 +38,8 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
     override fun start() {
         val now = _state.value
         if (now is RecordingState.Recording || now is RecordingState.Uploading) return
-        startedAt = OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString()
+        // API 명세 예처럼 늘 초까지 적어요(OffsetDateTime.toString은 0초면 초를 빼요)
+        startedAt = OffsetDateTime.now().format(STARTED_AT)
         elapsedSec = 0
         _state.value = RecordingState.Recording(0)
         ticker = scope.launch {
@@ -56,7 +58,7 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
         if (_state.value !is RecordingState.Recording) return
         ticker?.cancel()
         _state.value = RecordingState.Uploading
-        scope.launch {
+        uploadJob = scope.launch {
             // 2.5초마다 한 문장이 들어온 것처럼 만들어요
             val count = (elapsedSec / 2.5).toInt().coerceAtMost(MockData.liveSentences.size)
             val sentences = (0 until count).map { i ->
@@ -77,7 +79,17 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
         }
     }
 
+    // 가짜 녹음은 폰에 남기는 글이 없어요. 녹음 중이면 올리지 않고 멈추기만 해요.
+    override suspend fun discardAll() {
+        synchronized(this) {
+            ticker?.cancel()
+            uploadJob?.cancel()
+            _state.value = RecordingState.Idle
+        }
+    }
+
     private companion object {
         const val MAX_SEC = 3L * 60 * 60 // 최대 3시간
+        val STARTED_AT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")
     }
 }

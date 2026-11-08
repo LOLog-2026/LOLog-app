@@ -113,7 +113,7 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
             is PartUpload.Failed -> lastSending = 0
         }
     }
-    // TODO(지원): 마이크 소리 크기 값이 약속에 생기면 그 값으로 막대를 그려요. 지금은 말하는 척 흉내만 내요
+    // 파형은 실제 소리 크기가 아니라 "녹음 중"을 보여 주는 가짜 막대예요(팀에서 정함). 말하는 척 흉내만 내요
     val talking = s is RecordingState.Recording && (elapsedSec / 4) % 3 != 2L
 
     Column(
@@ -206,9 +206,7 @@ private const val MAX_BARS = 50
  * 소리 크기 막대(아이폰 음성 메모처럼). 새 막대는 빨간 선에서 생기고 왼쪽으로 흘러가요.
  * 방금 소리(최근 8개)는 빨강, 지나간 소리는 회색, 빨간 선 오른쪽은 앞으로 올 자리(옅은 점).
  *
- * TODO(지원 님 녹음 서비스): 지금은 소리 크기가 목업 값이에요.
- *  녹음 서비스가 마이크 소리 크기(0~1, 0.1초마다)를 RecordingState나 Flow로 주면
- *  아래 mockLevel(...) 자리에 그 값을 넣기만 하면 돼요. 그리는 쪽은 그대로예요.
+ * 실제 마이크 소리 크기가 아니라 "녹음 중"을 보여 주는 가짜 파형이에요(팀에서 정함). 막대 높이는 mockLevel(...)이 만들어요.
  */
 @Composable
 private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
@@ -276,7 +274,7 @@ class AnalyzingViewModel(private val repo: LologRepository, private val id: Long
     val status: StateFlow<RecordingProgress?> = _status
 
     init {
-        // GET /api/recordings/{id} — 앱이 열려 있을 때 30초마다 (목업은 2초)
+        // GET /api/recordings/{id} — 앱이 열려 있을 때 5초마다 (목업은 2초)
         viewModelScope.launch {
             val interval = if (BuildConfig.USE_MOCK) 2_000L else 5_000L
             while (isActive) {

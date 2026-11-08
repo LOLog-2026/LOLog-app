@@ -76,6 +76,12 @@ class RecordingStore(private val root: File) {
         }
     }
 
+    /** 폰에 남은 녹음을 모두 지운다. 로그아웃·탈퇴 때만 부르고, 열린 녹음이 없을 때 부른다. */
+    @Synchronized
+    fun deleteAll() {
+        root.listFiles()?.forEach { it.deleteRecursively() }
+    }
+
     inner class OpenRecording internal constructor(private val dir: File) {
         private var seq = readMeta(dir).sealedSeq
         private val out = FileOutputStream(File(dir, CURRENT), true)
@@ -95,6 +101,12 @@ class RecordingStore(private val root: File) {
             out.close()
             dir.deleteRecursively()
             true
+        }
+
+        /** 올리지 않고 없앤다. 로그아웃·탈퇴로 녹음을 버릴 때 쓴다. */
+        fun discard() = synchronized(this@RecordingStore) {
+            out.close()
+            dir.deleteRecursively()
         }
 
         /** 빈 결과는 쌓지 않는다. */

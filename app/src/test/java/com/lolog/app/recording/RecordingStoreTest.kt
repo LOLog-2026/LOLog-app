@@ -124,4 +124,18 @@ class RecordingStoreTest {
         sent.sealPart(1000, last = false)
         assertFalse(sent.discardIfUnsent())
     }
+
+    @Test
+    fun 로그아웃하면_남은_녹음을_모두_지운다() {
+        val store = store()
+        val done = store.open("2026-11-10T12:30:00+09:00")
+        done.append(0, 1000, "올리지 못한 글")
+        done.sealPart(1000, last = true)
+        val open = store.open("2026-11-10T13:00:00+09:00")
+        open.append(0, 1000, "녹음 중인 글")
+        open.discard()
+        store.deleteAll()
+        assertTrue(store.pendingParts().isEmpty())
+        assertTrue(folder.root.listFiles()!!.isEmpty())
+    }
 }

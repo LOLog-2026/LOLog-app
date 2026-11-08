@@ -23,7 +23,7 @@ LOLog Android 앱이에요.
 
 1. 이메일 로그인 (그 전에는 테스트 토큰 하나를 고정해서 써요)
 2. 업로드 실패 시 다시 올리기, 토큰 갱신
-3. FCM 푸시 (그 전에는 화면이 3초마다 상태를 물어봐요)
+3. FCM 푸시 (그 전에는 화면이 5초마다 상태를 물어봐요)
 4. 카드 고치기, 소셜 로그인, 공유, 설정·탈퇴
 
 ### 앱 설정
@@ -88,7 +88,7 @@ sealed interface PartUpload {
 }
 ```
 
-- 화면은 `Uploaded`를 받으면 그 `recordingId`로 "분석 중" 화면으로 넘어가요. `GET /api/recordings/{id}`를 3초마다 물어 `DONE`이면 카드 목록으로 가요.
+- 화면은 `Uploaded`를 받으면 그 `recordingId`로 "분석 중" 화면으로 넘어가요. `GET /api/recordings/{id}`를 5초마다 물어 `DONE`이면 카드 목록으로 가요.
 - `Uploaded`나 `UploadFailed`를 보여 준 뒤에는 다음 `start()` 때 `Idle`부터 다시 시작해요.
 - 녹음 중에 묶음을 올려도 상태는 `Recording`이고 `partUpload`만 바뀌어요. 화면은 녹음 시간 옆에 "올리는 중" 또는 "올리기 실패, 다음에 다시 시도" 정도만 작게 보여 줘요.
 - 화면에서 쓰는 녹음 ID는 서버가 준 `recordingId`뿐이에요. 앱이 만든 `clientRecordingId`는 녹음 서비스 안에서만 써요.
@@ -100,11 +100,11 @@ sealed interface PartUpload {
 | API | 부르는 사람 |
 | --- | --- |
 | `POST /api/recordings` | 지원 (녹음 서비스) |
-| `GET /api/recordings/{id}` | 서현 (분석 중 화면, 3초마다) |
+| `GET /api/recordings/{id}` | 서현 (분석 중 화면, 5초마다) |
 | `GET /api/cards?cursor=&size=20` | 서현 |
 | `GET /api/cards/{id}` | 서현 |
 | `POST /api/cards/{id}/comics` | 서현 |
-| `GET /api/comics/{id}` | 서현 (3초마다) |
+| `GET /api/comics/{id}` | 서현 (5초마다) |
 
 시간은 ISO-8601 문자열, ID는 숫자(Long)로 맞춰요. `clientRecordingId`만 문자열이에요.
 
