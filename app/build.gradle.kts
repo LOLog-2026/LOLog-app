@@ -10,12 +10,15 @@ plugins {
 // 서버 주소·테스트 토큰은 local.properties에 둬요(커밋 안 함, CLAUDE.md 11번)
 //   LOLOG_BASE_URL=http://10.0.2.2:8080/
 //   LOLOG_TEST_TOKEN=...
+//   LOLOG_USE_MOCK=false
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 val lologBaseUrl = (localProps.getProperty("LOLOG_BASE_URL") ?: "http://10.0.2.2:8080/").let { if (it.endsWith("/")) it else "$it/" }
 val lologTestToken = localProps.getProperty("LOLOG_TEST_TOKEN") ?: ""
+// 목업 켜기·끄기. 기본은 목업(true). 실제 서버·녹음으로 시험할 때만 local.properties에 LOLOG_USE_MOCK=false
+val lologUseMock = (localProps.getProperty("LOLOG_USE_MOCK") ?: "true").trim().toBoolean()
 
 android {
     namespace = "com.lolog.app"
@@ -30,7 +33,7 @@ android {
 
         // true: 앱 안의 목업 데이터로 동작 (백엔드 없이 에뮬레이터에서 바로 실행)
         // false: LOLOG_BASE_URL의 실제 서버(Nginx)로 요청
-        buildConfigField("boolean", "USE_MOCK", "true")
+        buildConfigField("boolean", "USE_MOCK", "$lologUseMock")
         // 기본값: 에뮬레이터에서 내 PC의 localhost는 10.0.2.2
         buildConfigField("String", "LOLOG_BASE_URL", "\"$lologBaseUrl\"")
         // 로그인 전 시험용 토큰. 비어 있으면 안 씀
