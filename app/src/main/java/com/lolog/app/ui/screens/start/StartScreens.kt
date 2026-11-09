@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lolog.app.data.model.EMAIL_CODE_LENGTH
+import com.lolog.app.data.model.EMAIL_CODE_RESEND_SECONDS
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.model.PASSWORD_MAX
@@ -56,11 +58,13 @@ import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 // ── 01 스플래시: SplashScreen.kt (3D 얼굴이 떠오르는 첫 화면) ──
 
@@ -87,17 +91,78 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
         val snackbar: String? = null,        // 아래 검은 띠 (인터넷 끊김·서버 오류)
         val accountExists: SocialProvider? = null, // 소셜: 같은 이메일로 이미 가입됨
         val done: Boolean = false,
+        // ── 가입 인증번호 ──
+        val codeEmail: String? = null,       // 인증번호를 보낸 이메일. 있으면 인증번호 칸을 보여 줘요
+        val sendingCode: Boolean = false,
+        val resendLeft: Int = 0,             // 다시 받기까지 남은 초
+        val emailInfo: String? = null,       // 이메일 칸 아래 회색 줄 (메일을 확인해 주세요)
+        val codeError: String? = null,       // 인증번호 칸 아래 빨간 줄
+        val codeExpired: Boolean = false,    // 만료되면 화면이 인증번호 칸을 비워요
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
+    private var countdown: Job? = null
 
-    fun login(email: String, password: String) = submit(null) { repo.login(email, password) }
+    fun login(email: String, password: String) {
+        val e = normalizeEmail(email)
+        submit(null) { repo.login(e, password) }
+    }
 
-    fun signup(email: String, password: String) {
+    /** 인증번호 받기. 가입 여부와 관계없이 같은 문구를 보여 줘요 */
+    fun requestCode(rawEmail: String) {
+        val email = normalizeEmail(rawEmail)
+        val s = _state.value
+        if (!isEmail(email) || s.sendingCode || s.loading || s.resendLeft > 0) return
+        viewModelScope.launch {
+            _state.update { it.copy(sendingCode = true, emailError = null, emailInfo = null, snackbar = null) }
+            try {
+                repo.requestEmailCode(email)
+                _state.update { it.copy(sendingCode = false, codeEmail = email, emailInfo = "메일을 확인해 주세요", codeError = null, codeExpired = false) }
+                startCountdown()
+            } catch (e: Throwable) {
+                val code = (e as? LologException)?.code
+                _state.update {
+                    val s2 = it.copy(sendingCode = false)
+                    when {
+                        code == ErrorCodes.TOO_MANY_REQUESTS || code == "HTTP_429" -> s2.copy(emailError = "잠시 뒤에 다시 받아 주세요")
+                        (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) -> s2.copy(emailError = "이메일 형식을 확인해 주세요")
+                        else -> s2.copy(snackbar = errorText(e))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startCountdown() {
+        countdown?.cancel()
+        countdown = viewModelScope.launch {
+            for (left in EMAIL_CODE_RESEND_SECONDS downTo 1) {
+                _state.update { it.copy(resendLeft = left) }
+                delay(1000)
+            }
+            _state.update { it.copy(resendLeft = 0) }
+        }
+    }
+
+    /** 번호를 받은 뒤 이메일을 고치면 번호는 무효라 처음부터 다시 받아요 */
+    fun emailChanged(email: String) {
+        _state.update {
+            if (it.codeEmail == null || it.codeEmail == email) it.copy(emailError = null)
+            else {
+                countdown?.cancel()
+                it.copy(emailError = null, emailInfo = null, codeEmail = null, codeError = null, codeExpired = false, resendLeft = 0)
+            }
+        }
+    }
+
+    fun clearCodeError() = _state.update { it.copy(codeError = null, codeExpired = false) }
+
+    fun signup(rawEmail: String, password: String, code: String) {
+        val email = normalizeEmail(rawEmail)
         // 화면에서 규칙을 다 맞춰야 버튼이 켜지지만, 한 번 더 확인 (FR-AUTH-01)
-        if (!isEmail(email) || !isValidPassword(password)) return
-        submit(null, isSignup = true) { repo.signup(email, password) }
+        if (!isEmail(email) || !isValidPassword(password) || code.length != EMAIL_CODE_LENGTH) return
+        submit(null, isSignup = true) { repo.signup(email, password, code) }
     }
 
     /** TODO(소셜): 카카오·구글·네이버 SDK 키가 들어오면 켜요. 지금은 버튼이 "준비 중"이라 불리지 않아요 */
@@ -112,7 +177,7 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
     private fun submit(provider: SocialProvider?, isSignup: Boolean = false, block: suspend () -> Unit) {
         if (_state.value.loading) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, emailError = null, passwordError = null, snackbar = null) }
+            _state.update { it.copy(loading = true, emailError = null, passwordError = null, codeError = null, snackbar = null) }
             try {
                 block()
                 _state.update { it.copy(loading = false, done = true) }
@@ -124,6 +189,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                         code == ErrorCodes.ACCOUNT_EXISTS && provider != null -> s.copy(accountExists = provider)
                         code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
                         code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")
+                        code == ErrorCodes.INVALID_CODE -> s.copy(codeError = "인증번호가 맞지 않아요")
+                        code == ErrorCodes.CODE_EXPIRED -> s.copy(codeError = "인증번호를 다시 받아 주세요", codeExpired = true)
                         (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "email" ->
                             s.copy(emailError = "이메일 형식을 확인해 주세요")
                         (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "password" ->
@@ -137,6 +204,9 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
 }
 
 fun isEmail(s: String) = android.util.Patterns.EMAIL_ADDRESS.matcher(s).matches()
+
+/** 서버와 같은 기준(앞뒤 공백 빼고 소문자, 서버 User.normalizeEmail)으로 바꿔 보내고, 화면에서 "번호를 받은 이메일과 같은지" 비교할 때도 써요 */
+fun normalizeEmail(s: String) = s.trim().lowercase(Locale.ROOT)
 
 @Composable
 private fun authViewModel(): AuthViewModel {
@@ -228,17 +298,27 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
     var emailTouched by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.done) { if (state.done) onDone() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
+    // 이메일을 바꿔 번호가 무효가 되거나 번호가 만료되면 인증번호 칸을 비워요
+    LaunchedEffect(state.codeEmail, state.codeExpired) { if (state.codeEmail == null || state.codeExpired) code = "" }
 
     // ④ 규칙은 입력하는 동안 바로 보여 주고, 다 맞아야 가입 버튼이 켜져요 (FR-AUTH-01)
     val emailOk = isEmail(email.trim())
     val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
     val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
     val confirmOk = confirm.isNotEmpty() && confirm == password
-    val allOk = emailOk && lengthOk && mixOk && confirmOk
+    val codeOk = state.codeEmail == normalizeEmail(email) && code.length == EMAIL_CODE_LENGTH
+    val allOk = emailOk && lengthOk && mixOk && confirmOk && codeOk
     val emailFormatError = if (emailTouched && email.isNotBlank() && !emailOk) "이메일 형식을 확인해 주세요" else null
+    val codeButton = when {
+        state.sendingCode -> "보내는 중"
+        state.resendLeft > 0 -> "다시 받기 ${state.resendLeft}초"
+        state.codeEmail != null -> "다시 받기"
+        else -> "번호 받기"
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -252,11 +332,31 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 LabeledField(
-                    "이메일", email, { email = it; emailTouched = false; vm.clearEmailError() },
+                    "이메일", email, { email = it; emailTouched = false; vm.emailChanged(normalizeEmail(it)) },
                     icon = Icons.Outlined.MailOutline, placeholder = "이메일", type = KeyboardType.Email,
-                    error = state.emailError ?: emailFormatError, enabled = !state.loading,
+                    error = state.emailError ?: emailFormatError, info = state.emailInfo, enabled = !state.loading,
                     onFocusLost = { emailTouched = true },
-                )
+                ) {
+                    Button(
+                        onClick = { vm.requestCode(email.trim()) },
+                        enabled = emailOk && !state.loading && !state.sendingCode && state.resendLeft == 0,
+                        shape = LologShape.sm,
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LologColors.Accent, contentColor = LologColors.Paper,
+                            disabledContainerColor = LologColors.Canvas, disabledContentColor = LologColors.Muted,
+                        ),
+                        modifier = Modifier.height(56.dp),
+                    ) { Text(codeButton, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                }
+                if (state.codeEmail != null) {
+                    LabeledField(
+                        "인증번호", code, { v -> code = v.filter { it.isDigit() }.take(EMAIL_CODE_LENGTH); vm.clearCodeError() },
+                        icon = Icons.Outlined.Shield, placeholder = "${EMAIL_CODE_LENGTH}자리 숫자", type = KeyboardType.NumberPassword,
+                        error = state.codeError, enabled = !state.loading,
+                        counter = "${code.length} / $EMAIL_CODE_LENGTH",
+                    )
+                }
                 LabeledField(
                     "비밀번호", password, { password = it.take(PASSWORD_MAX) },
                     icon = Icons.Outlined.Key, placeholder = "비밀번호", type = KeyboardType.Password, secret = true,
@@ -283,7 +383,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 fontSize = 12.sp, color = LologColors.Muted, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
             )
-            PrimaryButton("가입하기", { vm.signup(email.trim(), password) }, enabled = allOk, loading = state.loading)
+            PrimaryButton("가입하기", { vm.signup(email.trim(), password, code) }, enabled = allOk, loading = state.loading)
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -342,7 +442,10 @@ private fun OrDivider(text: String) {
     }
 }
 
-/** 이름표 + 아이콘 입력칸. error가 있으면 빨간 테두리 + 아래 빨간 안내 */
+/**
+ * 이름표 + 아이콘 입력칸. error가 있으면 빨간 테두리 + 아래 빨간 안내.
+ * info는 오류가 없을 때 아래에 보이는 회색 안내, action은 입력칸 오른쪽 버튼(예: 인증번호 받기)
+ */
 @Composable
 fun LabeledField(
     label: String,
@@ -353,38 +456,45 @@ fun LabeledField(
     type: KeyboardType = KeyboardType.Text,
     secret: Boolean = false,
     error: String? = null,
+    info: String? = null,
     enabled: Boolean = true,
     counter: String? = null,
     onFocusLost: () -> Unit = {},
+    action: (@Composable RowScope.() -> Unit)? = null,
 ) {
     var hadFocus by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Muted)
-        OutlinedTextField(
-            value = value, onValueChange = onChange, singleLine = true, enabled = enabled,
-            isError = error != null,
-            placeholder = { Text(placeholder, fontSize = 14.sp, color = LologColors.Muted) },
-            leadingIcon = if (icon != null) { { Icon(icon, null, tint = LologColors.Muted, modifier = Modifier.size(18.dp)) } } else null,
-            trailingIcon = if (counter != null) { { Text(counter, fontSize = 11.sp, color = LologColors.Muted, modifier = Modifier.padding(end = 12.dp)) } } else null,
-            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = type),
-            shape = LologShape.sm,
-            modifier = Modifier.fillMaxWidth().onFocusChanged { f ->
-                if (f.isFocused) hadFocus = true else if (hadFocus) onFocusLost()
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = LologColors.Accent, unfocusedBorderColor = LologColors.Line,
-                errorBorderColor = LologColors.Rec, disabledBorderColor = LologColors.Line,
-                focusedContainerColor = LologColors.Paper, unfocusedContainerColor = LologColors.Paper,
-                errorContainerColor = LologColors.Paper, disabledContainerColor = LologColors.Paper,
-            ),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = value, onValueChange = onChange, singleLine = true, enabled = enabled,
+                isError = error != null,
+                placeholder = { Text(placeholder, fontSize = 14.sp, color = LologColors.Muted) },
+                leadingIcon = if (icon != null) { { Icon(icon, null, tint = LologColors.Muted, modifier = Modifier.size(18.dp)) } } else null,
+                trailingIcon = if (counter != null) { { Text(counter, fontSize = 11.sp, color = LologColors.Muted, modifier = Modifier.padding(end = 12.dp)) } } else null,
+                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(keyboardType = type),
+                shape = LologShape.sm,
+                modifier = Modifier.weight(1f).onFocusChanged { f ->
+                    if (f.isFocused) hadFocus = true else if (hadFocus) onFocusLost()
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LologColors.Accent, unfocusedBorderColor = LologColors.Line,
+                    errorBorderColor = LologColors.Rec, disabledBorderColor = LologColors.Line,
+                    focusedContainerColor = LologColors.Paper, unfocusedContainerColor = LologColors.Paper,
+                    errorContainerColor = LologColors.Paper, disabledContainerColor = LologColors.Paper,
+                ),
+            )
+            action?.invoke(this)
+        }
         if (error != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Info, null, tint = LologColors.Rec, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(error, fontSize = 12.sp, color = LologColors.Rec)
             }
+        } else if (info != null) {
+            Text(info, fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(start = 4.dp))
         }
     }
 }
