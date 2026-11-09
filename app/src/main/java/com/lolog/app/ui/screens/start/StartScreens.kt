@@ -205,7 +205,7 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
 
 fun isEmail(s: String) = android.util.Patterns.EMAIL_ADDRESS.matcher(s).matches()
 
-/** 서버가 이메일 대소문자를 바꾸지 않아서, 앱이 앞뒤 공백을 빼고 소문자로 바꿔 보내요 */
+/** 서버와 같은 기준(앞뒤 공백 빼고 소문자, 서버 User.normalizeEmail)으로 바꿔 보내고, 화면에서 "번호를 받은 이메일과 같은지" 비교할 때도 써요 */
 fun normalizeEmail(s: String) = s.trim().lowercase(Locale.ROOT)
 
 @Composable
