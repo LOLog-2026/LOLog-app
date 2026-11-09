@@ -32,13 +32,15 @@ import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Account
 import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.repo.LologException
-import com.lolog.app.BuildConfig
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.RecordingController
 import com.lolog.app.recording.RecordingState
 import kotlinx.coroutines.flow.first
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
+import com.lolog.app.ui.social.SocialSignIn
+import com.lolog.app.ui.social.rememberSocialSignIn
+import com.lolog.app.ui.social.socialErrorText
 import com.lolog.app.ui.theme.LologColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,16 +67,26 @@ class SettingsViewModel(
         runCatching { repo.me() }.onSuccess { me -> _state.update { it.copy(me = me) } }
     }
 
-    /** POST /auth/me/social/{provider}. 409 SOCIAL_ALREADY_LINKED면 토스트(19번) */
-    fun link(provider: SocialProvider) = viewModelScope.launch {
-        _state.update { it.copy(linking = provider) }
-        try {
-            // TODO: 소셜 SDK 로그인으로 받은 토큰 넣기
-            val linked = repo.linkSocial(provider, "mock-${provider.name.lowercase()}-token")
-            _state.update { s -> s.copy(linking = null, me = s.me?.copy(linkedProviders = linked), toast = "${provider.label} 계정을 연결했어요") }
-        } catch (e: LologException) {
-            val msg = errorText(e)
-            _state.update { it.copy(linking = null, toast = msg) }
+    /**
+     * 그 회사 SDK로 토큰을 받아 POST /auth/me/social/{provider} (FR-AUTH-06). 409 SOCIAL_ALREADY_LINKED면 토스트(19번).
+     * 사용자가 SDK 창을 닫으면 조용히 원래대로 돌아가요
+     */
+    fun link(provider: SocialProvider, signIn: SocialSignIn) {
+        if (_state.value.linking != null) return
+        viewModelScope.launch {
+            _state.update { it.copy(linking = provider) }
+            try {
+                val token = signIn.token(provider)
+                if (token == null) {
+                    _state.update { it.copy(linking = null) }
+                    return@launch
+                }
+                val linked = repo.linkSocial(provider, token)
+                _state.update { s -> s.copy(linking = null, me = s.me?.copy(linkedProviders = linked), toast = "${provider.label} 계정을 연결했어요") }
+            } catch (e: LologException) {
+                val msg = socialErrorText(e)
+                _state.update { it.copy(linking = null, toast = msg) }
+            }
         }
     }
 
@@ -112,6 +124,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
     val container = LocalContainer.current
     val vm = viewModel { SettingsViewModel(container.repository, container.recorder) }
     val state by vm.state.collectAsState()
+    val signIn = rememberSocialSignIn()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var askLogout by remember { mutableStateOf(false) }
@@ -159,10 +172,9 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                         when {
                             linked -> Text("연결됨", fontSize = 13.sp, color = LologColors.Muted)
                             state.linking == p -> TypingDots(dot = 6.dp)
-                            // 소셜 SDK가 붙기 전에는 실제 서버에 가짜 토큰을 보내면 401 INVALID_TOKEN으로 로그인이 풀려요.
-                            // 로그인 화면처럼 "준비 중"으로 두고 눌리지 않게 해요(목업에서는 그대로 시험할 수 있어요)
-                            !BuildConfig.USE_MOCK -> Text("준비 중", fontSize = 13.sp, color = LologColors.Muted)
-                            else -> SmallPillButton("연결하기", { vm.link(p) })
+                            // 그 회사 키가 local.properties에 없으면 로그인 화면처럼 "준비 중"으로 두고 눌리지 않게 해요(목업은 늘 켜짐)
+                            !signIn.isReady(p) -> Text("준비 중", fontSize = 13.sp, color = LologColors.Muted)
+                            else -> SmallPillButton("연결하기", { vm.link(p, signIn) })
                         }
                     }
                 }
@@ -220,7 +232,6 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
 @Composable
 private fun ProviderLogo(p: SocialProvider) {
     val (bg, fg, mark) = when (p) {
-        SocialProvider.KAKAO -> Triple(LologColors.Kakao, LologColors.KakaoText, "●")
         SocialProvider.GOOGLE -> Triple(LologColors.Canvas, LologColors.Ink, "G")
         SocialProvider.NAVER -> Triple(LologColors.Naver, Color.White, "N")
     }

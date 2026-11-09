@@ -24,6 +24,10 @@ if (file("google-services.json").exists()) {
 //   LOLOG_KEYSTORE_PASSWORD=...
 //   LOLOG_KEY_ALIAS=lolog
 //   LOLOG_KEY_PASSWORD=...
+// 소셜 로그인 키(debug·release 같이 써요). 비어 있으면 그 회사 버튼은 "준비 중"
+//   LOLOG_GOOGLE_WEB_CLIENT_ID=...                구글 "웹" 클라이언트 ID(Android 클라이언트 ID 아님)
+//   LOLOG_NAVER_CLIENT_ID=...
+//   LOLOG_NAVER_CLIENT_SECRET=...
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -37,6 +41,7 @@ val lologUseMock = (localProps.getProperty("LOLOG_USE_MOCK") ?: "true").trim().t
 val lologReleaseBaseUrl = withSlash(localProps.getProperty("LOLOG_RELEASE_BASE_URL") ?: "https://lolog.java21.net/")
 val keystoreFile = localProps.getProperty("LOLOG_KEYSTORE_FILE")?.trim()?.let { file(it) }
 val hasReleaseSigning = keystoreFile != null && keystoreFile.exists()
+fun localString(key: String) = (localProps.getProperty(key) ?: "").trim()
 
 android {
     namespace = "com.lolog.app"
@@ -51,6 +56,10 @@ android {
 
         // sherpa-onnx .so는 arm64-v8a만 넣어요(지원 님 stt/README.md)
         ndk { abiFilters += listOf("arm64-v8a") }
+
+        buildConfigField("String", "LOLOG_GOOGLE_WEB_CLIENT_ID", "\"${localString("LOLOG_GOOGLE_WEB_CLIENT_ID")}\"")
+        buildConfigField("String", "LOLOG_NAVER_CLIENT_ID", "\"${localString("LOLOG_NAVER_CLIENT_ID")}\"")
+        buildConfigField("String", "LOLOG_NAVER_CLIENT_SECRET", "\"${localString("LOLOG_NAVER_CLIENT_SECRET")}\"")
     }
 
     signingConfigs {
@@ -138,6 +147,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.naver.oauth)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
 }

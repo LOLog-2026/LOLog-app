@@ -2,6 +2,7 @@ package com.lolog.app.data
 
 import com.lolog.app.data.model.CardEdit
 import com.lolog.app.data.model.LineEdit
+import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.model.isValidPassword
 import com.lolog.app.data.remote.ApiMapper
 import kotlinx.serialization.json.jsonArray
@@ -24,6 +25,14 @@ class SpecRulesTest {
         // 64자 안이어도 한글이 섞이면 72바이트를 넘을 수 있다(한 글자 3바이트)
         assertFalse(isValidPassword("a1" + "가".repeat(24)))
         assertTrue(isValidPassword("a1" + "가".repeat(23)))
+    }
+
+    @Test
+    fun 소셜_제공자는_구글과_네이버만_쓴다() {
+        assertEquals("google", ApiMapper.providerPath(SocialProvider.GOOGLE))
+        assertEquals("naver", ApiMapper.providerPath(SocialProvider.NAVER))
+        // linkedProviders에 KAKAO가 와도 앱은 모르는 값으로 버린다
+        assertEquals(setOf(SocialProvider.GOOGLE, SocialProvider.NAVER), ApiMapper.providers(listOf("GOOGLE", "NAVER", "KAKAO")))
     }
 
     @Test

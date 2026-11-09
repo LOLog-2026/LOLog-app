@@ -55,7 +55,7 @@ data class TokenDto(
     val isNewUser: Boolean? = null,
 )
 
-/** MeResponse. linkedProviders는 대문자 KAKAO·GOOGLE·NAVER */
+/** MeResponse. linkedProviders는 대문자 GOOGLE·NAVER */
 @Serializable
 data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList())
 

@@ -59,7 +59,8 @@ fun isValidPassword(pw: String): Boolean =
         pw.any { it in 'a'..'z' || it in 'A'..'Z' } && // isLetter()는 한글도 문자로 쳐서 영문만 봐요
         pw.any { it in '0'..'9' }
 
-enum class SocialProvider(val label: String) { KAKAO("카카오"), GOOGLE("Google"), NAVER("네이버") }
+/** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
+enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
 /** GET /auth/me */
 data class Account(val email: String, val linkedProviders: Set<SocialProvider>)
