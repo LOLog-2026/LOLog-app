@@ -41,7 +41,7 @@ LOLog Android 앱이에요.
 | DI | 쓰지 않아요. 객체는 `AppContainer` 하나에 모아요 |
 | 녹음 글 저장 | 앱 파일 폴더. 업로드에 성공하면 지워요 |
 | STT | sherpa-onnx. `.so`는 `jniLibs/arm64-v8a`에, 모델은 `assets`에 넣어요 |
-| 서버 주소·테스트 토큰 | `local.properties`의 `LOLOG_BASE_URL`, `LOLOG_TEST_TOKEN` → BuildConfig |
+| 서버 주소·테스트 토큰 | debug: `local.properties`의 `LOLOG_BASE_URL`, `LOLOG_TEST_TOKEN` → BuildConfig. release는 아래 「배포 빌드」 |
 
 ```
 com.lolog.app
@@ -117,6 +117,31 @@ sealed interface PartUpload {
 | `recording` | 녹음 중 | 지원 | 녹음 중 상단 고정 알림 | 낮음 (소리 없음) |
 | `recording_end` | 녹음 종료 | 지원 | 3시간이 되어 녹음을 끝냈다는 알림 | 기본 |
 | `push` | 분석·만화 완료 | 서현 | FCM 푸시 | 기본 |
+
+## 배포 빌드 (release)
+
+release는 `local.properties`의 개발용 값(`LOLOG_BASE_URL`, `LOLOG_TEST_TOKEN`, `LOLOG_USE_MOCK`)을 쓰지 않아요.
+
+| 값 | release |
+| --- | --- |
+| 목업 | 늘 꺼짐(실제 서버·실제 녹음) |
+| 서버 주소 | `https://lolog.java21.net/`. 바꿀 때만 `LOLOG_RELEASE_BASE_URL`. https가 아니면 빌드가 멈춰요 |
+| 시험용 토큰 | 넣지 않아요 |
+
+서명된 APK를 만들려면 키스토어를 한 번 만들고, 경로와 비밀번호를 `local.properties`에 적어요. 키스토어(`*.jks`)와 비밀번호는 커밋하지 않고 팀 안에서 따로 전해요. 잃어버리면 같은 앱으로 업데이트할 수 없어요.
+
+```
+keytool -genkeypair -v -keystore ~/lolog-release.jks -alias lolog -keyalg RSA -keysize 2048 -validity 10000
+```
+
+```
+LOLOG_KEYSTORE_FILE=/Users/me/lolog-release.jks
+LOLOG_KEYSTORE_PASSWORD=...
+LOLOG_KEY_ALIAS=lolog
+LOLOG_KEY_PASSWORD=...
+```
+
+`./gradlew assembleRelease`를 하면 `app/build/outputs/apk/release/app-release.apk`가 나와요. 키스토어가 없으면 `app-release-unsigned.apk`가 나오고 경고가 떠요. 서명 안 된 APK는 폰에 설치되지 않아요.
 
 ## 화면 쪽 실행 안내 (서현)
 
