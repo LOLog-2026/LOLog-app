@@ -1,0 +1,29 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+google-services.json
+
+# 비밀 값 (CLAUDE.md 7·11번)
+.env
+*.env
+*.jks
+*.keystore
+
+# 녹음 파일(음성 데이터)은 올리지 않음
+*.wav
+*.m4a
+*.mp3
+*.pcm
+*.aac
+
+# sherpa-onnx .so·모델은 커서 올리지 않음 (받는 법: recording/stt/README.md)
+app/src/main/jniLibs/
+app/src/main/assets/*.onnx
+app/src/main/assets/tokens.txt

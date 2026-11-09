@@ -1,0 +1,384 @@
+package com.lolog.app.ui.screens.library
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lolog.app.data.model.*
+import com.lolog.app.data.repo.LologException
+import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.ui.components.*
+import com.lolog.app.ui.navigation.LocalContainer
+import com.lolog.app.ui.theme.LologColors
+import com.lolog.app.ui.theme.LologShape
+import com.lolog.app.util.dayLabel
+import com.lolog.app.util.longDate
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/*
+ * 카드 상세 (mockups/카드-결정사항-시안.png ②③⑤, 보관함-만화-시안.png ③④⑥)
+ *  - 제목 아래 "녹음 날짜·시간 · 장소". 이름 없는 화자는 화자1·2·3
+ *  - 이 카드로 만든 만화: "1 / 3번 · 실패는 안 셈". 실패한 만화는 그 자리에서 다시 시도
+ *  - 만화 그리는 중: 고치기·지우기·다시 그리기 모두 꺼짐 (서버도 409 CARD_LOCKED / COMIC_IN_PROGRESS)
+ *  - 3번 다 씀: 회색 버튼 "3번 다 그렸어요"
+ *  - 카드를 지워도 만화는 '내 만화'에 남아요
+ */
+
+class CardDetailViewModel(private val repo: LologRepository, private val id: Long) : ViewModel() {
+    data class State(
+        val card: CardDetail? = null,
+        val comics: Map<Long, ComicDetail> = emptyMap(),
+        val loading: Boolean = true,
+        val error: String? = null,
+        val notFound: Boolean = false,
+        val busy: Boolean = false,
+        val deleted: Boolean = false,
+        val requestedComicId: Long? = null,
+        val toast: String? = null,
+        val deleteFailed: Boolean = false,
+    )
+
+    private val _state = MutableStateFlow(State())
+    val state: StateFlow<State> = _state
+
+    /** GET /api/cards/{id} */
+    fun load() = viewModelScope.launch {
+        try {
+            val card = repo.card(id)
+            _state.update { it.copy(card = card, loading = false, error = null) }
+            // 만화 날짜·그림은 카드 응답에 없어서 만화를 따로 조회해요
+            val comics = card.comics.mapNotNull { c -> runCatching { repo.comic(c.id) }.getOrNull()?.let { c.id to it } }.toMap()
+            _state.update { it.copy(comics = comics) }
+        } catch (e: LologException) {
+            _state.update {
+                if (e.code == ErrorCodes.CARD_NOT_FOUND) it.copy(loading = false, notFound = true)
+                else it.copy(loading = false, error = errorText(e))
+            }
+        }
+    }
+
+    /** POST /api/cards/{id}/comics → 202, comicId. 실패한 만화 "다시 시도"도 같은 요청이에요 */
+    fun requestComic() = viewModelScope.launch {
+        _state.update { it.copy(busy = true) }
+        try {
+            val res = repo.requestComic(id)
+            _state.update { it.copy(busy = false, requestedComicId = res.comicId) }
+        } catch (e: LologException) {
+            _state.update { it.copy(busy = false, toast = errorText(e)) }
+            load()
+        }
+    }
+
+    /** DELETE /api/cards/{id} */
+    fun delete() = viewModelScope.launch {
+        _state.update { it.copy(busy = true) }
+        try {
+            repo.deleteCard(id)
+            _state.update { it.copy(busy = false, deleted = true) }
+        } catch (e: LologException) {
+            // 공용 ③ 가벼운 실패: 아래 스낵바 + 다시 시도
+            _state.update { it.copy(busy = false, deleteFailed = true, toast = if (e.code == ErrorCodes.CARD_LOCKED) errorText(e) else "카드를 지우지 못했어요") }
+        }
+    }
+
+    fun consumed() = _state.update { it.copy(requestedComicId = null, toast = null, deleteFailed = false) }
+}
+
+// ── 08 카드 상세 · 10 만화 요청 · 22 카드 지우기 · 24 3번 다 씀 ──
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CardDetailScreen(
+    cardId: Long,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onComic: (Long) -> Unit,
+    onDeleted: () -> Unit,
+    onNotFound: () -> Unit,
+    savedJustNow: Boolean = false,
+    onSavedShown: () -> Unit = {},
+) {
+    val repo = LocalContainer.current.repository
+    val vm = viewModel { CardDetailViewModel(repo, cardId) }
+    val state by vm.state.collectAsState()
+    var menu by remember { mutableStateOf(false) }
+    var askDelete by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }
+    LaunchedEffect(state.notFound) { if (state.notFound) onNotFound() }
+    LaunchedEffect(state.requestedComicId) { state.requestedComicId?.let { sheet = false; vm.consumed(); onComic(it) } }
+    LaunchedEffect(state.toast) {
+        val msg = state.toast ?: return@LaunchedEffect
+        val retry = state.deleteFailed
+        askDelete = false
+        vm.consumed()
+        val r = snackbar.showSnackbar(msg, actionLabel = if (retry) "다시 시도" else null)
+        if (r == SnackbarResult.ActionPerformed && retry) vm.delete()
+    }
+    // 카드 고치기에서 저장하고 돌아오면
+    LaunchedEffect(savedJustNow) {
+        if (savedJustNow) { onSavedShown(); snackbar.showSnackbar("저장했어요. 보관함에도 바로 반영됐어요") }
+    }
+
+    val card = state.card
+    Scaffold(
+        modifier = Modifier.noteLines(),
+        containerColor = Color.Transparent,
+        snackbarHost = { LologSnackbarHost(snackbar) },
+        topBar = {
+            LologTopBar("", onBack) {
+                Box {
+                    IconButton(onClick = { menu = true }, enabled = card != null) { Icon(Icons.Default.MoreVert, "더 보기") }
+                    DropdownMenu(menu, { menu = false }) {
+                        val locked = card?.locked == true
+                        DropdownMenuItem(
+                            leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = if (locked) LologColors.Muted else LologColors.Rec) },
+                            text = {
+                                Column {
+                                    Text("카드 지우기", color = if (locked) LologColors.Muted else LologColors.Rec)
+                                    if (locked) Text("만화를 다 그린 뒤에 지울 수 있어요", fontSize = 11.sp, color = LologColors.Muted)
+                                }
+                            },
+                            enabled = !locked,
+                            onClick = { menu = false; askDelete = true },
+                        )
+                    }
+                }
+            }
+        },
+        bottomBar = { card?.let { BottomActions(it, state.busy, onEdit = onEdit, onDraw = { sheet = true }) } },
+    ) { pad ->
+        when {
+            state.loading -> SkeletonList(Modifier.padding(pad), count = 3)
+            card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
+            else -> CardBody(card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad))
+        }
+    }
+
+    if (sheet && card != null) {
+        ComicRequestSheet(card, busy = state.busy, onConfirm = vm::requestComic, onDismiss = { sheet = false })
+    }
+    if (askDelete) {
+        LologDialog(
+            title = "이 카드를 지울까요?",
+            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '내 만화'에 그대로 남아요.",
+            confirmText = "지우기",
+            danger = true,
+            loading = state.busy,
+            onConfirm = { vm.delete() },
+            onDismiss = { askDelete = false },
+        )
+    }
+}
+
+/** 아래 버튼: [카드 고치기] [다시 그리기 · N번 남음]. 그리는 중·3번 다 쓰면 이유 한 줄 + 회색 */
+@Composable
+private fun BottomActions(card: CardDetail, busy: Boolean, onEdit: () -> Unit, onDraw: () -> Unit) {
+    val full = card.remaining <= 0 && !card.locked
+    Column(
+        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when {
+            card.locked -> LockNote("만화 그리는 중엔 고치거나 지울 수 없어요")
+            full -> LockNote("한 카드로는 ${COMIC_LIMIT_PER_CARD}번까지 그릴 수 있어요")
+        }
+        if (full) {
+            PrimaryButton("${COMIC_LIMIT_PER_CARD}번 다 그렸어요", {}, enabled = false)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onEdit, enabled = !card.locked,
+                    modifier = Modifier.weight(1f).height(52.dp), shape = LologShape.pill,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LologColors.Line),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = LologColors.Paper, contentColor = LologColors.Ink),
+                ) {
+                    Icon(Icons.Outlined.Edit, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("카드 고치기", style = MaterialTheme.typography.labelLarge)
+                }
+                PrimaryButton(
+                    text = when {
+                        card.locked -> "그리는 중…"
+                        card.used == 0 && card.comics.isEmpty() -> "4컷만화로 그리기"
+                        else -> "다시 그리기 · ${card.remaining}번 남음"
+                    },
+                    onClick = onDraw, enabled = !card.locked, loading = busy,
+                    modifier = Modifier.weight(1.3f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LockNote(text: String) {
+    Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Lock, null, tint = LologColors.Muted, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, fontSize = 12.sp, color = LologColors.Muted)
+    }
+}
+
+@Composable
+private fun CardBody(
+    card: CardDetail,
+    comics: Map<Long, ComicDetail>,
+    busy: Boolean,
+    onComic: (Long) -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier,
+) {
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        KindChip(card.kind)
+        Text(card.summary, style = MaterialTheme.typography.headlineMedium)
+        // 🎙 11월 5일 오후 8:05 녹음 · 홍대 카페
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Mic, null, tint = LologColors.Muted, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            Text(
+                listOfNotNull("${longDate(card.recordedAt ?: card.createdAt)} 녹음", card.place).joinToString(" · "),
+                fontSize = 12.sp, color = LologColors.Muted,
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        card.lines.forEach { line ->
+            val idx = card.speakers.indexOfFirst { it.key == line.speaker }
+            Row(
+                Modifier.fillMaxWidth().softCard(LologShape.sm).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Row(
+                    Modifier.clip(LologShape.pill).background(LologColors.Canvas).height(24.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(speakerColor(idx)))
+                    Spacer(Modifier.width(4.dp))
+                    Text(card.speakers.displayName(line.speaker), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(line.text, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f).padding(top = 2.dp))
+            }
+        }
+
+        if (card.comics.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("이 카드로 만든 만화", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                val full = card.remaining <= 0
+                Text(
+                    "${card.used} / ${COMIC_LIMIT_PER_CARD}번" + if (!full && card.comics.any { it.status == ComicStatus.FAILED }) " · 실패는 안 셈" else "",
+                    fontSize = 12.sp, fontWeight = if (full) FontWeight.Bold else FontWeight.Normal,
+                    color = if (full) LologColors.Rec else LologColors.Muted,
+                )
+            }
+            // 만든 순서대로 1번째, 2번째…
+            card.comics.sortedBy { it.id }.forEachIndexed { i, ref ->
+                ComicRow(i + 1, ref, comics[ref.id], card, busy, onOpen = { onComic(ref.id) }, onRetry = onRetry)
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDetail, busy: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {
+    val stage = ref.status.stage
+    Row(
+        Modifier.fillMaxWidth().softCard(LologShape.sm).clickable(onClick = onOpen).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(52.dp).clip(LologShape.sm).background(LologColors.Canvas)) {
+            if (stage == ComicStage.DONE) ComicImage(detail?.imageUrl, card.lines.map { it.text }, Modifier.fillMaxSize(), small = true)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("${no}번째 만화", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(
+                when (stage) {
+                    ComicStage.DONE -> listOfNotNull("완료", detail?.createdAt?.let { dayLabel(it) }?.ifBlank { null }).joinToString(" · ")
+                    ComicStage.FAILED -> "실패 · 다시 시도해 주세요"
+                    ComicStage.MAKING -> "그리고 있어요 · 1~2분 걸려요"
+                    ComicStage.WAITING -> "곧 그리기 시작해요"
+                },
+                fontSize = 12.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        when (stage) {
+            ComicStage.DONE -> Text("완료", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LologColors.MemoryText)
+            // 실패: 이유는 안 보여 주고 그 자리에서 다시 시도 (같은 POST 요청). 그리는 중이면 꺼져요
+            ComicStage.FAILED -> Box(
+                Modifier.clip(LologShape.pill).border(1.dp, if (card.locked) LologColors.Line else LologColors.Rec, LologShape.pill)
+                    .clickable(enabled = !card.locked && !busy, onClick = onRetry)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) { Text("다시 시도", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (card.locked) LologColors.Muted else LologColors.Rec) }
+            else -> StageBadge(stage)
+        }
+    }
+}
+
+/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받아요 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LologColors.Paper) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KindChip(card.kind)
+                Text(card.summary, fontSize = 14.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "세로 4칸으로 그리고, 칸마다 말풍선에 대사를 넣어요. 보통 1~2분 걸리고, 완성되면 알림을 보내 드려요.",
+                fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp,
+            )
+            Column(Modifier.fillMaxWidth().background(LologColors.Canvas, LologShape.md).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                InfoRow("등장인물", card.speakers.displayNames().joinToString(", "))
+                InfoRow("장소", card.place ?: "없음")
+                InfoRow("대사", "${card.lines.size}개")
+                InfoRow("남은 횟수", "${card.remaining}번 (실패는 안 셈)")
+            }
+            PrimaryButton("그려 주세요", onConfirm, loading = busy)
+            GhostButton("취소", onDismiss)
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row {
+        Text(label, fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.width(96.dp))
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
