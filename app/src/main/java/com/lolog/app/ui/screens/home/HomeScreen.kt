@@ -48,6 +48,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.lolog.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 
 class HomeViewModel(private val repo: LologRepository) : ViewModel() {
     data class State(val cardCount: String = "-", val comicCount: String = "-", val recent: CardSummary? = null)
@@ -147,7 +150,10 @@ fun HomeScreen(
     ) {
         // 위쪽 줄: 왼쪽 LOLog, 오른쪽 설정 톱니
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("LOLog", style = LologText.brand, modifier = Modifier.padding(vertical = 4.dp))
+            // 로고: 작은 코랄 마크 + LOLog 글자
+            Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(32.dp))
+            Spacer(Modifier.width(8.dp))
+            Image(painterResource(R.drawable.logo_word), contentDescription = "LOLog", modifier = Modifier.height(20.dp))
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onSettings) {
                 Icon(Icons.Outlined.Settings, contentDescription = "설정", tint = LologColors.Muted)
@@ -211,7 +217,7 @@ private fun AnalysisStrip(a: HomeViewModel.Analysis, onLibrary: () -> Unit, onDi
         )
         p?.status == RecordingStatus.DETECTING -> Strip(
             title = "재밌는 이야기 찾는 중…", body = "보통 30초쯤 걸려요. 그동안 다시 녹음해도 돼요",
-            bg = Color(0xFFF6F8FF), border = LologColors.AccentSoft,
+            bg = Color(0xFFFFFAEB), border = LologColors.AccentSoft,
             lead = { TypingDots(dot = 6.dp) },
         )
         else -> Strip(

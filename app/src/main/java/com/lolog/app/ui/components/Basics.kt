@@ -33,9 +33,9 @@ import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.ui.theme.LologText
 
-/** 볼펜 노트 배경: 캔버스색 + 28dp 간격 옅은 줄 */
+/** 볼펜 노트 배경: 흰 바탕 + 28dp 간격 아주 옅은 줄 (B안) */
 fun Modifier.noteLines(): Modifier = this
-    .background(LologColors.Canvas)
+    .background(LologColors.Paper)
     .drawBehind {
         val gap = 28.dp.toPx()
         var y = 10.dp.toPx()
@@ -45,11 +45,12 @@ fun Modifier.noteLines(): Modifier = this
         }
     }
 
-/** 흰 카드 + 옅은 그림자 */
+/** 흰 카드 + 옅은 그림자 + 아주 옅은 테두리 */
 fun Modifier.softCard(shape: RoundedCornerShape = LologShape.md): Modifier = this
-    .shadow(2.dp, shape, ambientColor = Color(0x10191F28), spotColor = Color(0x10191F28))
+    .shadow(3.dp, shape, ambientColor = Color(0x10191F28), spotColor = Color(0x10191F28))
     .clip(shape)
     .background(LologColors.Paper)
+    .border(1.dp, Color(0xFFF0F1F4), shape) // 흰 바탕 위에서도 카드 테두리가 보이게
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
