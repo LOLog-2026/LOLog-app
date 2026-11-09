@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 // ── 01 스플래시: SplashScreen.kt (3D 얼굴이 떠오르는 첫 화면) ──
 
@@ -103,10 +104,14 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
     val state: StateFlow<State> = _state
     private var countdown: Job? = null
 
-    fun login(email: String, password: String) = submit(null) { repo.login(email, password) }
+    fun login(email: String, password: String) {
+        val e = normalizeEmail(email)
+        submit(null) { repo.login(e, password) }
+    }
 
     /** 인증번호 받기. 가입 여부와 관계없이 같은 문구를 보여 줘요 */
-    fun requestCode(email: String) {
+    fun requestCode(rawEmail: String) {
+        val email = normalizeEmail(rawEmail)
         val s = _state.value
         if (!isEmail(email) || s.sendingCode || s.loading || s.resendLeft > 0) return
         viewModelScope.launch {
@@ -153,7 +158,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
 
     fun clearCodeError() = _state.update { it.copy(codeError = null, codeExpired = false) }
 
-    fun signup(email: String, password: String, code: String) {
+    fun signup(rawEmail: String, password: String, code: String) {
+        val email = normalizeEmail(rawEmail)
         // 화면에서 규칙을 다 맞춰야 버튼이 켜지지만, 한 번 더 확인 (FR-AUTH-01)
         if (!isEmail(email) || !isValidPassword(password) || code.length != EMAIL_CODE_LENGTH) return
         submit(null, isSignup = true) { repo.signup(email, password, code) }
@@ -198,6 +204,9 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
 }
 
 fun isEmail(s: String) = android.util.Patterns.EMAIL_ADDRESS.matcher(s).matches()
+
+/** 서버가 이메일 대소문자를 바꾸지 않아서, 앱이 앞뒤 공백을 빼고 소문자로 바꿔 보내요 */
+fun normalizeEmail(s: String) = s.trim().lowercase(Locale.ROOT)
 
 @Composable
 private fun authViewModel(): AuthViewModel {
@@ -301,7 +310,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
     val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
     val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
     val confirmOk = confirm.isNotEmpty() && confirm == password
-    val codeOk = state.codeEmail == email.trim() && code.length == EMAIL_CODE_LENGTH
+    val codeOk = state.codeEmail == normalizeEmail(email) && code.length == EMAIL_CODE_LENGTH
     val allOk = emailOk && lengthOk && mixOk && confirmOk && codeOk
     val emailFormatError = if (emailTouched && email.isNotBlank() && !emailOk) "이메일 형식을 확인해 주세요" else null
     val codeButton = when {
@@ -323,7 +332,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 LabeledField(
-                    "이메일", email, { email = it; emailTouched = false; vm.emailChanged(it.trim()) },
+                    "이메일", email, { email = it; emailTouched = false; vm.emailChanged(normalizeEmail(it)) },
                     icon = Icons.Outlined.MailOutline, placeholder = "이메일", type = KeyboardType.Email,
                     error = state.emailError ?: emailFormatError, info = state.emailInfo, enabled = !state.loading,
                     onFocusLost = { emailTouched = true },
