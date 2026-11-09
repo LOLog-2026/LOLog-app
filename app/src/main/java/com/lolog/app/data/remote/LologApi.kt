@@ -10,7 +10,9 @@ import retrofit2.http.*
 
 /** 인증 서비스 (/auth). Nginx가 /auth를 인증 서비스로 넘겨요. */
 interface AuthApi {
-    @POST("auth/signup") suspend fun signup(@Body body: EmailAuthDto): TokenDto
+    /** 204 본문 없음 */
+    @POST("auth/email/code") suspend fun requestEmailCode(@Body body: EmailCodeDto)
+    @POST("auth/signup") suspend fun signup(@Body body: SignupDto): TokenDto
     @POST("auth/login") suspend fun login(@Body body: EmailAuthDto): TokenDto
     @POST("auth/social/{provider}")
     suspend fun social(@Path("provider") provider: String, @Body body: SocialAuthDto): TokenDto

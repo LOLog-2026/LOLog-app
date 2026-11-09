@@ -26,9 +26,17 @@ data class ErrorDto(
 
 // ── 인증 (/auth) ──
 
-/** SignupRequest · LoginRequest */
+/** LoginRequest */
 @Serializable
 data class EmailAuthDto(val email: String, val password: String)
+
+/** EmailCodeRequest. 응답은 늘 204(본문 없음) */
+@Serializable
+data class EmailCodeDto(val email: String)
+
+/** SignupRequest. code는 6자리 문자열이라 앞의 0을 그대로 보내요 */
+@Serializable
+data class SignupDto(val email: String, val password: String, val code: String)
 
 /** SocialLoginRequest */
 @Serializable
