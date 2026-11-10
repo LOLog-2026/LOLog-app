@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -33,6 +34,7 @@ import com.lolog.app.data.model.ComicStage
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.ui.theme.LologText
+import coil.request.ImageRequest
 
 /** 볼펜 노트 배경: 흰 바탕 + 28dp 간격 아주 옅은 줄 (B안) */
 fun Modifier.noteLines(): Modifier = this
@@ -228,6 +230,18 @@ fun SpeakerAvatar(name: String, index: Int, size: Dp = 32.dp) {
         Modifier.size(size).clip(CircleShape).background(speakerColor(index)),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.Bold, color = LologColors.Ink) }
+}
+
+/**
+ * 화자 그림(기본 화자·프로필 캐릭터) 불러오기. 서명 주소가 10분마다 바뀌어서
+ * 메모리·디스크 캐시를 주소 대신 [cacheKey](default-<id>, profile-<userId>)로 해요
+ */
+@Composable
+fun characterImage(url: String, cacheKey: String): ImageRequest {
+    val context = LocalContext.current
+    return remember(url, cacheKey) {
+        ImageRequest.Builder(context).data(url).memoryCacheKey(cacheKey).diskCacheKey(cacheKey).crossfade(true).build()
+    }
 }
 
 /** 파란 볼펜 손글씨 메모 (메모에만 사용) */
