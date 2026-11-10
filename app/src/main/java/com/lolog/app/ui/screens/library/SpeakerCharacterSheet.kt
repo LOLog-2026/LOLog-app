@@ -48,6 +48,7 @@ import kotlinx.coroutines.coroutineScope
  *    그림이 없으면 회색 안내 + 기본 화자 가로 줄 + "AI에게 맡기기". 나는 "내 캐릭터 만들기"(이번엔 자리만)
  *  - 기본: 나이대·성별 거르기 + 격자. 이름은 그대로 둬요
  *  - 맨 아래 "그림 떼기"(지금 그림이 붙어 있을 때만)
+ *  - 그 아래 "이 화자 빼기"(onRemove를 넘긴 카드 고치기에서만). 대사가 남아 있으면 꺼지고 회색 안내
  *  - "AI에게 맡기기"·그냥 닫기 = 그림은 그대로 두고 이름만 저장
  * 저장(PATCH)은 부르는 화면이 해요: 카드 보기는 바로, 카드 고치기는 "저장" 때 한꺼번에.
  */
@@ -141,6 +142,10 @@ fun SpeakerCharacterSheet(
     data: SpeakerCharacterViewModel.State,
     onRetry: () -> Unit,
     onClose: (SpeakerPick) -> Unit,
+    /** 카드 고치기에서만 넘겨요(화자 2명 이상). null이면 "이 화자 빼기"가 안 보여요 */
+    onRemove: (() -> Unit)? = null,
+    /** false면 그 화자의 대사가 남아 있어 버튼이 꺼져요 */
+    removeEnabled: Boolean = true,
 ) {
     val current = speaker.character
     var name by remember { mutableStateOf(speaker.name.orEmpty()) }
@@ -216,6 +221,15 @@ fun SpeakerCharacterSheet(
                     TextButton(onClick = { onClose(SpeakerPick(cleanName, null, characterChanged = true)) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text("그림 떼기", fontSize = 13.sp, color = LologColors.Muted)
                     }
+                }
+                if (onRemove != null) {
+                    TextButton(onClick = onRemove, enabled = removeEnabled, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        Text("이 화자 빼기", fontSize = 13.sp, color = if (removeEnabled) LologColors.Rec else LologColors.Muted)
+                    }
+                    if (!removeEnabled) Text(
+                        "이 화자의 대사를 다른 화자로 바꾸면 뺄 수 있어요", fontSize = 12.sp, color = LologColors.Muted,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
                 }
             }
             LologSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
