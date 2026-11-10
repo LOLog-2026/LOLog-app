@@ -186,7 +186,8 @@ fun FriendRequestsScreen(onBack: () -> Unit) {
         }
     }
 
-    confirmBlock?.let { r ->
+    // 바깥 Scaffold의 기본 글자색이 회색이라 확인 창 제목은 Ink로
+    confirmBlock?.let { r -> CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
         val n = r.user.nickname
         LologDialog(
             title = "${n}님을 차단할까요?",
@@ -197,7 +198,7 @@ fun FriendRequestsScreen(onBack: () -> Unit) {
             onConfirm = { vm.block(r) { confirmBlock = null } },
             onDismiss = { if (!state.blocking) confirmBlock = null },
         )
-    }
+    } }
 }
 
 /** 받은 요청: 그림 · 닉네임 · "코드 · 3분 전" · [수락][거절] ⋯ / 보낸 요청: ... · [취소] */

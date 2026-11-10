@@ -48,6 +48,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -62,6 +63,7 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
         val savingNickname: Boolean = false,
         val busy: Boolean = false,
         val snackbar: String? = null,
+        val loads: Int = 0, // 새로 받기에 성공한 횟수. 맨 위 줄 연노랑을 새 목록에 칠하려고 봐요
     )
 
     private val _state = MutableStateFlow(State())
@@ -79,7 +81,7 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
                 val f = friends.await()
                 val r = received.await().size
                 val s = sent.await().size
-                _state.update { it.copy(loading = false, error = null, profile = p, friends = f, receivedCount = r, sentCount = s) }
+                _state.update { it.copy(loading = false, error = null, profile = p, friends = f, receivedCount = r, sentCount = s, loads = it.loads + 1) }
             }
         } catch (e: Throwable) {
             _state.update { it.copy(loading = false, error = if (it.profile == null) errorText(e) else null, snackbar = if (it.profile != null) errorText(e) else null) }
@@ -151,7 +153,11 @@ fun FriendsScreen(
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
     // 띠는 화면 범위에서 띄워요(값을 비우면 이 효과가 다시 돌아 띠가 끊겨요)
     LaunchedEffect(message, highlightTop) {
-        if (highlightTop) highlight = true
+        // 새 친구가 들어간 목록을 받은 뒤에 칠해요(돌아온 직후 목록은 예전 것)
+        if (highlightTop) {
+            val start = vm.state.value.loads
+            scope.launch { vm.state.first { it.loads > start }; highlight = true }
+        }
         message?.let { onMessageShown(); scope.launch { snackbar.showSnackbar(it) } }
     }
     LaunchedEffect(highlight) { if (highlight) { delay(1_800); highlight = false } }
@@ -279,7 +285,8 @@ fun FriendsScreen(
         }
     }
 
-    confirm?.let { (f, block) ->
+    // 탭 화면 바탕의 기본 글자색이 회색이라 확인 창 제목은 Ink로
+    confirm?.let { (f, block) -> CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
         LologDialog(
             title = if (block) "${f.nickname}님을 차단할까요?" else "${f.nickname}님과 친구를 끊을까요?",
             body = if (block) {
@@ -293,7 +300,7 @@ fun FriendsScreen(
             onConfirm = { vm.remove(f, block) { confirm = null } },
             onDismiss = { if (!state.busy) confirm = null },
         )
-    }
+    } }
 }
 
 /** 맨 위 상자: 닉네임이 없으면 입력 칸, 있으면 내 닉네임과 친구 코드 */
