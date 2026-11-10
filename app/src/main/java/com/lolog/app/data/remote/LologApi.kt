@@ -32,14 +32,17 @@ interface MainApi {
     @GET("api/recordings")
     suspend fun recordings(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("status") status: String?): RecordingPageDto
 
-    @GET("api/cards") suspend fun cards(@Query("cursor") cursor: String?, @Query("size") size: Int): CardPageDto
+    /** sort: "oldest"면 오래된순, null(빼면)이면 최신순 */
+    @GET("api/cards")
+    suspend fun cards(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): CardPageDto
     @GET("api/cards/{id}") suspend fun card(@Path("id") id: Long): CardDetailDto
     @PATCH("api/cards/{id}") suspend fun updateCard(@Path("id") id: Long, @Body body: JsonObject): CardDetailDto
     @DELETE("api/cards/{id}") suspend fun deleteCard(@Path("id") id: Long)
 
     /** 요청 본문 없음 */
     @POST("api/cards/{id}/comics") suspend fun requestComic(@Path("id") cardId: Long): ComicAcceptedDto
-    @GET("api/comics") suspend fun comics(@Query("cursor") cursor: String?, @Query("size") size: Int): ComicPageDto
+    @GET("api/comics")
+    suspend fun comics(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): ComicPageDto
     @GET("api/comics/{id}") suspend fun comic(@Path("id") id: Long): ComicDto
     @DELETE("api/comics/{id}") suspend fun deleteComic(@Path("id") id: Long)
 

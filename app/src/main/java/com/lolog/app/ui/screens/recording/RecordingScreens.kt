@@ -322,13 +322,13 @@ private fun Analyzing(status: RecordingProgress?, onLibrary: () -> Unit) {
                 ),
                 StepItem(
                     "카드로 정리 완료",
-                    if (done) "카드 ${status!!.cardCount}개를 보관함에 넣었어요" else "찾은 카드 수를 알려 드리고 보관함에 넣어요",
+                    if (done) "카드 ${status!!.cardCount}개를 ${LIBRARY_NAME}에 넣었어요" else "찾은 카드 수를 알려 드리고 ${LIBRARY_NAME}에 넣어요",
                     if (done) StepState.DONE else StepState.WAIT,
                 ),
             ),
         )
         Spacer(Modifier.weight(1f))
-        if (done) PrimaryButton("보관함에서 보기", onLibrary)
+        if (done) PrimaryButton("${LIBRARY_NAME}에서 보기", onLibrary)
         else PrivacyNote("앱을 닫아도 계속 진행돼요. 카드가 생기면 알림으로 알려 드려요.")
     }
 }

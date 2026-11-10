@@ -176,8 +176,8 @@ fun HomeScreen(
         analysis?.let { a -> AnalysisStrip(a, onLibrary = { vm.dismiss(); onLibrary() }, onDismiss = vm::dismiss) }
         val newCards = analysis?.progress?.takeIf { it.status == RecordingStatus.DONE }?.cardCount ?: 0
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat(state.cardCount, "모은 이야기 카드", Modifier.weight(1f).clickable(onClick = onLibrary), plus = newCards)
-            Stat(state.comicCount, "완성된 4컷만화", Modifier.weight(1f))
+            Stat(state.cardCount, "이야기 카드", Modifier.weight(1f).clickable(onClick = onLibrary), plus = newCards)
+            Stat(state.comicCount, "4컷만화", Modifier.weight(1f))
         }
         state.recent?.let { card ->
             Row(verticalAlignment = Alignment.Bottom) {
@@ -270,11 +270,10 @@ private fun RecordButton(onClick: () -> Unit) {
 
 @Composable
 private fun Stat(value: String, label: String, modifier: Modifier, plus: Int = 0) {
-    Column(modifier.softCard().padding(12.dp)) {
-        Row {
-            Text(value, style = LologText.stat)
-            if (plus > 0) Text("+$plus", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Rec, modifier = Modifier.padding(start = 3.dp))
-        }
-        Text(label, fontSize = 12.sp, color = LologColors.Muted)
+    // 한 줄: 이름은 왼쪽, 숫자(코랄)는 오른쪽. 새 카드 "+n"은 숫자 옆에 그대로
+    Row(modifier.softCard().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(value, style = LologText.stat.copy(fontSize = 30.sp, lineHeight = 34.sp), maxLines = 1)
+        if (plus > 0) Text("+$plus", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Rec, modifier = Modifier.padding(start = 3.dp).align(Alignment.Top))
     }
 }

@@ -63,13 +63,13 @@ class RemoteLologRepository(
         api.recordings(cursor = null, size = 1, status = "RECEIVED,DETECTING").recordings.firstOrNull()?.recordingId
     }
 
-    override suspend fun cards(cursor: String?, size: Int) = call { api.cards(cursor, size).toModel() }
+    override suspend fun cards(cursor: String?, size: Int, sort: SortOrder) = call { api.cards(cursor, size, sort.query).toModel() }
     override suspend fun card(id: Long) = call { api.card(id).toModel() }
     override suspend fun updateCard(id: Long, edit: CardEdit) = call { api.updateCard(id, with(ApiMapper) { edit.patchBody() }).toModel() }
     override suspend fun deleteCard(id: Long) = call { api.deleteCard(id) }
 
     override suspend fun requestComic(cardId: Long) = call { api.requestComic(cardId).toModel() }
-    override suspend fun comics(cursor: String?, size: Int) = call { api.comics(cursor, size).toModel() }
+    override suspend fun comics(cursor: String?, size: Int, sort: SortOrder) = call { api.comics(cursor, size, sort.query).toModel() }
     override suspend fun comic(id: Long) = call { api.comic(id).toDetail(id) }
     override suspend fun deleteComic(id: Long) = call { api.deleteComic(id) }
 
