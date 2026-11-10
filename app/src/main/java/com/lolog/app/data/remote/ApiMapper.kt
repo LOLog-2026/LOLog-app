@@ -3,6 +3,7 @@ package com.lolog.app.data.remote
 import com.lolog.app.data.model.*
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -123,13 +124,17 @@ object ApiMapper {
      *    character는 붙이면 { type, id }, 떼면 "character": null 을 꼭 넣어요(빼면 "그대로"라는 뜻이에요)
      *  - lines: [{ id, speaker?, text? }] 바꾼 대사만, 그 안에서도 바꾼 칸만
      *  - place: 바꿨을 때만. 지웠으면 "place": null
+     *  - 새 화자: 이름·그림이 없어도 speakers에 { "key": "화자3" }을 꼭 넣어요(있으면 같이)
+     *  - removeSpeakers: ["화자2"]. 빼는 화자는 speakers에 넣지 않아요(이름·그림을 바꿨어도)
+     *  key는 모두 빼기 전 기준(앱이 들고 있는 원래 key)이에요.
      * Json 설정(explicitNulls=false)이 null을 빼 버려서 DTO 대신 직접 만들어요.
      */
     fun CardEdit.patchBody(): JsonObject = buildJsonObject {
         val names = speakers?.associateBy { it.key }.orEmpty()
         val pics = characters.orEmpty()
-        // 이름만 바꾼 화자, 그림만 바꾼 화자, 둘 다 바꾼 화자를 key 하나로 합쳐요(처음 나온 순서대로)
-        val keys = (names.keys + pics.keys).distinct()
+        val removed = removeSpeakers.orEmpty().distinct()
+        // 이름만 바꾼 화자, 그림만 바꾼 화자, 둘 다 바꾼 화자, 새 화자를 key 하나로 합쳐요(처음 나온 순서대로)
+        val keys = (names.keys + pics.keys + newSpeakers.orEmpty()).distinct() - removed.toSet()
         if (keys.isNotEmpty()) {
             put("speakers", buildJsonArray {
                 keys.forEach { key ->
@@ -157,6 +162,7 @@ object ApiMapper {
             })
         }
         place?.let { p -> put("place", p.ifBlank { null }) }
+        if (removed.isNotEmpty()) put("removeSpeakers", buildJsonArray { removed.forEach { add(JsonPrimitive(it)) } })
     }
 
     // ── 만화 ──

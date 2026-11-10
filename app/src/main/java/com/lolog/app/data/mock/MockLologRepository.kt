@@ -70,6 +70,70 @@ internal fun mockCheckPasswordChange(currentPassword: String, newPassword: Strin
 }
 
 /**
+ * 목업 카드 고치기(PATCH /api/cards/{id})를 서버처럼 검사하고 덮어써요. 만화 잠금(CARD_LOCKED)은 부르는 쪽이 먼저 봐요.
+ *  - 비었거나 너무 길면 400 INVALID_REQUEST (field는 제안이라 목업만 채워요), 없는 화자면 400 UNKNOWN_SPEAKER
+ *  - 화자 더하기·빼기(api-dto CardUpdateRequest): 더하기·대사 변경을 먼저 하고, 그다음 빼기·key 다시 매기기
+ */
+internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Friend>, me: Profile): CardDetail {
+    fun bad(field: String, msg: String): Nothing = throw LologException(ErrorCodes.INVALID_REQUEST, msg, field)
+    fun unknownSpeaker(): Nothing = throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
+    if (patch.isEmpty) throw LologException(ErrorCodes.INVALID_REQUEST, "바꾼 것이 없어요")
+    val keys = card.speakers.map { it.key }
+    val remove = patch.removeSpeakers.orEmpty()
+    if (remove.size != remove.toSet().size) bad("removeSpeakers", "같은 화자를 두 번 뺄 수 없어요")
+
+    // 화자 더하기: 카드에 없는 key는 다음 번호(화자 2명이면 화자3, 둘을 더하면 화자3·화자4)일 때만 새 화자
+    val sentKeys = (patch.speakers.orEmpty().map { it.key } + patch.characters.orEmpty().keys + patch.newSpeakers.orEmpty()).distinct()
+    val newKeys = sentKeys.filter { it !in keys }
+    val nextKeys = (1..newKeys.size).map { "화자${keys.size + it}" }
+    if (newKeys.toSet() != nextKeys.toSet()) unknownSpeaker()
+    val allKeys = keys + nextKeys
+
+    patch.speakers?.forEach { sp ->
+        val n = sp.name ?: return@forEach
+        val i = allKeys.indexOf(sp.key)
+        if (n.isBlank() || n.length > TextLimits.SPEAKER_NAME) bad("speakers[$i].name", "이름은 ${TextLimits.SPEAKER_NAME}자까지 쓸 수 있어요")
+    }
+    patch.lines?.forEach { l ->
+        val i = card.lines.indexOfFirst { it.id == l.id }
+        if (i < 0) bad("lines", "이 카드의 대사가 아니에요")
+        if (l.speaker != null && l.speaker !in allKeys) unknownSpeaker()
+        // 고쳐 보낸 대사에만 글자 수를 검사해요(명세)
+        l.text?.let { t ->
+            if (t.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
+            if (t.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
+        }
+    }
+    patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
+    // 새 화자에게는 같은 요청의 lines에 그 화자로 바꾼 대사가 하나 이상 있어야 해요
+    nextKeys.forEach { k -> if (patch.lines.orEmpty().none { it.speaker == k }) bad("speakers", "새 화자에게 대사를 하나 이상 넣어 주세요") }
+    // 화자 빼기: 카드에 없는 key → UNKNOWN_SPEAKER, speakers에도 있는 key → INVALID_REQUEST
+    remove.forEach { k ->
+        if (k !in keys) unknownSpeaker()
+        if (k in sentKeys) bad("removeSpeakers", "고치는 화자는 뺄 수 없어요")
+    }
+
+    // ① 더하기·대사 변경. 이름과 그림은 따로 덮어써요
+    val speakers = MockCharacters.applySpeakers(card.speakers + nextKeys.map { Speaker(it) }, patch, friends, me)
+    val ln = patch.lines?.associateBy { it.id }.orEmpty()
+    val lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old }
+
+    // ② 빼기: 대사가 남은 화자는 못 빼요. 다 적용한 뒤 1~4명
+    remove.forEach { k -> if (lines.any { it.speaker == k }) throw LologException(ErrorCodes.SPEAKER_HAS_LINES, "대사가 남은 화자예요") }
+    val left = speakers.filter { it.key !in remove }
+    if (left.size > SPEAKER_MAX) throw LologException(ErrorCodes.SPEAKER_LIMIT, "화자는 ${SPEAKER_MAX}명까지예요")
+    if (left.isEmpty()) bad("removeSpeakers", "화자가 한 명은 있어야 해요")
+
+    // ③ 뺐으면 남은 화자 key를 화자1부터 다시 매겨요. 이름·그림·대사는 따라가요
+    val rename = if (remove.isEmpty()) emptyMap() else left.mapIndexed { i, sp -> sp.key to "화자${i + 1}" }.toMap()
+    return card.copy(
+        speakers = left.map { it.copy(key = rename[it.key] ?: it.key) },
+        lines = lines.map { it.copy(speaker = rename[it.speaker] ?: it.speaker) },
+        place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
+    )
+}
+
+/**
  * 백엔드 없이 화면 흐름을 다 돌려 볼 수 있는 메모리 목업이에요.
  * 앱 모델을 바로 돌려줘요(서버 DTO·변환은 거치지 않음). 상태 변화(감지·만화)는 몇 초 단위로 흉내 내요.
  *
@@ -109,6 +173,16 @@ internal fun mockCheckPasswordChange(currentPassword: String, newPassword: Strin
  *    그림 없는 친구·나의 PROFILE → 409 CHARACTER_NOT_READY
  *    목록에 없는 기본 id, 친구가 아닌 회원 ID → 400 UNKNOWN_CHARACTER
  *    성공하면 화자 character에 label(기본은 label, 친구는 닉네임)과 thumbnailUrl을 채워 돌려줘요
+ *
+ * 화자 더하기·빼기 규칙(mockEditCard, LOLog-docs api-dto.md CardUpdateRequest·FR-EDIT-01)
+ *  - 요청 key는 모두 빼기 전 기준. 더하기·대사 변경을 먼저 하고, 그다음 빼기·다시 매기기
+ *  - 카드에 없는 key(다음 번호 빼고) → 400 UNKNOWN_SPEAKER
+ *  - 새 key인데 그 화자로 바꾼 대사가 같은 요청의 lines에 없음 → 400 INVALID_REQUEST
+ *  - speakers와 removeSpeakers에 같은 key → 400 INVALID_REQUEST
+ *  - 뺄 화자에 (이번 lines를 적용한 뒤에도) 대사가 남음 → 409 SPEAKER_HAS_LINES
+ *  - 다 적용한 뒤 4명 넘음 → 409 SPEAKER_LIMIT, 0명 → 400 INVALID_REQUEST
+ *  - 뺐으면 남은 화자 key를 화자1부터 다시 매기고, 대사의 speaker도 새 key로 바꿔 돌려줘요
+ *    (목업 카드의 처음 key는 A·B·C라, 빼기 전에는 더한 화자만 화자N으로 섞여 있을 수 있어요)
  */
 class MockLologRepository(private val tokens: TokenStore) : LologRepository {
 
@@ -270,46 +344,13 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         findCard(id).withLiveComics()
     }
 
-    /** 고친 값 검사: 비었거나 너무 길면 400 INVALID_REQUEST, 없는 화자면 UNKNOWN_SPEAKER (field는 제안이라 목업만 채워요) */
-    private fun validate(card: CardDetail, patch: CardEdit) {
-        fun bad(field: String, msg: String): Nothing = throw LologException(ErrorCodes.INVALID_REQUEST, msg, field)
-        if (patch.isEmpty) throw LologException(ErrorCodes.INVALID_REQUEST, "바꾼 것이 없어요")
-        val keys = card.speakers.map { it.key }.toSet()
-        patch.speakers?.forEach { sp ->
-            if (sp.key !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
-            val n = sp.name ?: return@forEach
-            val i = card.speakers.indexOfFirst { it.key == sp.key }
-            if (n.isBlank() || n.length > TextLimits.SPEAKER_NAME) bad("speakers[$i].name", "이름은 ${TextLimits.SPEAKER_NAME}자까지 쓸 수 있어요")
-        }
-        patch.lines?.forEach { l ->
-            val i = card.lines.indexOfFirst { it.id == l.id }
-            if (i < 0) bad("lines", "이 카드의 대사가 아니에요")
-            if (l.speaker != null && l.speaker !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
-            // 고쳐 보낸 대사에만 글자 수를 검사해요(명세)
-            l.text?.let { t ->
-                if (t.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
-                if (t.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
-            }
-        }
-        patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
-        patch.characters?.keys?.forEach { if (it !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요") }
-    }
-
     override suspend fun updateCard(id: Long, patch: CardEdit): CardDetail = lock.withLock {
         net()
         val card = findCard(id)
         if (card.withLiveComics().locked) {
             throw LologException(ErrorCodes.CARD_LOCKED, "만화를 만드는 중이에요")
         }
-        validate(card, patch)
-        // 바꾼 것만 왔으니 원래 카드에 덮어써요 (명세 PATCH). 이름과 그림은 따로 덮어써요
-        val speakers = MockCharacters.applySpeakers(card.speakers, patch, friendBook.friends(), friendBook.profile())
-        val ln = patch.lines?.associateBy { it.id }.orEmpty()
-        val updated = card.copy(
-            speakers = speakers,
-            lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old },
-            place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
-        )
+        val updated = mockEditCard(card, patch, friendBook.friends(), friendBook.profile())
         cardStore[cardStore.indexOf(card)] = updated
         updated.withLiveComics()
     }
