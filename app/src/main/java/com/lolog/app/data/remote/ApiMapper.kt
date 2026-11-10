@@ -1,6 +1,7 @@
 package com.lolog.app.data.remote
 
 import com.lolog.app.data.model.*
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -52,12 +53,26 @@ object ApiMapper {
         "ACCEPTED" to FriendRequestStatus.ACCEPTED,
     )
 
+    private val CHARACTER_TYPE = mapOf("DEFAULT" to CharacterType.DEFAULT, "PROFILE" to CharacterType.PROFILE)
+    private val AGE_GROUP = mapOf("CHILD" to AgeGroup.CHILD, "YOUNG" to AgeGroup.YOUNG, "MIDDLE" to AgeGroup.MIDDLE)
+    private val GENDER = mapOf("F" to Gender.F, "M" to Gender.M)
+    private val PROFILE_CHARACTER_STATUS = mapOf(
+        "PROCESSING" to ProfileCharacterStatus.PROCESSING,
+        "READY" to ProfileCharacterStatus.READY,
+        "FAILED" to ProfileCharacterStatus.FAILED,
+    )
+
     fun recordingStatus(raw: String?) = RECORDING_STATUS[raw?.trim()?.uppercase()] ?: RecordingStatus.UNKNOWN
     fun comicStatus(raw: String?) = COMIC_STATUS[raw?.trim()?.uppercase()] ?: ComicStatus.UNKNOWN
     fun cardKind(raw: String?) = CARD_KIND[raw?.trim()?.uppercase()] ?: CARD_KIND[raw?.trim()] ?: CardKind.OTHER
     /** 모르는 방향은 받은 요청으로 봐요 */
     fun friendDirection(raw: String?) = FRIEND_DIRECTION[raw?.trim()?.uppercase()] ?: FriendRequestDirection.RECEIVED
     fun friendStatus(raw: String?) = FRIEND_STATUS[raw?.trim()?.uppercase()] ?: FriendRequestStatus.UNKNOWN
+    /** 모르는 그림 종류는 null(그 화자는 그림 없음으로 봐요) */
+    fun characterType(raw: String?) = CHARACTER_TYPE[raw?.trim()?.uppercase()]
+    fun ageGroup(raw: String?) = AGE_GROUP[raw?.trim()?.uppercase()]
+    fun gender(raw: String?) = GENDER[raw?.trim()?.uppercase()]
+    fun profileCharacterStatus(raw: String?) = PROFILE_CHARACTER_STATUS[raw?.trim()?.uppercase()] ?: ProfileCharacterStatus.UNKNOWN
     fun providerPath(p: SocialProvider) = PROVIDER.getValue(p)
     fun provider(raw: String) = PROVIDER.entries.firstOrNull { it.value.equals(raw.trim(), true) }?.key
 
@@ -78,7 +93,10 @@ object ApiMapper {
 
     // ── 카드 ──
 
-    fun SpeakerDto.toModel() = Speaker(key, name)
+    fun SpeakerDto.toModel() = Speaker(key, name, character?.toModel())
+    fun SpeakerCharacterDto.toModel() = characterType(type)?.let {
+        SpeakerCharacter(it, id, label?.ifBlank { null }, thumbnailUrl?.ifBlank { null })
+    }
     fun LineDto.toModel() = Line(id, speaker, text)
 
     fun CardSummaryDto.toModel() = CardSummary(
@@ -100,15 +118,31 @@ object ApiMapper {
 
     /**
      * PATCH /api/cards/{id} 본문(CardUpdateRequest). 바꾼 것만 넣어요.
-     *  - speakers: [{ key, name }] 바꾼 화자만. name이 null이면 이름 지움 → JSON에 "name": null 을 꼭 넣어요
+     *  - speakers: [{ key, name?, character? }] 바꾼 화자만. 두 칸 중 바꾼 칸만 넣어요(둘 중 하나는 꼭 있어요)
+     *    name이 null이면 이름 지움 → "name": null 을 꼭 넣어요
+     *    character는 붙이면 { type, id }, 떼면 "character": null 을 꼭 넣어요(빼면 "그대로"라는 뜻이에요)
      *  - lines: [{ id, speaker?, text? }] 바꾼 대사만, 그 안에서도 바꾼 칸만
      *  - place: 바꿨을 때만. 지웠으면 "place": null
      * Json 설정(explicitNulls=false)이 null을 빼 버려서 DTO 대신 직접 만들어요.
      */
     fun CardEdit.patchBody(): JsonObject = buildJsonObject {
-        speakers?.let { list ->
+        val names = speakers?.associateBy { it.key }.orEmpty()
+        val pics = characters.orEmpty()
+        // 이름만 바꾼 화자, 그림만 바꾼 화자, 둘 다 바꾼 화자를 key 하나로 합쳐요(처음 나온 순서대로)
+        val keys = (names.keys + pics.keys).distinct()
+        if (keys.isNotEmpty()) {
             put("speakers", buildJsonArray {
-                list.forEach { sp -> add(buildJsonObject { put("key", sp.key); put("name", sp.name) /* null이면 JSON null */ }) }
+                keys.forEach { key ->
+                    add(buildJsonObject {
+                        put("key", key)
+                        if (key in names) put("name", names.getValue(key).name) // null이면 JSON null
+                        if (key in pics) {
+                            val c = pics[key]
+                            if (c == null) put("character", JsonNull)
+                            else put("character", buildJsonObject { put("type", c.type.name); put("id", c.id) })
+                        }
+                    })
+                }
             })
         }
         lines?.let { list ->
@@ -143,7 +177,18 @@ object ApiMapper {
 
     // ── 친구·프로필 ──
 
-    fun ProfileResponse.toModel() = Profile(nickname?.ifBlank { null }, friendCode?.ifBlank { null })
+    // TODO 명세에 내 userId 필요: GET /auth/me·GET /api/me/profile 어디에도 내 회원 ID가 없어서 userId는 null로 둬요.
+    //  null이면 화자 고르기 팝업의 "나"는 그림이 없을 때처럼 동작해요(PROFILE을 보내지 않아요)
+    fun ProfileResponse.toModel() = Profile(
+        nickname?.ifBlank { null }, friendCode?.ifBlank { null },
+        character = character?.let { ProfileCharacter(profileCharacterStatus(it.status), it.thumbnailUrl?.ifBlank { null }, it.updatedAt) },
+        userId = null,
+    )
+
+    fun DefaultCharacterItem.toModel() = DefaultCharacter(
+        id = id, label = label, ageGroup = ageGroup(ageGroup), gender = gender(gender),
+        glasses = glasses, thumbnailUrl = thumbnailUrl?.ifBlank { null },
+    )
 
     // DTO와 앱 모델 이름이 같아서(FriendUser) 앱 모델은 전체 이름으로 써요
     fun FriendUser.toModel() = com.lolog.app.data.model.FriendUser(userId, nickname, friendCode)

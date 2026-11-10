@@ -23,8 +23,9 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     init {
         val now = OffsetDateTime.now()
         friendList += listOf(
-            Friend(11, "민수", "K2PH7RTA", "2026-11-03T20:10:00+09:00"),
-            Friend(12, "서연", "S5VB9GDT", "2026-10-28T18:00:00+09:00"),
+            // 서연·민수(K2PH7RTA)는 프로필 캐릭터가 있어요(그림은 기본 화자 썸네일을 빌려 써요)
+            Friend(11, "민수", "K2PH7RTA", "2026-11-03T20:10:00+09:00", MockCharacters.thumb("young-m-02")),
+            Friend(12, "서연", "S5VB9GDT", "2026-10-28T18:00:00+09:00", MockCharacters.thumb("young-f-03")),
             Friend(13, "민수", "QW8ZN3EM", "2026-10-20T12:30:00+09:00"),
             Friend(14, "도윤", "D3RM6YKC", "2026-10-12T09:00:00+09:00"),
             Friend(15, "하은", "R4YB8CUE", "2026-10-01T21:40:00+09:00"),
@@ -40,7 +41,8 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     private fun now() = OffsetDateTime.now().toString()
     private fun fail(code: String, msg: String): Nothing = throw LologException(code, msg)
 
-    fun profile() = Profile(nickname, if (nickname != null) MY_CODE else null)
+    /** 내 프로필 캐릭터는 없어요(시안 15). 내 회원 ID는 목업에서만 "1" */
+    fun profile() = Profile(nickname, if (nickname != null) MY_CODE else null, character = null, userId = MY_USER_ID.toString())
 
     fun updateNickname(raw: String): Profile {
         val n = raw.trim()

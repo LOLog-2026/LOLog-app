@@ -1,7 +1,6 @@
 package com.lolog.app.data.remote
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 /*
  * 서버 JSON 모양(DTO) — LOLog-docs spec/api-dto.md(2026-11-06) 기준이에요.
@@ -123,8 +122,13 @@ data class RecordingPageDto(val recordings: List<RecordingListItemDto> = emptyLi
 
 // ── 카드 (/api/cards) ──
 
+/** Speaker. character는 늘 오고 값은 null이거나 { type, id, label, thumbnailUrl } (명세 characters.md 4장) */
 @Serializable
-data class SpeakerDto(val key: String, val name: String? = null)
+data class SpeakerDto(val key: String, val name: String? = null, val character: SpeakerCharacterDto? = null)
+
+/** 화자에 붙은 그림. type DEFAULT·PROFILE, id는 기본 화자 id 또는 회원 ID 문자열. label은 닉네임이 없으면 null */
+@Serializable
+data class SpeakerCharacterDto(val type: String, val id: String, val label: String? = null, val thumbnailUrl: String? = null)
 
 @Serializable
 data class LineDto(val id: Long, val speaker: String, val text: String)
@@ -172,6 +176,23 @@ data class CardDetailDto(
 // PATCH /api/cards/{id} 본문(CardUpdateRequest)은 "null을 보내면 지움" 규칙이 있어서
 // DTO 대신 ApiMapper.patchBody()가 JsonObject로 직접 만들어요.
 
+// ── 기본 화자 (LOLog-docs spec/characters.md 4장) ──
+
+/** DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소 */
+@Serializable
+data class DefaultCharacterItem(
+    val id: String,
+    val label: String = "",
+    val ageGroup: String? = null,
+    val gender: String? = null,
+    val glasses: Boolean = false,
+    val thumbnailUrl: String? = null,
+)
+
+/** GET /api/characters/defaults */
+@Serializable
+data class DefaultCharacterListDto(val characters: List<DefaultCharacterItem> = emptyList())
+
 // ── 만화 (/api/comics) ──
 
 /** ComicCreateResponse (202). 요청 본문은 없어요 */
@@ -198,13 +219,17 @@ data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor
 
 // ── 친구·프로필 (LOLog-docs spec/friends.md 2장) ──
 
-/** ProfileResponse — GET·PATCH /api/me/profile. character는 프로필 캐릭터(이번엔 안 써요) */
+/** ProfileResponse — GET·PATCH /api/me/profile. character는 내 프로필 캐릭터(만든 적이 없으면 null) */
 @Serializable
 data class ProfileResponse(
     val nickname: String? = null,
     val friendCode: String? = null, // 닉네임을 정하기 전에는 null
-    val character: JsonObject? = null,
+    val character: ProfileCharacterDto? = null,
 )
+
+/** ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소) */
+@Serializable
+data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "")
 
 /** ProfileUpdateRequest — PATCH /api/me/profile. 1~10자(앞뒤 공백 뺀 길이) */
 @Serializable

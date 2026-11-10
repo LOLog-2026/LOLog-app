@@ -69,7 +69,8 @@ object MockData {
         CardDetail(
             id = 9, kind = CardKind.FUNNY, summary = "고양이가 줌 수업에 출석함", place = "자취방",
             startMs = 50_000, endMs = 120_000,
-            speakers = listOf(Speaker("A", "민지"), Speaker("B", null)),
+            // 화자1에 처음부터 기본 화자가 붙어 있는 카드(그림이 보이는 말풍선 확인용)
+            speakers = listOf(Speaker("A", "민지", MockCharacters.defaultRef("young-f-01")), Speaker("B", null)),
             lines = listOf(
                 Line(1, "B", "어제 수업 중에 갑자기 출석 부르는데"),
                 Line(2, "B", "고양이가 키보드 밟아서 '네' 쳤잖아"),

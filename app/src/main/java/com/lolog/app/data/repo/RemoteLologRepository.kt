@@ -94,6 +94,8 @@ class RemoteLologRepository(
     override suspend fun blocks() = call { api.blocks().blocks.map { it.toModel() } }
     override suspend fun unblock(userId: Long) = call { api.unblock(userId) }
 
+    override suspend fun defaultCharacters() = call { api.defaultCharacters().characters.map { it.toModel() } }
+
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
         tokens.fcmToken = token

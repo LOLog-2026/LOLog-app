@@ -88,6 +88,9 @@ interface MainApi {
     /** 204. 차단한 적 없어도 204 */
     @DELETE("api/blocks/{userId}") suspend fun unblock(@Path("userId") userId: Long)
 
+    // 화자 그림 (LOLog-docs spec/characters.md 4장)
+    @GET("api/characters/defaults") suspend fun defaultCharacters(): DefaultCharacterListDto
+
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)
     suspend fun deleteFcmToken(@Body body: FcmTokenDto)

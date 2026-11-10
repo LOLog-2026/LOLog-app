@@ -43,6 +43,10 @@ object ErrorCodes {
     const val FRIEND_REQUEST_EXISTS = "FRIEND_REQUEST_EXISTS"       // 409 이미 보낸 요청이 있음
     const val FRIEND_LIMIT = "FRIEND_LIMIT"                         // 409 나나 상대의 친구가 이미 100명
     const val USER_BLOCKED = "USER_BLOCKED"                         // 409 내가 차단한 사람에게 요청
+    // 화자 그림 (LOLog-docs spec/characters.md 4장)
+    const val UNKNOWN_CHARACTER = "UNKNOWN_CHARACTER"     // 400 없는 기본 화자 id, 나도 친구도 아닌 회원 ID
+    const val DUPLICATE_CHARACTER = "DUPLICATE_CHARACTER" // 400 한 카드에서 같은 그림을 두 화자에 붙임
+    const val CHARACTER_NOT_READY = "CHARACTER_NOT_READY" // 409 쓸 수 있는 그림이 없는 사람의 캐릭터를 붙임
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -98,7 +102,39 @@ data class RecordingProgress(val status: RecordingStatus, val cardCount: Int)
 
 // ── 카드 ──────────────────────────────────────────────
 
-data class Speaker(val key: String, val name: String? = null)
+/** character는 이 화자에 붙인 그림. null이면 그림 없이 AI가 외모를 정해요 */
+data class Speaker(val key: String, val name: String? = null, val character: SpeakerCharacter? = null)
+
+/** 화자 그림 종류: 기본 화자, 회원의 프로필 캐릭터 */
+enum class CharacterType { DEFAULT, PROFILE }
+
+/**
+ * 화자에 붙인 그림(명세 CharacterRef + 응답의 label·thumbnailUrl).
+ * id는 기본 화자 id(kid-f-01) 또는 회원 ID 문자열("42"). label은 기본 화자 설명 또는 그 사람의 닉네임
+ */
+data class SpeakerCharacter(val type: CharacterType, val id: String, val label: String? = null, val thumbnailUrl: String? = null) {
+    /** 같은 그림인지(type+id). label·주소는 보지 않아요 */
+    fun sameAs(other: SpeakerCharacter?): Boolean = other != null && type == other.type && id == other.id
+
+    /** 그림 캐시 키. 서명 주소가 10분마다 바뀌어서 주소 대신 이 키로 캐시해요 */
+    val cacheKey: String get() = if (type == CharacterType.DEFAULT) defaultCharacterCacheKey(id) else profileCacheKey(id)
+}
+
+fun defaultCharacterCacheKey(id: String) = "default-$id"
+fun profileCacheKey(userId: String) = "profile-$userId"
+
+enum class AgeGroup(val label: String) { CHILD("어린이"), YOUNG("청년"), MIDDLE("중장년") }
+enum class Gender(val label: String) { F("여"), M("남") }
+
+/** GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소 */
+data class DefaultCharacter(
+    val id: String,
+    val label: String,
+    val ageGroup: AgeGroup?,
+    val gender: Gender?,
+    val glasses: Boolean,
+    val thumbnailUrl: String?,
+)
 
 data class Line(val id: Long, val speaker: String, val text: String)
 
@@ -149,21 +185,24 @@ data class CardDetail(
 }
 
 /**
- * 카드 고치기(PATCH): 바꾼 것만 채워요(null = 안 바꿈).
- *  speakers = 이름을 바꾼 화자만(name null = 이름 지움), lines = 고친 대사만, place = 장소를 지우면 ""
- */
-/**
  * 고친 대사 하나(api-dto LineUpdate). speaker·text는 바꾼 것만 넣어요.
  * 화자만 바꾼 대사에 원래 text를 같이 보내면, LLM이 만든 200자 넘는 대사는 서버가 400으로 거절해요.
  */
 data class LineEdit(val id: Long, val speaker: String? = null, val text: String? = null)
 
+/**
+ * 카드 고치기(PATCH): 바꾼 것만 채워요(null = 안 바꿈).
+ *  speakers = 이름을 바꾼 화자만(name null = 이름 지움, character는 보지 않아요)
+ *  characters = 그림을 바꾼 화자만. 화자 key → 새 그림(null = 그림 떼기)
+ *  lines = 고친 대사만, place = 장소를 지우면 ""
+ */
 data class CardEdit(
     val speakers: List<Speaker>? = null,
     val lines: List<LineEdit>? = null,
     val place: String? = null,
+    val characters: Map<String, SpeakerCharacter?>? = null,
 ) {
-    val isEmpty: Boolean get() = speakers == null && lines == null && place == null
+    val isEmpty: Boolean get() = speakers == null && lines == null && place == null && characters == null
 }
 
 // ── 만화 ──────────────────────────────────────────────
@@ -235,8 +274,22 @@ object FriendRules {
     const val FRIEND_MAX = 100
 }
 
-/** GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null */
-data class Profile(val nickname: String? = null, val friendCode: String? = null)
+/**
+ * GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null.
+ * character는 내 프로필 캐릭터(만든 적이 없으면 null).
+ * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID. 명세에 아직 없어서 실서버에서는 null이에요
+ */
+data class Profile(
+    val nickname: String? = null,
+    val friendCode: String? = null,
+    val character: ProfileCharacter? = null,
+    val userId: String? = null,
+)
+
+enum class ProfileCharacterStatus { PROCESSING, READY, FAILED, UNKNOWN }
+
+/** 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만 */
+data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String)
 
 /** 친구 한 명. thumbnailUrl은 친구의 프로필 캐릭터 그림(없으면 기본 사람 아이콘) */
 data class Friend(
