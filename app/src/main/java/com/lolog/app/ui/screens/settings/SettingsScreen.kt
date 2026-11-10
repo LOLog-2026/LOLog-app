@@ -42,6 +42,7 @@ import com.lolog.app.ui.social.SocialSignIn
 import com.lolog.app.ui.social.rememberSocialSignIn
 import com.lolog.app.ui.social.socialErrorText
 import com.lolog.app.ui.theme.LologColors
+import com.lolog.app.util.ReplayFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -147,7 +148,13 @@ fun SettingsScreen(
     var askWithdraw by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.load() }
-    LaunchedEffect(state.loggedOut) { if (state.loggedOut) onLoggedOut() }
+    LaunchedEffect(state.loggedOut) {
+        if (state.loggedOut) {
+            // 받아 둔 카드 음성도 지워요(replay.md 3장). 다음에 로그인한 사람이 듣지 않게요
+            ReplayFiles.clear(context)
+            onLoggedOut()
+        }
+    }
     LaunchedEffect(state.toast) { state.toast?.let { snackbar.showSnackbar(it); vm.toastShown() } }
     // 비밀번호 바꾸기에서 돌아오면 아래 띠로 결과를 알려요. 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
     val scope = rememberCoroutineScope()

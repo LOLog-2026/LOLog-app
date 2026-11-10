@@ -154,6 +154,27 @@ data class CardSummary(
     val preview: String? = null,
     /** 목록에 "대사 4개"로 보여요 */
     val lineCount: Int? = null,
+    /** 들을 수 있는 음성이 있으면 목록에 작은 표시(replay.md 2장) */
+    val hasAudio: Boolean = false,
+)
+
+/** 카드 구간 음성의 상태(replay.md 1장) */
+enum class AudioStatus {
+    /** 들을 수 있음. 재생 버튼을 보여 줘요 */
+    READY,
+
+    /** 음성 저장을 켠 녹음인데 음성이 아직 안 올라옴(녹음이 끝난 지 7일 안). 안내 문구를 보여 줘요 */
+    PENDING,
+
+    /** 음성 저장을 끈 녹음이거나 7일이 지나도록 안 올라옴. 음성에 대한 것을 아무것도 안 보여 줘요 */
+    NONE,
+}
+
+/** CardDetail.audio. url은 10분짜리 서명 주소, durationMs는 음성 길이(재생 바 전체 길이) */
+data class CardAudio(
+    val status: AudioStatus = AudioStatus.NONE,
+    val url: String? = null,
+    val durationMs: Long? = null,
 )
 
 data class CardPage(val cards: List<CardSummary>, val nextCursor: String?)
@@ -174,6 +195,8 @@ data class CardDetail(
     val comicRemaining: Int? = null,
     /** 녹음 기록이 지워졌으면 null */
     val recordingId: Long? = null,
+    /** 카드 구간 음성(순간 다시 듣기) */
+    val audio: CardAudio = CardAudio(),
 ) {
     /** 서버 값이 없으면 실패를 뺀 개수로 앱이 계산 */
     val remaining: Int

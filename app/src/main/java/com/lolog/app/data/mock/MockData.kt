@@ -38,6 +38,8 @@ object MockData {
             ),
             comics = listOf(ComicRef(31, ComicStatus.DONE), ComicRef(33, ComicStatus.FAILED)),
             createdAt = "2026-11-04T19:40:00+09:00", recordedAt = "2026-11-04T19:20:00+09:00",
+            // 들을 수 있는 카드(순간 다시 듣기 확인용). 길이 = 구간 + 앞뒤 0.5초
+            audio = CardAudio(AudioStatus.READY, "mock://audio/12", 95_000 - 1_200 + 1_000),
         ),
         CardDetail(
             id = 11, kind = CardKind.MEMORY, summary = "첫 MT 버스에서 부른 노래", place = null,
@@ -51,6 +53,8 @@ object MockData {
             ),
             comics = listOf(ComicRef(35, ComicStatus.DRAWING)),
             createdAt = "2026-11-02T22:10:00+09:00", recordedAt = "2026-11-02T21:30:00+09:00",
+            // 음성이 아직 안 올라온 카드(PENDING 안내 문구 확인용)
+            audio = CardAudio(AudioStatus.PENDING),
         ),
         CardDetail(
             id = 10, kind = CardKind.ABSURD, summary = "엘리베이터에서 교수님께 \"엄마\"라고 부름", place = "공학관",

@@ -344,6 +344,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         place = place, speakers = speakers,
         preview = lines.getOrNull(1)?.text ?: lines.firstOrNull()?.text,
         lineCount = lines.size,
+        hasAudio = audio.status == AudioStatus.READY,
     )
 
     // ── 만화 ──
