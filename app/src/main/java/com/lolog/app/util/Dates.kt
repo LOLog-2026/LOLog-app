@@ -49,3 +49,11 @@ fun durationLabel(totalSec: Long): String {
 
 /** "11월 4일" */
 fun dayLabel(iso: String?): String = parse(iso)?.atZoneSameInstant(zone)?.format(dayFmt) ?: ""
+
+private val dayWeekFmt = DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN)
+
+/** 날짜별 묶음용: 이 폰 시간대의 날짜 */
+fun localDay(iso: String?): LocalDate? = parse(iso)?.atZoneSameInstant(zone)?.toLocalDate()
+
+/** "11월 4일 화요일" */
+fun dayWithWeek(day: LocalDate): String = day.format(dayWeekFmt)

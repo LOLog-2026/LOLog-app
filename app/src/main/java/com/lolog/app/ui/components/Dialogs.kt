@@ -29,7 +29,7 @@ fun LologDialog(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(LologColors.Paper, RoundedCornerShape(20.dp))
+                .background(LologColors.Paper, com.lolog.app.ui.theme.LologShape.dialog)
                 .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -38,13 +38,9 @@ fun LologDialog(
             Text(body, fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = com.lolog.app.ui.theme.LologShape.pill,
-                    colors = ButtonDefaults.buttonColors(containerColor = LologColors.Canvas, contentColor = LologColors.Ink),
-                ) { Text(dismissText, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
-                PrimaryButton(confirmText, onConfirm, danger = danger, loading = loading, modifier = Modifier.weight(1f).height(48.dp))
+                // 확정 디자인: [취소]는 흰 바탕 + 테두리 보조 버튼
+                GhostButton(dismissText, onDismiss, Modifier.weight(1f))
+                PrimaryButton(confirmText, onConfirm, danger = danger, loading = loading, modifier = Modifier.weight(1f))
             }
         }
     }

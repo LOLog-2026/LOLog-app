@@ -8,6 +8,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -150,11 +156,15 @@ fun CardDetailScreen(
 
     val card = state.card
     Scaffold(
-        modifier = Modifier.noteLines(),
+        // 11/10 확정: 흰색에서 아래로 아주 옅은 크림으로
+        modifier = Modifier.background(Brush.verticalGradient(listOf(LologColors.Paper, Cream))),
         containerColor = Color.Transparent,
         snackbarHost = { LologSnackbarHost(snackbar) },
         topBar = {
-            LologTopBar("", onBack) {
+            CardTopBar(card, onBack) {
+                IconButton(onClick = onEdit, enabled = card != null && !card.locked) {
+                    Icon(Icons.Outlined.Edit, "카드 고치기", modifier = Modifier.size(21.dp))
+                }
                 Box {
                     IconButton(onClick = { menu = true }, enabled = card != null) { Icon(Icons.Default.MoreVert, "더 보기") }
                     DropdownMenu(menu, { menu = false }) {
@@ -174,7 +184,7 @@ fun CardDetailScreen(
                 }
             }
         },
-        bottomBar = { card?.let { BottomActions(it, state.busy, onEdit = onEdit, onDraw = { sheet = true }) } },
+        bottomBar = { card?.let { BottomActions(it, state.busy, onDraw = { sheet = true }) } },
     ) { pad ->
         when {
             state.loading -> SkeletonList(Modifier.padding(pad), count = 3)
@@ -199,42 +209,59 @@ fun CardDetailScreen(
     }
 }
 
-/** 아래 버튼: [카드 고치기] [다시 그리기 · N번 남음]. 그리는 중·3번 다 쓰면 이유 한 줄 + 회색 */
+/** 카드 보기 바탕 아래쪽 크림색(11/10 확정 #FFFCF5) */
+private val Cream = Color(0xFFFFFCF5)
+
+/** 위 칸: ← · 제목(13.5sp) + "11월 4일 오후 7:20 녹음 · 홍대 카페"(10sp) · 오른쪽 아이콘들. 아래 1dp 선 */
 @Composable
-private fun BottomActions(card: CardDetail, busy: Boolean, onEdit: () -> Unit, onDraw: () -> Unit) {
+private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit) {
+    // 제목·아이콘은 진한 Ink (탭 Scaffold의 기본 글자색은 회색이라 정해 줘요)
+    CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
+    Column(Modifier.fillMaxWidth().background(LologColors.Paper).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().height(56.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
+            Column(Modifier.weight(1f)) {
+                if (card != null) {
+                    Text(card.summary, fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull("${longDate(card.recordedAt ?: card.createdAt)} 녹음", card.place?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                        fontSize = 10.sp, color = LologColors.Muted, maxLines = 1,
+                    )
+                }
+            }
+            actions()
+        }
+        HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+    }
+    }
+}
+
+/** 아래: "이 카드로 만든 만화 n / 3번" + 전체 너비 알약. 남은 횟수·잠김 규칙은 그대로 */
+@Composable
+private fun BottomActions(card: CardDetail, busy: Boolean, onDraw: () -> Unit) {
     val full = card.remaining <= 0 && !card.locked
     Column(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when {
             card.locked -> LockNote("만화 그리는 중엔 고치거나 지울 수 없어요")
             full -> LockNote("한 카드로는 ${COMIC_LIMIT_PER_CARD}번까지 그릴 수 있어요")
+            else -> Text(
+                "이 카드로 만든 만화 ${card.used} / ${COMIC_LIMIT_PER_CARD}번", fontSize = 11.sp, color = LologColors.Muted,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
         }
         if (full) {
             PrimaryButton("${COMIC_LIMIT_PER_CARD}번 다 그렸어요", {}, enabled = false)
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = onEdit, enabled = !card.locked,
-                    modifier = Modifier.weight(1f).height(52.dp), shape = LologShape.pill,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LologColors.Line),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = LologColors.Paper, contentColor = LologColors.Ink),
-                ) {
-                    Icon(Icons.Outlined.Edit, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("카드 고치기", style = MaterialTheme.typography.labelLarge)
-                }
-                PrimaryButton(
-                    text = when {
-                        card.locked -> "그리는 중…"
-                        card.used == 0 && card.comics.isEmpty() -> "4컷만화로 그리기"
-                        else -> "다시 그리기 · ${card.remaining}번 남음"
-                    },
-                    onClick = onDraw, enabled = !card.locked, loading = busy,
-                    modifier = Modifier.weight(1.3f),
-                )
-            }
+            PrimaryButton(
+                text = when {
+                    card.locked -> "그리는 중…"
+                    card.used == 0 && card.comics.isEmpty() -> "4컷만화로 그리기"
+                    else -> "다시 그리기 · ${card.remaining}번 남음"
+                },
+                onClick = onDraw, enabled = !card.locked, loading = busy,
+            )
         }
     }
 }
@@ -258,39 +285,13 @@ private fun CardBody(
     modifier: Modifier,
 ) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        KindChip(card.kind)
-        Text(card.summary, style = MaterialTheme.typography.headlineMedium)
-        // 🎙 11월 5일 오후 8:05 녹음 · 홍대 카페
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Mic, null, tint = LologColors.Muted, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(3.dp))
-            Text(
-                listOfNotNull("${longDate(card.recordedAt ?: card.createdAt)} 녹음", card.place).joinToString(" · "),
-                fontSize = 12.sp, color = LologColors.Muted,
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        card.lines.forEach { line ->
-            val idx = card.speakers.indexOfFirst { it.key == line.speaker }
-            Row(
-                Modifier.fillMaxWidth().softCard(LologShape.sm).padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Row(
-                    Modifier.clip(LologShape.pill).background(LologColors.Canvas).height(24.dp).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(speakerColor(idx)))
-                    Spacer(Modifier.width(4.dp))
-                    Text(card.speakers.displayName(line.speaker), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(line.text, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f).padding(top = 2.dp))
-            }
-        }
+        // 가운데 위 "● 웃김 · 대화 n줄"
+        KindChip(card.kind, Modifier.align(Alignment.CenterHorizontally), suffix = "대화 ${card.lines.size}줄")
+        // 대사는 처음부터 전부 말풍선으로(재생 없음)
+        CardLines(card)
 
         if (card.comics.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
@@ -348,37 +349,46 @@ private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDet
     }
 }
 
-/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받아요 */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 대사 말풍선: 화자 목록 순서가 짝수(0, 2…)면 왼쪽, 홀수면 오른쪽. 이름 없는 화자는 "화자1·2".
+ * 카드 보기와 만화 그리는 중 화면이 같이 써요.
+ */
+@Composable
+fun CardLines(card: CardDetail, modifier: Modifier = Modifier, lines: List<Line> = card.lines) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        lines.forEach { line -> LineBubble(card, line) }
+    }
+}
+
+@Composable
+fun LineBubble(card: CardDetail, line: Line, modifier: Modifier = Modifier, content: (@Composable () -> Unit)? = null) {
+    val idx = card.speakers.indexOfFirst { it.key == line.speaker }.coerceAtLeast(0)
+    ChatBubble(card.speakers.displayName(line.speaker), idx, line.text, left = idx % 2 == 0, modifier = modifier, content = content)
+}
+
+/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받고, 남은 횟수를 보여 줘요 */
 @Composable
 private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LologColors.Paper) {
+    LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                KindChip(card.kind)
-                Text(card.summary, fontSize = 14.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
             Text(
-                "세로 4칸으로 그리고, 칸마다 말풍선에 대사를 넣어요. 보통 1~2분 걸리고, 완성되면 알림을 보내 드려요.",
-                fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp,
+                "세로 4칸으로 그려요. 보통 몇 분 걸리고, 다 되면 알림으로 알려 드려요.",
+                fontSize = 13.5.sp, color = LologColors.Muted, lineHeight = 20.sp,
             )
-            Column(Modifier.fillMaxWidth().background(LologColors.Canvas, LologShape.md).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                InfoRow("등장인물", card.speakers.displayNames().joinToString(", "))
-                InfoRow("장소", card.place ?: "없음")
-                InfoRow("대사", "${card.lines.size}개")
-                InfoRow("남은 횟수", "${card.remaining}번 (실패는 안 셈)")
-            }
+            Text(
+                buildAnnotatedString {
+                    append("이 카드로 ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold)) { append("${card.remaining}번") }
+                    append(" 그릴 수 있어요 (실패는 안 세요)")
+                },
+                fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LologColors.AccentSoft).padding(horizontal = 14.dp, vertical = 12.dp),
+            )
+            Spacer(Modifier.height(2.dp))
             PrimaryButton("그려 주세요", onConfirm, loading = busy)
             GhostButton("취소", onDismiss)
         }
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row {
-        Text(label, fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.width(96.dp))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}

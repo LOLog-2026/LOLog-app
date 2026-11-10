@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -19,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -134,14 +135,14 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
             )
         }
         Spacer(Modifier.height(6.dp))
-        Text(clock(elapsedSec), style = LologText.timer)
-        Text("최대 3시간 · 1시간마다 자동으로 올려요", fontSize = 12.sp, color = LologColors.Muted)
+        Text(clock(elapsedSec), style = LologText.timer.copy(fontSize = 38.sp))
+        Text("최대 3시간 · 1시간마다 자동으로 올려요", fontSize = 11.sp, color = LologColors.Muted)
         if (partUpload is PartUpload.Failed) {
             Text("${partUpload.partNo}번째 묶음은 폰에 두었다가 다시 올려요", fontSize = 12.sp, color = LologColors.Rec)
         }
         Spacer(Modifier.height(16.dp))
-        // 녹음 중 · 파형 시안(mockups/녹음중-파형-시안.png): 대사 글자 대신 소리 크기 막대
-        Column(Modifier.weight(1f).fillMaxWidth().softCard()) {
+        // 11/10 확정: Canvas 바탕 둥근 20dp 큰 판 안에 소리 막대. 1시간 묶음 표시(partUpload)는 그대로
+        Column(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(LologColors.Canvas)) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Waveform(
                     running = s is RecordingState.Recording,
@@ -154,23 +155,21 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
-                Text("-5초", fontSize = 10.sp, color = LologColors.Muted)
-                Spacer(Modifier.weight(1f))
-                Text("지금", fontSize = 10.sp, color = LologColors.Muted)
-            }
-            HorizontalDivider(color = LologColors.Line)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                when (partUpload) {
-                    is PartUpload.Sending -> StatusPill("↑ ${partUpload.partNo}번째 묶음 올리는 중", LologColors.AccentSoft, LologColors.Accent)
-                    else -> StatusPill("● 듣고 있어요", LologColors.RecSoft, LologColors.Rec)
+            // 1시간 묶음 올리는 중·올림 표시는 있을 때만 판 아래쪽에
+            if (partUpload is PartUpload.Sending || sentPartNo > 0) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (partUpload is PartUpload.Sending) StatusPill("↑ ${partUpload.partNo}번째 묶음 올리는 중", LologColors.AccentSoft, LologColors.Accent)
+                    Spacer(Modifier.weight(1f))
+                    if (sentPartNo > 0) Text("${sentPartNo}번째 묶음 올림 ✓", fontSize = 12.sp, color = LologColors.Muted)
                 }
-                Spacer(Modifier.weight(1f))
-                if (sentPartNo > 0) Text("${sentPartNo}번째 묶음 올림 ✓", fontSize = 12.sp, color = LologColors.Muted)
             }
         }
         Spacer(Modifier.height(12.dp))
-        PrivacyNote("말은 폰 안에서만 글자로 바꿔요. 글자만 서버로 올라가요.")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Lock, null, tint = LologColors.Muted, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("말은 폰 안에서만 글자로 바꿔요. 글자만 올라가요.", fontSize = 11.sp, color = LologColors.Muted)
+        }
         Spacer(Modifier.height(12.dp))
         if (s is RecordingState.UploadFailed) {
             Text(s.message, fontSize = 13.sp, color = LologColors.Rec, textAlign = TextAlign.Center)
@@ -179,7 +178,8 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
             GhostButton("돌아가기", onBack)
         } else {
             PrimaryButton(
-                "녹음 끝내기", { recorder.stop() }, danger = true,
+                // 실수로 끝내지 않게 확인 창을 먼저 띄워요
+                "녹음 끝내기", { askStop = true }, danger = true,
                 loading = s is RecordingState.Uploading, enabled = s is RecordingState.Recording,
                 leading = { Icon(Icons.Default.Stop, null) },
             )
@@ -226,7 +226,7 @@ private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
     Canvas(modifier) {
         val barW = 3.dp.toPx()
         val gap = 2.dp.toPx()
-        val nowX = size.width * 0.75f
+        val nowX = size.width - 10.dp.toPx() // 11/10 확정: 코랄 세로선은 판 오른쪽 끝
         val midY = size.height / 2
         // 가운데 기준선
         drawLine(LologColors.Line, Offset(0f, midY), Offset(size.width, midY), 1.dp.toPx())
@@ -249,8 +249,7 @@ private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
             )
         }
         // 빨간 지금 선
-        drawLine(LologColors.Rec, Offset(nowX, 6.dp.toPx()), Offset(nowX, size.height), 2.dp.toPx())
-        drawCircle(LologColors.Rec, 5.dp.toPx(), Offset(nowX, 6.dp.toPx()))
+        drawLine(LologColors.Rec, Offset(nowX, 0f), Offset(nowX, size.height), 2.dp.toPx())
     }
 }
 

@@ -17,7 +17,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -32,11 +31,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lolog.app.ui.theme.LologColors
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.sin
 
 // ── 01 첫 화면(스플래시) ─────────────────────────────
 // 사진: mockups/첫화면-진짜3D얼굴-시안.png
-// 흰 바탕 + 아래에서 3D 얼굴들이 흔들흔들 떠올라요. 가운데 로고는 펜으로 그리듯 나타나요(4초, 11/8).
+// 흰 바탕 + 아래에서 3D 얼굴들이 흔들흔들 떠올라요. 가운데 로고는 펜으로 그리듯 나타나요(3초, 11/10 다듬음).
+// 움직임 숫자는 mockups/첫화면-비교-1110/splash-compare.html의 drawSmooth와 같아요.
 
 /** 첫 화면에 떠오르는 얼굴 하나 */
 private data class FloatFace(
@@ -44,7 +45,7 @@ private data class FloatFace(
     val size: Dp,
     val x: Float,       // 화면 가로 위치(0~1, 얼굴 가운데)
     val startMs: Int,   // 이때 화면 아래에서 나타나요 (음수면 이미 올라오는 중)
-    val spin: Boolean = false, // true면 한 바퀴 빙글, false면 고개만 좌우로
+    val spin: Boolean = false, // true면 기울기에 느린 흔들림을 더해요(11/10: 한 바퀴 빙글 대신)
 )
 
 private val faces = listOf(
@@ -57,10 +58,10 @@ private val faces = listOf(
     FloatFace("cool", 94.dp, 0.40f, 1100),
 )
 
-private const val SPLASH_MS = 4_000L
+private const val SPLASH_MS = 3_000L
 
-/** 얼굴 움직임 빠르기. 처음 1.6초 판을 4초로 늘리면서 같은 비율(1.6/4.0)로 천천히 */
-private const val FACE_SLOW = 0.4f
+/** 얼굴 움직임 빠르기(11/10 다듬음: 0.4 → 0.5) */
+private const val FACE_SLOW = 0.5f
 private const val RISE_DP_PER_SEC = 430f
 
 private val LogoYellow = Color(0xFFFFD028)
@@ -83,8 +84,9 @@ fun SplashScreen(onDone: () -> Unit) {
         val h = maxHeight
         val density = LocalDensity.current
         val hPx = with(density) { h.toPx() }
-        val logoTop = hPx * 0.5f - with(density) { 70.dp.toPx() }
-        val logoBottom = hPx * 0.5f + with(density) { 70.dp.toPx() }
+        val midY = hPx * 0.5f
+        val near0 = with(density) { 20.dp.toPx() }
+        val near1 = with(density) { 170.dp.toPx() }
 
         // 얼굴들 (글자 뒤)
         val ft = (t * FACE_SLOW).toLong()
@@ -95,15 +97,16 @@ fun SplashScreen(onDone: () -> Unit) {
             val sizePx = with(density) { f.size.toPx() }
             val centerY = hPx + sizePx / 2 - a * with(density) { RISE_DP_PER_SEC.dp.toPx() }
             if (centerY < -sizePx) return@forEachIndexed
-            // 위쪽에서 서서히 사라지고, 글자 근처를 지날 땐 옅어져요
-            var alpha = if (centerY < sizePx) (centerY / sizePx).coerceIn(0f, 1f) else 1f
-            if (centerY in logoTop..logoBottom) alpha *= 0.3f
+            // 위로 나갈 때 부드럽게 사라지고, 로고 가운데로 갈수록 서서히 옅어져요(한가운데서 25%까지)
+            var alpha = smoothstep(-sizePx * 0.5f, sizePx * 1.2f, centerY)
+            alpha *= 1f - 0.75f * (1f - smoothstep(near0, near1, abs(centerY - midY)))
             if (alpha <= 0.02f) return@forEachIndexed
 
-            val dx = sin(a * 5.5f + j) * 18f
-            val tilt = sin(a * 4.5f + j * 2) * 12f
-            val yaw = if (f.spin) ((a * 360f).toInt() % 360) else (sin(a * 4f + j) * 30f).toInt()
-            val mouth = ((ageMs / 300) % 2).toInt() // 입 뻥긋·윙크 등은 0.3초마다 바뀜
+            // 흔들림은 반으로, 고개 돌리기 없이 늘 정면 그림
+            val dx = sin(a * 3f + j) * 9f
+            val tilt = sin(a * 2.6f + j * 2) * 8f + if (f.spin) sin(a * 1.6f) * 6f else 0f
+            val mouth = (((ageMs + j * 170) / 650) % 2).toInt() // 입은 0.65초마다, 얼굴마다 엇갈려서
+            val sq = 1f + 0.04f * sin(a * 6f + j) // 말할 때 살짝 통통
 
             Box(
                 Modifier
@@ -121,9 +124,13 @@ fun SplashScreen(onDone: () -> Unit) {
                         ),
                 )
                 Image(
-                    painter = painterResource(SplashFaceRes.get(f.kind, mouth, yaw)),
+                    painter = painterResource(SplashFaceRes.get(f.kind, mouth)),
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize().rotate(tilt),
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        rotationZ = tilt
+                        scaleX = 1f / sq
+                        scaleY = sq
+                    },
                 )
             }
         }
@@ -132,18 +139,28 @@ fun SplashScreen(onDone: () -> Unit) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             DrawnLogoMark(t, Modifier.width(132.dp))
             Spacer(Modifier.height(14.dp))
-            // LOLog 글자: 왼쪽부터 써 내려가요
-            val word = phase(t, 2_500, 3_300)
+            // LOLog 글자: 왼쪽부터 드러나면서 6dp 아래에서 올라와요
+            val word = phase(t, 1_750, 2_350)
             Image(
                 painterResource(R.drawable.logo_word), contentDescription = "LOLog",
-                modifier = Modifier.height(40.dp).drawWithContent {
-                    clipRect(right = size.width * word) { this@drawWithContent.drawContent() }
-                },
+                modifier = Modifier.height(40.dp)
+                    .graphicsLayer {
+                        translationY = (1f - word) * 6.dp.toPx()
+                        alpha = minOf(1f, word * 2f)
+                    }
+                    .drawWithContent {
+                        clipRect(right = size.width * word) { this@drawWithContent.drawContent() }
+                    },
             )
             Spacer(Modifier.height(14.dp))
+            // 문구: 5dp 아래에서 올라오며 나타나요
+            val tag = phase(t, 2_250, 2_650)
             Text(
                 "흘려보낸 대화를 다시 꺼내 보는 곳", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF8B95A1),
-                modifier = Modifier.alpha(phase(t, 3_100, 3_500)),
+                modifier = Modifier.graphicsLayer {
+                    translationY = (1f - tag) * 5.dp.toPx()
+                    alpha = tag
+                },
             )
         }
 
@@ -155,6 +172,20 @@ fun SplashScreen(onDone: () -> Unit) {
     }
 }
 
+/** a~b 사이에서 0 → 1, 양 끝을 부드럽게(smoothstep) */
+private fun smoothstep(a: Float, b: Float, x: Float): Float {
+    val k = ((x - a) / (b - a)).coerceIn(0f, 1f)
+    return k * k * (3 - 2 * k)
+}
+
+/** 살짝 넘쳤다 돌아오는 곡선(backOut). 0 → 1 */
+private fun backOut(x: Float): Float {
+    val q = x.coerceIn(0f, 1f) - 1f
+    val c1 = 1.70158f
+    val c3 = c1 + 1f
+    return 1f + c3 * q * q * q + c1 * q * q
+}
+
 /** start~end(ms) 사이에서 0 → 1, 부드럽게 */
 private fun phase(t: Long, start: Int, end: Int): Float =
     FastOutSlowInEasing.transform(((t - start).toFloat() / (end - start)).coerceIn(0f, 1f))
@@ -162,15 +193,17 @@ private fun phase(t: Long, start: Int, end: Int): Float =
 /**
  * 로고 마크를 펜으로 그리듯 보여 줘요. 마크를 조각 4개로 나눈 그림을 겹쳐 두고 차례로 드러내요.
  *  ① 말풍선: 꼬리에서 시작해 시계 방향으로 한 바퀴  ② 네모 틀: 왼쪽 위에서 시계 방향으로 한 바퀴
- *  ③ 파란 선: 왼쪽에서 오른쪽으로  ④ 재생 삼각형: 톡 커지며 나타남
+ *  ③ 파란 선: 왼쪽에서 오른쪽으로  ④ 재생 삼각형: 살짝 넘쳤다 돌아오며 톡 튀어나옴
+ * ①②는 드러나면서 투명도 0.35 → 1로 점점 진해져요(11/10 다듬음)
  * 조각 그림 res/drawable-nodpi/logo_mark_{bubble,frame,wave,play}.png 은 logo_mark.png를 잘라 만든 거예요(합치면 같은 그림).
  */
 @Composable
 private fun DrawnLogoMark(t: Long, modifier: Modifier) {
-    val bubble = phase(t, 200, 1_300)
-    val frame = phase(t, 1_000, 2_100)
-    val wave = phase(t, 1_900, 2_400)
-    val play = phase(t, 2_300, 2_700)
+    val bubble = phase(t, 150, 900)
+    val frame = phase(t, 650, 1_400)
+    val wave = phase(t, 1_250, 1_650)
+    // 재생 삼각형: 1550ms부터 380ms 동안
+    val play = ((t - 1_550).toFloat() / 380f).coerceIn(0f, 1f)
     Box(modifier.aspectRatio(480f / 415f)) {
         // 그림 안 위치는 0~1 비율(가로, 세로)
         SweepLayer(R.drawable.logo_mark_bubble, bubble, cx = 0.26f, cy = 0.55f, startDeg = 100f)
@@ -184,8 +217,8 @@ private fun DrawnLogoMark(t: Long, modifier: Modifier) {
         Image(
             painterResource(R.drawable.logo_mark_play), null,
             Modifier.fillMaxSize().graphicsLayer {
-                val k = 0.6f + 0.4f * play
-                scaleX = k; scaleY = k; alpha = play
+                val k = 0.55f + 0.45f * backOut(play)
+                scaleX = k; scaleY = k; alpha = minOf(1f, play * 2f)
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.71f, 0.49f)
             },
         )
@@ -197,7 +230,7 @@ private fun DrawnLogoMark(t: Long, modifier: Modifier) {
 private fun SweepLayer(res: Int, p: Float, cx: Float, cy: Float, startDeg: Float) {
     Image(
         painterResource(res), null,
-        Modifier.fillMaxSize().drawWithContent {
+        Modifier.fillMaxSize().graphicsLayer { alpha = if (p > 0f) 0.35f + 0.65f * p else 0f }.drawWithContent {
             when {
                 p <= 0f -> Unit
                 p >= 1f -> drawContent()
