@@ -321,7 +321,8 @@ private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDet
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(52.dp).clip(LologShape.sm).background(LologColors.Canvas)) {
-            if (stage == ComicStage.DONE) ComicImage(detail?.imageUrl, card.lines.map { it.text }, Modifier.fillMaxSize(), small = true)
+            // 만화 화면과 같은 원본(imageUrl)이라 같은 캐시 이름을 써요(#35)
+            if (stage == ComicStage.DONE) ComicImage(detail?.imageUrl, card.lines.map { it.text }, Modifier.fillMaxSize(), small = true, cacheKey = comicCacheKey(ref.id))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
