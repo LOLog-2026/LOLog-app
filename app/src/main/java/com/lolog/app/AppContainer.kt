@@ -10,6 +10,10 @@ import com.lolog.app.data.repo.TokenStore
 import com.lolog.app.notification.Notifier
 import com.lolog.app.recording.RealRecordingController
 import com.lolog.app.recording.RecordingController
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /** 앱 전체에서 하나씩만 쓰는 것들. DI 라이브러리 없이 손으로 묶었어요. */
 class AppContainer(context: Context) {
@@ -26,7 +30,21 @@ class AppContainer(context: Context) {
         if (BuildConfig.USE_MOCK) {
             MockRecordingController(repository)
         } else {
-            RealRecordingController(appContext, send = { network!!.main.uploadRecording(it) })
+            RealRecordingController(
+                appContext,
+                send = { network!!.main.uploadRecording(it) },
+                // PUT /api/recordings/{id}/audio/{seq}: 파트 file(audio/aac) + 폼 값 startMs·endMs (audio.md 6장)
+                sendAudio = { recordingId, audio ->
+                    val text = "text/plain".toMediaType()
+                    network!!.main.uploadAudio(
+                        recordingId = recordingId,
+                        seq = audio.seq,
+                        file = MultipartBody.Part.createFormData("file", audio.file.name, audio.file.asRequestBody("audio/aac".toMediaType())),
+                        startMs = audio.startMs.toString().toRequestBody(text),
+                        endMs = audio.endMs.toString().toRequestBody(text),
+                    )
+                },
+            )
         }
 
     val notifier = Notifier(appContext)
@@ -35,4 +53,9 @@ class AppContainer(context: Context) {
     var permissionAsked: Boolean
         get() = prefs.getBoolean("perm_asked", false)
         set(v) { prefs.edit().putBoolean("perm_asked", v).apply() }
+
+    /** 녹음 버튼 화면의 "음성도 저장" 체크. 기본은 꺼짐이고 한 번 고른 값을 폰이 기억해요(audio.md 1장) */
+    var saveAudio: Boolean
+        get() = prefs.getBoolean("save_audio", false)
+        set(v) { prefs.edit().putBoolean("save_audio", v).apply() }
 }

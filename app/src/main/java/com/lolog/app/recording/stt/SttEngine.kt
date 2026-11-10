@@ -26,6 +26,7 @@ data class SttSegment(val startMs: Long, val endMs: Long, val text: String, val 
 
 /**
  * 입력 → 링버퍼 → 크기 맞춤(AutoGain) → VAD → 20초 자르기 → SenseVoice. 음성은 메모리에만 잠깐 두고 인식 후 버린다.
+ * 음성 저장을 켰으면 크기를 맞춘 소리를 audioSink에도 그대로 넘긴다(명세 audio.md 2장).
  * VAD·크기 맞춤·자르기 설정은 오픈소스 데이터 측정(LOLog-ai#18, 명세 FR-REC-03)으로 정했다.
  * 스레드는 폰 측정에서 가장 빨랐던 2개다.
  */
@@ -34,6 +35,8 @@ class SttEngine(
     private val source: PcmSource,
     private val onSegment: (SttSegment) -> Unit,
     private val onFinished: (error: Throwable?) -> Unit,
+    /** 음성 저장을 켰으면 크기를 맞춘 소리를 여기로도 넘긴다. 끄면 null이고 소리는 메모리에만 잠깐 둔다. */
+    private val audioSink: AudioSink? = null,
 ) {
     companion object {
         const val SAMPLE_RATE = 16000
@@ -126,6 +129,8 @@ class SttEngine(
             source.release()
             vad?.release()
             recognizer?.release()
+            // 마지막 묶음을 올리기 전에 음성 파일을 마감해 둔다.
+            audioSink?.close()
             onFinished(error)
         }
     }
@@ -149,15 +154,22 @@ class SttEngine(
         val samples = FloatArray(VAD_WINDOW)
         val gain = AutoGain()
         var fedToVad = 0L
+        var skipped = 0L
         while (true) {
             val readStart = ring.nextReadPosition
             val n = ring.readBlocking(pcm)
             // 덮어쓰기가 있으면 읽기 위치가 건너뛰므로 VAD 번호와 링버퍼 번호의 차이를 새로 구한다.
             val offset = readStart - fedToVad
             if (n < VAD_WINDOW) break
+            // 건너뛴 만큼 음성 파일에 무음을 채워 파일 안 위치가 글의 시간(링버퍼 번호)과 맞게 한다.
+            if (offset > skipped) {
+                audioSink?.skip(offset - skipped)
+                skipped = offset
+            }
             for (i in 0 until n) samples[i] = pcm[i] / 32768f
             // 키운 소리를 VAD와 인식기에 같이 넘긴다. 앞 여유도 history에서 꺼내므로 같은 이득이 들어간다.
             gain.apply(samples)
+            audioSink?.write(samples, n)
             history.write(samples)
             vad.acceptWaveform(samples)
             fedToVad += n
