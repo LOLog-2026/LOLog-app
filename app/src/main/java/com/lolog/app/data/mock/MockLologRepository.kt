@@ -28,7 +28,7 @@ private const val MOCK_EMAIL_CODE = "123456"
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
- *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번)
+ *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번), 네이버 연결 → 연결됨
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
  *  - 대사 중 40자 넘는 게 있으면 만화 FAILED (21번). 카드 고치기에서 줄이면 성공
  *  - 실패한 만화는 3번에 안 세요(11/5 확정). 카드를 지워도 만화는 남고 cardDeleted = true
@@ -39,7 +39,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private val lock = Mutex()
     private val cardStore = MockData.cards()
     private val comicStore = MockData.comics()
-    private val linked = mutableSetOf(SocialProvider.KAKAO)
+    private val linked = mutableSetOf<SocialProvider>()
     private val recordings = java.util.concurrent.ConcurrentHashMap<Long, RecordingProgress>()
     private val recordingParts = mutableMapOf<String, Long>() // clientRecordingId → recordingId
     private val recordingSentences = mutableMapOf<Long, MutableList<Sentence>>()

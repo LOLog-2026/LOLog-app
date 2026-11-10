@@ -38,7 +38,6 @@ object ApiMapper {
 
     /** 주소에 들어가는 provider 이름과 linkedProviders[] 값 */
     private val PROVIDER = mapOf(
-        SocialProvider.KAKAO to "kakao",
         SocialProvider.GOOGLE to "google",
         SocialProvider.NAVER to "naver",
     )

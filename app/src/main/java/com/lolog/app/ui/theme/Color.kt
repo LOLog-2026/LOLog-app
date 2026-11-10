@@ -27,7 +27,5 @@ object LologColors {
     val RecSoft = Color(0xFFFFE5E8)
     val Ok = Color(0xFF2FA36B)
 
-    val Kakao = Color(0xFFFEE500)
-    val KakaoText = Color(0xFF191600)
     val Naver = Color(0xFF03C75A)
 }

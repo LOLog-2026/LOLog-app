@@ -147,6 +147,15 @@ LOLOG_KEY_PASSWORD=...
 
 - 처음에는 **목업 모드**(`app/build.gradle.kts`의 `USE_MOCK=true`)라 서버 없이 모든 화면이 돌아가요. 녹음도 가짜(`data/mock/MockRecordingController`)라 마이크·STT 없이 시간만 흘러요.
 - 실제 서버로 바꾸려면 `local.properties`에 `LOLOG_BASE_URL`(없으면 `http://10.0.2.2:8080/`), 필요하면 `LOLOG_TEST_TOKEN`, 그리고 `LOLOG_USE_MOCK=false`를 적어요. 목업이 아니면 녹음도 실제 녹음(`RealRecordingController`)이에요.
+- 소셜 로그인(구글·네이버) 키는 `local.properties`에 적어요. debug·release 모두 이 값을 써요. 값은 팀 안에서 따로 전하고 커밋하지 않아요. 비어 있으면 그 회사 버튼은 로그인 화면·설정 화면 모두 "준비 중"으로 눌리지 않아요(목업 모드는 키 없이 목업 토큰으로 진행).
+
+  ```
+  LOLOG_GOOGLE_WEB_CLIENT_ID=...     구글 "웹" 클라이언트 ID(Android 클라이언트 ID 아님). 서버가 ID 토큰의 aud를 이 값으로 확인해요
+  LOLOG_NAVER_CLIENT_ID=...
+  LOLOG_NAVER_CLIENT_SECRET=...
+  ```
+
+  구글 로그인은 그 PC의 debug 서명 SHA-1이 구글 콘솔의 Android 클라이언트에 등록돼 있어야 해요. `./gradlew signingReport`로 확인해요.
 - 푸시(FCM)는 Firebase 콘솔 → 프로젝트 설정 → 내 앱(`com.lolog.app`)에서 받은 `google-services.json`을 `app/`에 두면 켜져요. 파일이 없어도 빌드는 되고 푸시만 꺼져요. 받기는 `notification/LologMessagingService`, 토큰 등록은 `notification/PushTokens`(로그인할 때, 토큰이 바뀔 때)예요.
 - 글꼴 Pretendard, Nanum Pen Script는 SIL Open Font License 1.1이에요(`licenses/`).
 
@@ -159,6 +168,7 @@ LOLOG_KEY_PASSWORD=...
 | 비밀번호 4자 미만 로그인 | INVALID_CREDENTIALS |
 | `offline@…`로 로그인 | 인터넷 끊김 |
 | 설정 → Google 연결하기 | 409 SOCIAL_ALREADY_LINKED |
+| 설정 → 네이버 연결하기 | 연결됨 |
 | 녹음 15초 안에 끝내기 | 이야기를 못 찾았어요 |
 | 만드는 중인 만화가 있는 카드 고치기 | CARD_LOCKED |
 | "택시 기사님의 인생 상담" 카드 | 3/3번, 버튼 잠김 (서버는 409 COMIC_LIMIT) |

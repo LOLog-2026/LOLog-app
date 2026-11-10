@@ -56,6 +56,9 @@ import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
+import com.lolog.app.ui.social.SocialSignIn
+import com.lolog.app.ui.social.rememberSocialSignIn
+import com.lolog.app.ui.social.socialErrorText
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import kotlinx.coroutines.Job
@@ -165,8 +168,14 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
         submit(null, isSignup = true) { repo.signup(email, password, code) }
     }
 
-    /** TODO(소셜): 카카오·구글·네이버 SDK 키가 들어오면 켜요. 지금은 버튼이 "준비 중"이라 불리지 않아요 */
-    fun social(provider: SocialProvider) = submit(provider) { repo.socialLogin(provider, "mock-${provider.name.lowercase()}-token") }
+    /** 구글·네이버 SDK로 토큰을 받아 POST /auth/social/{provider} (FR-AUTH-02). 사용자가 SDK 창을 닫으면 조용히 원래 화면 */
+    fun social(provider: SocialProvider, signIn: SocialSignIn) = submit(provider) {
+        val token = signIn.token(provider) ?: throw SocialCancelled
+        repo.socialLogin(provider, token)
+    }
+
+    /** 사용자가 SDK 창을 닫음. 오류 문구 없이 끝내려고 써요 */
+    private object SocialCancelled : Exception()
 
     /** 칸을 다시 고치면 그 칸 아래 오류는 지워요 */
     fun clearEmailError() = _state.update { it.copy(emailError = null) }
@@ -186,7 +195,9 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                 _state.update {
                     val s = it.copy(loading = false)
                     when {
+                        e === SocialCancelled -> s
                         code == ErrorCodes.ACCOUNT_EXISTS && provider != null -> s.copy(accountExists = provider)
+                        provider != null -> s.copy(snackbar = socialErrorText(e))
                         code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
                         code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")
                         code == ErrorCodes.INVALID_CODE -> s.copy(codeError = "인증번호가 맞지 않아요")
@@ -218,6 +229,7 @@ private fun authViewModel(): AuthViewModel {
 fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
     val vm = authViewModel()
     val state by vm.state.collectAsState()
+    val signIn = rememberSocialSignIn()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var emailTouched by remember { mutableStateOf(false) }
@@ -246,8 +258,8 @@ fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
                 fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp,
             )
             Spacer(Modifier.height(14.dp))
-            // 소셜: 카카오 → 구글 → 네이버. 앱 키가 들어오기 전엔 "준비 중"으로 눌리지 않아요
-            SocialButtons(ready = false, enabled = !state.loading, onClick = vm::social)
+            // 소셜: 구글 → 네이버. 그 회사 키가 local.properties에 없으면 "준비 중"으로 눌리지 않아요(목업은 늘 켜짐)
+            SocialButtons(ready = signIn::isReady, enabled = !state.loading) { vm.social(it, signIn) }
             OrDivider("또는 이메일로")
             LabeledField(
                 "이메일", email,
@@ -401,12 +413,11 @@ private fun RuleLine(text: String, ok: Boolean, touched: Boolean) {
     }
 }
 
-/** 카카오 → 구글 → 네이버. ready=false면 옅게 + "준비 중" 표시 + 눌리지 않음 */
+/** 구글 → 네이버. ready가 false인 회사는 옅게 + "준비 중" 표시 + 눌리지 않음 */
 @Composable
-private fun SocialButtons(ready: Boolean, enabled: Boolean, onClick: (SocialProvider) -> Unit) {
-    SocialButton("카카오로 시작하기", "●", LologColors.Kakao, LologColors.KakaoText, ready, enabled) { onClick(SocialProvider.KAKAO) }
-    SocialButton("Google로 시작하기", "G", LologColors.Paper, LologColors.Ink, ready, enabled, border = true) { onClick(SocialProvider.GOOGLE) }
-    SocialButton("네이버로 시작하기", "N", LologColors.Naver, Color.White, ready, enabled) { onClick(SocialProvider.NAVER) }
+private fun SocialButtons(ready: (SocialProvider) -> Boolean, enabled: Boolean, onClick: (SocialProvider) -> Unit) {
+    SocialButton("Google로 시작하기", "G", LologColors.Paper, LologColors.Ink, ready(SocialProvider.GOOGLE), enabled, border = true) { onClick(SocialProvider.GOOGLE) }
+    SocialButton("네이버로 시작하기", "N", LologColors.Naver, Color.White, ready(SocialProvider.NAVER), enabled) { onClick(SocialProvider.NAVER) }
 }
 
 @Composable
