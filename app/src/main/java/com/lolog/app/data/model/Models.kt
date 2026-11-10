@@ -62,8 +62,8 @@ fun isValidPassword(pw: String): Boolean =
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
-/** GET /auth/me */
-data class Account(val email: String, val linkedProviders: Set<SocialProvider>)
+/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요 */
+data class Account(val email: String, val linkedProviders: Set<SocialProvider>, val hasPassword: Boolean = false)
 
 // ── 녹음 ──────────────────────────────────────────────
 

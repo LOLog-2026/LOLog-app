@@ -14,8 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -122,7 +121,13 @@ class SettingsViewModel(
 // ── 16 설정 · 19 소셜 연결 실패 · 23 탈퇴 ──────────────
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onLoggedOut: () -> Unit,
+    onChangePassword: () -> Unit,
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
+) {
     val container = LocalContainer.current
     val vm = viewModel { SettingsViewModel(container.repository, container.recorder) }
     val state by vm.state.collectAsState()
@@ -137,6 +142,9 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
     LaunchedEffect(Unit) { vm.load() }
     LaunchedEffect(state.loggedOut) { if (state.loggedOut) onLoggedOut() }
     LaunchedEffect(state.toast) { state.toast?.let { snackbar.showSnackbar(it); vm.toastShown() } }
+    // 비밀번호 바꾸기에서 돌아오면 아래 띠로 결과를 알려요. 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(message) { message?.let { onMessageShown(); scope.launch { snackbar.showSnackbar(it) } } }
 
     Scaffold(
         containerColor = LologColors.Paper,
@@ -184,6 +192,10 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
             }
 
             HorizontalDivider(Modifier.padding(vertical = 10.dp), thickness = 1.dp, color = LologColors.Line)
+            // 비밀번호가 있는 계정만 보여 줘요. 소셜로만 가입했으면 줄이 아예 없어요(FR-AUTH-07, 시안 12)
+            if (state.me?.hasPassword == true) {
+                SettingsRow("비밀번호 바꾸기", onClick = onChangePassword)
+            }
             // 알림 스위치는 API에 없어 안드로이드 알림 설정으로 보내요 (협의 2-5)
             SettingsRow("알림 설정", trailing = "휴대폰 설정 ›") {
                 context.startActivity(

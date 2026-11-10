@@ -25,8 +25,49 @@ internal fun <T> mockPage(newestFirst: List<T>, cursor: String?, size: Int, sort
     return list.drop(start).take(size) to (start + size).takeIf { it < list.size }?.toString()
 }
 
-/** 목업에서 늘 맞는 가입 인증번호 */
+/** 목업에서 늘 맞는 인증번호(가입·비밀번호 찾기) */
 private const val MOCK_EMAIL_CODE = "123456"
+
+/** 인증번호 한 종류(가입·비밀번호 찾기)의 보낸 시각과 틀린 횟수. 목업 인증번호는 늘 MOCK_EMAIL_CODE */
+internal class MockCodes {
+    private val sentAt = mutableMapOf<String, Long>() // 이메일 → 보낸 시각(ms)
+    private val fails = mutableMapOf<String, Int>()
+
+    fun send(email: String) {
+        val key = email.lowercase()
+        val sent = sentAt[key]
+        val nowMs = System.currentTimeMillis()
+        if (sent != null && nowMs - sent < EMAIL_CODE_RESEND_SECONDS * 1000L) {
+            throw LologException(ErrorCodes.TOO_MANY_REQUESTS, "잠시 뒤에 다시 받아 주세요")
+        }
+        sentAt[key] = nowMs
+        fails.remove(key)
+    }
+
+    fun check(email: String, code: String) {
+        val key = email.lowercase()
+        val sent = sentAt[key]
+        // 번호를 안 받았거나 10분 지났거나 5번 틀리면 만료. 시험용으로 000000도 만료
+        if (sent == null || System.currentTimeMillis() - sent > 10 * 60 * 1000L || code == "000000") {
+            throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요")
+        }
+        if (code != MOCK_EMAIL_CODE) {
+            val n = (fails[key] ?: 0) + 1
+            fails[key] = n
+            if (n >= 5) { sentAt.remove(key); throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요") }
+            throw LologException(ErrorCodes.INVALID_CODE, "인증번호가 맞지 않아요")
+        }
+    }
+
+    /** 맞게 쓴 번호는 한 번만 써요 */
+    fun used(email: String) { sentAt.remove(email.lowercase()); fails.remove(email.lowercase()) }
+}
+
+/** 목업 비밀번호 바꾸기 검사. 지금 비밀번호는 로그인 목업과 같은 규칙(4자 미만이면 틀림) */
+internal fun mockCheckPasswordChange(currentPassword: String, newPassword: String) {
+    if (currentPassword.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "지금 비밀번호가 맞지 않아요")
+    if (!isValidPassword(newPassword)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "newPassword")
+}
 
 /**
  * 백엔드 없이 화면 흐름을 다 돌려 볼 수 있는 메모리 목업이에요.
@@ -35,6 +76,9 @@ private const val MOCK_EMAIL_CODE = "123456"
  * 오류 화면 확인용 규칙
  *  - 이메일 가입 인증번호는 123456. 다른 번호 → 400 INVALID_CODE, 000000·5번 틀림 → 400 CODE_EXPIRED
  *  - 인증번호를 60초 안에 또 받기 → 429 TOO_MANY_REQUESTS
+ *  - 비밀번호 찾기 인증번호도 123456이고 위 두 규칙이 같아요(번호와 틀린 횟수는 가입과 따로 저장)
+ *  - 비밀번호 바꾸기에서 지금 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
+ *  - 내 정보(me)의 hasPassword: 이메일로 로그인했으면 true, 소셜로 로그인했으면 false
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
@@ -72,38 +116,22 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private fun now(): String = OffsetDateTime.now().toString()
 
     // ── 인증 ──
-    /** 이메일 → 인증번호를 보낸 시각(ms). 목업 인증번호는 늘 MOCK_EMAIL_CODE */
-    private val codeSentAt = mutableMapOf<String, Long>()
-    private val codeFails = mutableMapOf<String, Int>()
+    private val signupCodes = MockCodes()
+    private val resetCodes = MockCodes()
+    /** 마지막 로그인 방법. me()의 hasPassword를 정해요(앱을 새로 켜서 모르면 이메일로 봐요) */
+    private var loggedInWithEmail = true
 
     override suspend fun requestEmailCode(email: String) {
         net()
-        val key = email.lowercase()
-        val sent = codeSentAt[key]
-        val nowMs = System.currentTimeMillis()
-        if (sent != null && nowMs - sent < EMAIL_CODE_RESEND_SECONDS * 1000L) {
-            throw LologException(ErrorCodes.TOO_MANY_REQUESTS, "잠시 뒤에 다시 받아 주세요")
-        }
-        codeSentAt[key] = nowMs
-        codeFails.remove(key)
+        signupCodes.send(email)
     }
 
     override suspend fun signup(email: String, password: String, code: String) {
         net()
-        val key = email.lowercase()
-        val sent = codeSentAt[key]
-        // 번호를 안 받았거나 10분 지났거나 5번 틀리면 만료. 시험용으로 000000도 만료
-        if (sent == null || System.currentTimeMillis() - sent > 10 * 60 * 1000L || code == "000000") {
-            throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요")
-        }
-        if (code != MOCK_EMAIL_CODE) {
-            val fails = (codeFails[key] ?: 0) + 1
-            codeFails[key] = fails
-            if (fails >= 5) { codeSentAt.remove(key); throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요") }
-            throw LologException(ErrorCodes.INVALID_CODE, "인증번호가 맞지 않아요")
-        }
+        signupCodes.check(email, code)
         if (email.equals("taken@lolog.app", true)) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         if (!isValidPassword(password)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "password")
+        loggedInWithEmail = true
         tokens.save("mock-access", "mock-refresh")
     }
 
@@ -112,12 +140,14 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         // 시험용: offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호
         if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
         if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+        loggedInWithEmail = true
         tokens.save("mock-access", "mock-refresh")
     }
 
     override suspend fun socialLogin(provider: SocialProvider, providerToken: String): Boolean {
         net()
         if (provider == SocialProvider.NAVER) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
+        loggedInWithEmail = false
         tokens.save("mock-access", "mock-refresh")
         return false
     }
@@ -125,7 +155,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun logout() { net(150); tokens.clear() }
     override suspend fun withdraw() { net(); lock.withLock { cardStore.clear(); comicStore.clear() }; tokens.clear() }
 
-    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet()) }
+    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail) }
 
     override suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider> {
         net()
@@ -134,6 +164,24 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         }
         linked += provider
         return linked.toSet()
+    }
+
+    override suspend fun requestPasswordResetCode(email: String) {
+        net()
+        resetCodes.send(email)
+    }
+
+    override suspend fun resetPassword(email: String, code: String, newPassword: String) {
+        net()
+        resetCodes.check(email, code)
+        if (!isValidPassword(newPassword)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "newPassword")
+        resetCodes.used(email)
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String) {
+        net()
+        mockCheckPasswordChange(currentPassword, newPassword)
+        tokens.save("mock-access", "mock-refresh")
     }
 
     // ── 녹음 ──

@@ -115,16 +115,18 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
         submit(null) { repo.login(e, password) }
     }
 
-    /** 인증번호 받기. 가입 여부와 관계없이 같은 문구를 보여 줘요 */
-    fun requestCode(rawEmail: String) {
+    /** 인증번호 받기. 가입 여부와 관계없이 같은 문구를 보여 줘요. forReset이면 비밀번호 찾기 번호(FR-AUTH-07) */
+    fun requestCode(rawEmail: String, forReset: Boolean = false) {
         val email = normalizeEmail(rawEmail)
         val s = _state.value
         if (!isEmail(email) || s.sendingCode || s.loading || s.resendLeft > 0) return
         viewModelScope.launch {
             _state.update { it.copy(sendingCode = true, emailError = null, emailInfo = null, snackbar = null) }
             try {
-                repo.requestEmailCode(email)
-                _state.update { it.copy(sendingCode = false, codeEmail = email, emailInfo = "메일을 확인해 주세요", codeError = null, codeExpired = false) }
+                if (forReset) repo.requestPasswordResetCode(email) else repo.requestEmailCode(email)
+                // 찾기는 가입 안 된 이메일이면 메일이 안 가서 주소를 다시 보라는 말을 더해요(명세)
+                val info = if (forReset) "메일을 확인해 주세요. 메일이 안 오면 이메일 주소를 확인해 주세요." else "메일을 확인해 주세요"
+                _state.update { it.copy(sendingCode = false, codeEmail = email, emailInfo = info, codeError = null, codeExpired = false) }
                 startCountdown()
             } catch (e: Throwable) {
                 val code = (e as? LologException)?.code
@@ -171,6 +173,13 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
         submit(null, isSignup = true) { repo.signup(email, password, code) }
     }
 
+    /** 비밀번호 찾기: 인증번호로 새 비밀번호를 정해요. 토큰은 안 받아서 성공하면 로그인 화면으로 가요 */
+    fun resetPassword(rawEmail: String, newPassword: String, code: String) {
+        val email = normalizeEmail(rawEmail)
+        if (!isEmail(email) || !isValidPassword(newPassword) || code.length != EMAIL_CODE_LENGTH) return
+        submit(null, isReset = true) { repo.resetPassword(email, code, newPassword) }
+    }
+
     /** 구글·네이버 SDK로 토큰을 받아 POST /auth/social/{provider} (FR-AUTH-02). 사용자가 SDK 창을 닫으면 조용히 원래 화면 */
     fun social(provider: SocialProvider, signIn: SocialSignIn) = submit(provider) {
         val token = signIn.token(provider) ?: throw SocialCancelled
@@ -186,7 +195,7 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
     fun snackbarShown() = _state.update { it.copy(snackbar = null) }
     fun dismiss() = _state.update { it.copy(accountExists = null) }
 
-    private fun submit(provider: SocialProvider?, isSignup: Boolean = false, block: suspend () -> Unit) {
+    private fun submit(provider: SocialProvider?, isSignup: Boolean = false, isReset: Boolean = false, block: suspend () -> Unit) {
         if (_state.value.loading) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, emailError = null, passwordError = null, codeError = null, snackbar = null) }
@@ -195,6 +204,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                 _state.update { it.copy(loading = false, done = true) }
             } catch (e: Throwable) {
                 val code = (e as? LologException)?.code
+                // 찾기에서 번호가 만료되면 기다리지 않고 바로 다시 받을 수 있게 해요(시안 6)
+                if (isReset && code == ErrorCodes.CODE_EXPIRED) countdown?.cancel()
                 _state.update {
                     val s = it.copy(loading = false)
                     when {
@@ -204,10 +215,11 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                         code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
                         code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")
                         code == ErrorCodes.INVALID_CODE -> s.copy(codeError = "인증번호가 맞지 않아요")
-                        code == ErrorCodes.CODE_EXPIRED -> s.copy(codeError = "인증번호를 다시 받아 주세요", codeExpired = true)
+                        code == ErrorCodes.CODE_EXPIRED ->
+                            s.copy(codeError = "인증번호를 다시 받아 주세요", codeExpired = true, resendLeft = if (isReset) 0 else s.resendLeft)
                         (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "email" ->
                             s.copy(emailError = "이메일 형식을 확인해 주세요")
-                        (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field == "password" ->
+                        (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && (e as LologException).field in setOf("password", "newPassword") ->
                             s.copy(passwordError = "비밀번호 규칙을 확인해 주세요")
                         else -> s.copy(snackbar = errorText(e))
                     }
@@ -229,7 +241,13 @@ private fun authViewModel(): AuthViewModel {
 }
 
 @Composable
-fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
+fun LoginScreen(
+    onLoggedIn: () -> Unit,
+    onSignup: () -> Unit,
+    onFindPassword: (email: String) -> Unit,
+    resetEmail: String? = null,
+    onResetShown: () -> Unit = {},
+) {
     val vm = authViewModel()
     val state by vm.state.collectAsState()
     val signIn = rememberSocialSignIn()
@@ -239,6 +257,16 @@ fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.done) { if (state.done) onLoggedIn() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
+    // 비밀번호 찾기에서 바꾸고 돌아오면 이메일 칸을 채운 채로 두고 아래 띠로 알려요(FR-AUTH-07).
+    // 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(resetEmail) {
+        val e = resetEmail ?: return@LaunchedEffect
+        email = e
+        password = ""
+        onResetShown()
+        scope.launch { snackbar.showSnackbar("비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요") }
+    }
 
     // ① 입력 오류: 이메일 형식이 틀리면 칸 아래 빨간 안내. 둘 다 채워야 버튼이 켜져요
     val emailOk = isEmail(email.trim())
@@ -291,8 +319,11 @@ fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Text("회원가입", fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.clickable(enabled = !state.loading, onClick = onSignup).padding(8.dp))
                 Text("·", fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.padding(vertical = 8.dp))
-                // 비밀번호 찾기는 API에 없어 자리만 둬요
-                Text("비밀번호 찾기", fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.padding(8.dp))
+                // 로그인 이메일 칸에 적은 값을 넘겨 찾기 화면 이메일 칸을 미리 채워요
+                Text(
+                    "비밀번호 찾기", fontSize = 13.sp, color = LologColors.Muted,
+                    modifier = Modifier.clickable(enabled = !state.loading) { onFindPassword(email.trim()) }.padding(8.dp),
+                )
             }
         }
     }
@@ -408,9 +439,110 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
     }
 }
 
+// ── 비밀번호 찾기 (FR-AUTH-07) ─────────────────────
+// 사진: 비밀번호-찾기-바꾸기-시안-1110.png 2·3·5·6·7. 가입 화면과 같은 부품을 써요
+
+@Composable
+fun PasswordResetScreen(initialEmail: String, onBack: () -> Unit, onDone: (email: String) -> Unit) {
+    val vm = authViewModel()
+    val state by vm.state.collectAsState()
+    var email by remember { mutableStateOf(initialEmail) }
+    var emailTouched by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(state.done) { if (state.done) onDone(normalizeEmail(email)) }
+    LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
+    // 이메일을 바꿔 번호가 무효가 되거나 번호가 만료되면 인증번호 칸을 비워요
+    LaunchedEffect(state.codeEmail, state.codeExpired) { if (state.codeEmail == null || state.codeExpired) code = "" }
+
+    // 규칙과 버튼 조건은 가입 화면과 같아요
+    val emailOk = isEmail(email.trim())
+    val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
+    val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
+    val confirmOk = confirm.isNotEmpty() && confirm == password
+    val codeOk = state.codeEmail == normalizeEmail(email) && code.length == EMAIL_CODE_LENGTH
+    val allOk = emailOk && lengthOk && mixOk && confirmOk && codeOk
+    val emailFormatError = if (emailTouched && email.isNotBlank() && !emailOk) "이메일 형식을 확인해 주세요" else null
+    val codeButton = when {
+        state.sendingCode -> "보내는 중"
+        state.resendLeft > 0 -> "다시 받기 ${state.resendLeft}초"
+        state.codeEmail != null -> "다시 받기"
+        else -> "번호 받기"
+    }
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = { LologTopBar("비밀번호 찾기", onBack) },
+        snackbarHost = { LologSnackbarHost(snackbar) },
+        modifier = Modifier.noteLines(),
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).imePadding().padding(horizontal = 24.dp)) {
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // 번호를 받기 전에만 큰 안내 글자를 보여 줘요(시안 2 → 3)
+                if (state.codeEmail == null) {
+                    Text(
+                        "가입한 이메일로\n인증번호를 보내 드려요",
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                    )
+                }
+                LabeledField(
+                    "이메일", email, { email = it; emailTouched = false; vm.emailChanged(normalizeEmail(it)) },
+                    icon = Icons.Outlined.MailOutline, placeholder = "이메일", type = KeyboardType.Email,
+                    error = state.emailError ?: emailFormatError, info = state.emailInfo, enabled = !state.loading,
+                    onFocusLost = { emailTouched = true },
+                ) {
+                    Button(
+                        onClick = { vm.requestCode(email.trim(), forReset = true) },
+                        enabled = emailOk && !state.loading && !state.sendingCode && state.resendLeft == 0,
+                        shape = LologShape.sm,
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LologColors.Accent, contentColor = LologColors.Paper,
+                            disabledContainerColor = LologColors.Canvas, disabledContentColor = LologColors.Muted,
+                        ),
+                        modifier = Modifier.height(56.dp),
+                    ) { Text(codeButton, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                }
+                if (state.codeEmail != null) {
+                    LabeledField(
+                        "인증번호", code, { v -> code = v.filter { it.isDigit() }.take(EMAIL_CODE_LENGTH); vm.clearCodeError() },
+                        icon = Icons.Outlined.Shield, placeholder = "${EMAIL_CODE_LENGTH}자리 숫자", type = KeyboardType.NumberPassword,
+                        error = state.codeError, enabled = !state.loading,
+                        counter = "${code.length} / $EMAIL_CODE_LENGTH",
+                    )
+                    LabeledField(
+                        "새 비밀번호", password, { password = it.take(PASSWORD_MAX); vm.clearPasswordError() },
+                        icon = Icons.Outlined.Key, placeholder = "새 비밀번호", type = KeyboardType.Password, secret = true,
+                        error = state.passwordError, enabled = !state.loading,
+                        counter = if (password.isNotEmpty()) "${password.length} / $PASSWORD_MAX" else null,
+                    )
+                    RuleLine(if (password.isEmpty() || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, password.isNotEmpty())
+                    RuleLine("영문과 숫자 모두 포함", mixOk, password.isNotEmpty())
+                    Spacer(Modifier.height(2.dp))
+                    LabeledField(
+                        "새 비밀번호 확인", confirm, { confirm = it.take(PASSWORD_MAX) },
+                        icon = Icons.Outlined.Key, placeholder = "한 번 더 입력해 주세요", type = KeyboardType.Password, secret = true,
+                        error = if (confirm.isNotEmpty() && !confirmOk) "비밀번호가 서로 달라요" else null,
+                        enabled = !state.loading,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton("비밀번호 바꾸기", { vm.resetPassword(email.trim(), password, code) }, enabled = allOk, loading = state.loading)
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
 /** 비밀번호 규칙 한 줄: 맞으면 파란 체크, 틀리면 빨간 ✕, 아직 입력 전이면 회색 */
 @Composable
-private fun RuleLine(text: String, ok: Boolean, touched: Boolean) {
+internal fun RuleLine(text: String, ok: Boolean, touched: Boolean) {
     val color = when { !touched -> LologColors.Muted; ok -> LologColors.Accent; else -> LologColors.Rec }
     val icon = when { !touched -> Icons.Outlined.RadioButtonUnchecked; ok -> Icons.Outlined.Check; else -> Icons.Outlined.Close }
     Row(verticalAlignment = Alignment.CenterVertically) {
