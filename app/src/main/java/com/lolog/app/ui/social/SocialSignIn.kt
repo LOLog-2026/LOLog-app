@@ -23,8 +23,11 @@ import com.lolog.app.ui.components.errorText
 import com.navercorp.nid.NidOAuth
 import com.navercorp.nid.core.data.datastore.NidOAuthInitializingCallback
 import com.navercorp.nid.core.data.errorcode.NidOAuthErrorCode
+import com.navercorp.nid.oauth.domain.`enum`.NidOAuthLoginState
 import com.navercorp.nid.oauth.util.NidOAuthCallback
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -77,22 +80,54 @@ class SocialSignIn(private val activity: Activity) {
 
     private suspend fun naver(): String? {
         initNaver()
-        return suspendCancellableCoroutine { cont ->
+        awaitNaverReady()
+        // requestLogin이 콜백 없이 끝나도 무한 로딩이 되지 않게 전체 3분 제한 (#34)
+        val result = withTimeoutOrNull(NAVER_LOGIN_TIMEOUT_MS) { requestNaverLogin() }
+        return when (result) {
+            null -> throw sdkError("naver", "timeout", null)
+            is NaverResult.Token -> result.token
+            NaverResult.Cancelled -> null
+        }
+    }
+
+    /** withTimeoutOrNull의 null(시간 초과)과 사용자가 창을 닫은 경우를 나누려고 감싸요 */
+    private sealed interface NaverResult {
+        data class Token(val token: String) : NaverResult
+        data object Cancelled : NaverResult
+    }
+
+    private suspend fun requestNaverLogin(): NaverResult =
+        suspendCancellableCoroutine { cont ->
             NidOAuth.requestLogin(activity, object : NidOAuthCallback {
                 override fun onSuccess() {
                     val token = NidOAuth.getAccessToken()
                     if (token.isNullOrBlank()) cont.resumeWithException(sdkError("naver", "no_token", null))
-                    else cont.resume(token)
+                    else cont.resume(NaverResult.Token(token))
                 }
 
                 override fun onFailure(errorCode: String, errorDescription: String) {
                     // 창을 닫거나 동의하지 않으면 사용자가 그만둔 것이라 조용히 돌아가요
                     val last = NidOAuth.getLastErrorCode()
-                    if (last == NidOAuthErrorCode.CLIENT_USER_CANCEL || last == NidOAuthErrorCode.SERVER_ERROR_ACCESS_DENIED) cont.resume(null)
+                    if (last == NidOAuthErrorCode.CLIENT_USER_CANCEL || last == NidOAuthErrorCode.SERVER_ERROR_ACCESS_DENIED) cont.resume(NaverResult.Cancelled)
                     else cont.resumeWithException(sdkError("naver", "$errorCode $errorDescription", null))
                 }
             })
         }
+
+    /**
+     * SDK 5.11.2는 initialize의 onSuccess 직후 잠깐(약 0.1초) 아직 준비 전 상태라,
+     * 그때 requestLogin을 부르면 콜백 없이 끝나요(#34). 준비될 때까지 100ms씩 최대 3초 기다려요.
+     * SDK의 준비 판단(isOAuthReady)과 같게 NEED_INIT·OAUTH_DATA_INITIALIZING을 준비 전으로 봐요.
+     * 이미 초기화돼 있던 경우에도 같은 확인을 거쳐요.
+     */
+    private suspend fun awaitNaverReady() {
+        val ready = withTimeoutOrNull(NAVER_READY_TIMEOUT_MS) {
+            while (NidOAuth.getState().let { it == NidOAuthLoginState.NEED_INIT || it == NidOAuthLoginState.OAUTH_DATA_INITIALIZING }) {
+                delay(100)
+            }
+            true
+        }
+        if (ready == null) throw sdkError("naver", "not_ready", null)
     }
 
     /** 네이버 SDK 초기화(처음 한 번). 초기화는 비동기라 끝날 때까지 기다려요 */
@@ -120,6 +155,10 @@ class SocialSignIn(private val activity: Activity) {
         /** 앱 내부용 오류 코드: 회사 SDK에서 토큰을 받지 못함 */
         const val SOCIAL_SDK_ERROR = "SOCIAL_SDK_ERROR"
         private const val NAVER_APP_NAME = "LOLog"
+        /** 네이버 SDK 준비 기다리는 최대 시간 */
+        private const val NAVER_READY_TIMEOUT_MS = 3_000L
+        /** 네이버 로그인 창 전체(로그인·동의 포함)를 기다리는 최대 시간 */
+        private const val NAVER_LOGIN_TIMEOUT_MS = 180_000L
     }
 }
 
