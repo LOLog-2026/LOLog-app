@@ -33,6 +33,16 @@ object ErrorCodes {
     const val INVALID_CODE = "INVALID_CODE"             // 400 가입 인증번호가 틀림
     const val CODE_EXPIRED = "CODE_EXPIRED"             // 400 인증번호가 없거나 10분 지남·5번 틀림
     const val TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS"   // 429 같은 이메일로 60초 안에 인증번호를 또 요청
+    // 친구 (LOLog-docs spec/friends.md 오류 코드)
+    const val CANNOT_FRIEND_SELF = "CANNOT_FRIEND_SELF"             // 400 내 코드를 넣음, 나를 차단하려 함
+    const val FRIEND_CODE_NOT_FOUND = "FRIEND_CODE_NOT_FOUND"       // 404 없는 친구 코드(상대가 나를 차단했어도 이 코드)
+    const val FRIEND_REQUEST_NOT_FOUND = "FRIEND_REQUEST_NOT_FOUND" // 404 없는 요청, 내 요청이 아님
+    const val USER_NOT_FOUND = "USER_NOT_FOUND"                     // 404 차단: 친구도 아니고 요청도 오간 적 없음
+    const val PROFILE_REQUIRED = "PROFILE_REQUIRED"                 // 409 닉네임 없이 요청 보내기·수락
+    const val ALREADY_FRIENDS = "ALREADY_FRIENDS"                   // 409 이미 친구
+    const val FRIEND_REQUEST_EXISTS = "FRIEND_REQUEST_EXISTS"       // 409 이미 보낸 요청이 있음
+    const val FRIEND_LIMIT = "FRIEND_LIMIT"                         // 409 나나 상대의 친구가 이미 100명
+    const val USER_BLOCKED = "USER_BLOCKED"                         // 409 내가 차단한 사람에게 요청
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -215,6 +225,46 @@ data class ComicDetail(
     /** 세로 4칸 한 장의 가로:세로 비율. 서버 크기가 없으면 명세 크기 800×3152 */
     val ratio: Float get() = (width ?: COMIC_WIDTH).toFloat() / (height ?: COMIC_HEIGHT).toFloat()
 }
+
+// ── 친구 (LOLog-docs spec/friends.md) ─────────────────
+
+/** 닉네임 1~10자(앞뒤 공백 뺀 길이), 친구 코드 대문자·숫자 8자리, 친구는 100명까지 */
+object FriendRules {
+    const val NICKNAME_MAX = 10
+    const val CODE_LENGTH = 8
+    const val FRIEND_MAX = 100
+}
+
+/** GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null */
+data class Profile(val nickname: String? = null, val friendCode: String? = null)
+
+/** 친구 한 명. thumbnailUrl은 친구의 프로필 캐릭터 그림(없으면 기본 사람 아이콘) */
+data class Friend(
+    val userId: Long,
+    val nickname: String,
+    val friendCode: String,
+    val friendsSince: String,
+    val thumbnailUrl: String? = null,
+)
+
+enum class FriendRequestDirection(val query: String) { RECEIVED("received"), SENT("sent") }
+
+/** POST에서 상대가 이미 나에게 요청해 둔 경우는 바로 친구가 돼서 ACCEPTED */
+enum class FriendRequestStatus { PENDING, ACCEPTED, UNKNOWN }
+
+/** 요청의 상대. 닉네임을 정한 사람만 요청을 주고받아서 nickname은 늘 있어요 */
+data class FriendUser(val userId: Long, val nickname: String, val friendCode: String)
+
+data class FriendRequest(
+    val id: Long,
+    val direction: FriendRequestDirection,
+    val user: FriendUser,
+    val status: FriendRequestStatus,
+    val createdAt: String,
+)
+
+/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null */
+data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: String, val blockedAt: String)
 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 

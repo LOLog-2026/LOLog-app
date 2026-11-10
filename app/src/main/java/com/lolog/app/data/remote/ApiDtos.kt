@@ -1,6 +1,7 @@
 package com.lolog.app.data.remote
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /*
  * 서버 JSON 모양(DTO) — LOLog-docs spec/api-dto.md(2026-11-06) 기준이에요.
@@ -192,6 +193,70 @@ data class ComicDto(
 
 @Serializable
 data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor: String? = null)
+
+// ── 친구·프로필 (LOLog-docs spec/friends.md 2장) ──
+
+/** ProfileResponse — GET·PATCH /api/me/profile. character는 프로필 캐릭터(이번엔 안 써요) */
+@Serializable
+data class ProfileResponse(
+    val nickname: String? = null,
+    val friendCode: String? = null, // 닉네임을 정하기 전에는 null
+    val character: JsonObject? = null,
+)
+
+/** ProfileUpdateRequest — PATCH /api/me/profile. 1~10자(앞뒤 공백 뺀 길이) */
+@Serializable
+data class ProfileUpdateRequest(val nickname: String)
+
+/** FriendRequestCreate — POST /api/friend-requests */
+@Serializable
+data class FriendRequestCreate(val friendCode: String)
+
+/** 요청의 상대 */
+@Serializable
+data class FriendUser(val userId: Long, val nickname: String = "", val friendCode: String = "")
+
+/** FriendRequestResponse. direction RECEIVED·SENT, status PENDING·ACCEPTED */
+@Serializable
+data class FriendRequestResponse(
+    val id: Long,
+    val direction: String = "",
+    val user: FriendUser,
+    val status: String = "",
+    val createdAt: String = "",
+)
+
+/** GET /api/friend-requests?direction= */
+@Serializable
+data class FriendRequestListResponse(val requests: List<FriendRequestResponse> = emptyList())
+
+/** FriendItem.character: 친구에게 쓸 수 있는 그림(256, 10분 서명 주소) */
+@Serializable
+data class FriendCharacter(val thumbnailUrl: String? = null)
+
+/** FriendItem — GET /api/friends 한 항목, POST /api/friend-requests/{id}/accept 응답 */
+@Serializable
+data class FriendItem(
+    val userId: Long,
+    val nickname: String = "",
+    val friendCode: String = "",
+    val friendsSince: String = "",
+    val character: FriendCharacter? = null,
+)
+
+@Serializable
+data class FriendListResponse(val friends: List<FriendItem> = emptyList())
+
+/** POST /api/blocks 본문 { userId } */
+@Serializable
+data class BlockCreate(val userId: Long)
+
+/** BlockItem. nickname은 null 가능 */
+@Serializable
+data class BlockItem(val userId: Long, val nickname: String? = null, val friendCode: String = "", val blockedAt: String = "")
+
+@Serializable
+data class BlockListResponse(val blocks: List<BlockItem> = emptyList())
 
 // ── 기기 ──
 

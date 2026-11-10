@@ -42,9 +42,22 @@ object ApiMapper {
         SocialProvider.NAVER to "naver",
     )
 
+    private val FRIEND_DIRECTION = mapOf(
+        "RECEIVED" to FriendRequestDirection.RECEIVED,
+        "SENT" to FriendRequestDirection.SENT,
+    )
+
+    private val FRIEND_STATUS = mapOf(
+        "PENDING" to FriendRequestStatus.PENDING,
+        "ACCEPTED" to FriendRequestStatus.ACCEPTED,
+    )
+
     fun recordingStatus(raw: String?) = RECORDING_STATUS[raw?.trim()?.uppercase()] ?: RecordingStatus.UNKNOWN
     fun comicStatus(raw: String?) = COMIC_STATUS[raw?.trim()?.uppercase()] ?: ComicStatus.UNKNOWN
     fun cardKind(raw: String?) = CARD_KIND[raw?.trim()?.uppercase()] ?: CARD_KIND[raw?.trim()] ?: CardKind.OTHER
+    /** 모르는 방향은 받은 요청으로 봐요 */
+    fun friendDirection(raw: String?) = FRIEND_DIRECTION[raw?.trim()?.uppercase()] ?: FriendRequestDirection.RECEIVED
+    fun friendStatus(raw: String?) = FRIEND_STATUS[raw?.trim()?.uppercase()] ?: FriendRequestStatus.UNKNOWN
     fun providerPath(p: SocialProvider) = PROVIDER.getValue(p)
     fun provider(raw: String) = PROVIDER.entries.firstOrNull { it.value.equals(raw.trim(), true) }?.key
 
@@ -127,4 +140,20 @@ object ApiMapper {
             id.takeIf { it != 0L } ?: requestedId, cardId ?: 0L, comicStatus(status), imageUrl, createdAt,
             width = width, height = height, cardDeleted = cardId == null, cardSummary = cardSummary,
         )
+
+    // ── 친구·프로필 ──
+
+    fun ProfileResponse.toModel() = Profile(nickname?.ifBlank { null }, friendCode?.ifBlank { null })
+
+    // DTO와 앱 모델 이름이 같아서(FriendUser) 앱 모델은 전체 이름으로 써요
+    fun FriendUser.toModel() = com.lolog.app.data.model.FriendUser(userId, nickname, friendCode)
+
+    fun FriendRequestResponse.toModel() = FriendRequest(
+        id = id, direction = friendDirection(direction), user = user.toModel(),
+        status = friendStatus(status), createdAt = createdAt,
+    )
+
+    fun FriendItem.toModel() = Friend(userId, nickname, friendCode, friendsSince, character?.thumbnailUrl?.ifBlank { null })
+
+    fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt)
 }

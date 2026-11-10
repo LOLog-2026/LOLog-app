@@ -17,6 +17,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lolog.app.AppContainer
 import com.lolog.app.data.model.PushPayload
+import com.lolog.app.data.model.FriendRequestDirection
 import com.lolog.app.data.model.PushType
 import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
@@ -24,6 +25,11 @@ import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
+import com.lolog.app.ui.screens.friends.AddFriendScreen
+import com.lolog.app.ui.screens.friends.BlockedScreen
+import com.lolog.app.ui.screens.friends.NicknameScreen
+import com.lolog.app.ui.screens.friends.FriendRequestsScreen
+import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
@@ -50,6 +56,10 @@ private const val RESET_EMAIL_INPUT = "resetEmailInput"
 private const val PASSWORD_RESET_DONE = "passwordResetDone"
 /** 비밀번호 바꾸기에서 설정으로 돌아갈 때 띠에 보여 줄 글자 */
 private const val SETTINGS_MESSAGE = "settingsMessage"
+/** 친구 추가·요청 화면에서 친구 탭으로 돌아갈 때 띠에 보여 줄 글자 */
+private const val FRIENDS_MESSAGE = "friendsMessage"
+/** 친구 추가에서 바로 친구가 됐으면 true: 친구 목록 맨 위 줄을 잠깐 연노랑으로 */
+private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
 
 object Routes {
     const val SPLASH = "splash"
@@ -60,6 +70,11 @@ object Routes {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val COMICS = "comics"
+    const val FRIENDS = "friends"
+    const val ADD_FRIEND = "friends/add"
+    const val FRIEND_REQUESTS = "friends/requests"
+    const val NICKNAME = "nickname"
+    const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val RECORDING = "recording"
@@ -76,11 +91,12 @@ object Routes {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-// 아래 탭 3개: 보관함 · 홈(가운데) · 내 만화. 설정은 홈 위쪽 톱니 버튼으로 들어가요
+// 아래 탭 4개: 보관함 · 홈 · 내 만화 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
 private val tabs = listOf(
     Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
     Tab(Routes.COMICS, "내 만화", Icons.Outlined.GridView),
+    Tab(Routes.FRIENDS, "친구", Icons.Outlined.People),
 )
 
 /** 탭 사이 이동: 스택을 쌓지 않고 상태를 남겨 둬요 */
@@ -113,6 +129,16 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
     val showTabs = current in tabs.map { it.route }
+
+    // 친구 탭의 빨간 숫자 = 받은 요청 수. 홈이나 친구 화면을 열 때마다 새로 받아요(푸시는 이번에 없음)
+    var receivedCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(current, loggedIn) {
+        if (!loggedIn) { receivedCount = 0; return@LaunchedEffect }
+        if (current == Routes.HOME || current == Routes.FRIENDS) {
+            runCatching { container.repository.friendRequests(FriendRequestDirection.RECEIVED).size }
+                .onSuccess { receivedCount = it }
+        }
+    }
 
     // 알림을 눌렀을 때 갈 화면 (협의 2-2 기본안)
     LaunchedEffect(pendingPush, loggedIn, current) {
@@ -147,7 +173,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     Scaffold(
         containerColor = LologColors.Canvas,
         topBar = { OfflineBar(visible = !online && current != Routes.SPLASH) },
-        bottomBar = { if (showTabs) BottomTabs(current) { nav.goTab(it) } },
+        bottomBar = { if (showTabs) BottomTabs(current, receivedCount) { nav.goTab(it) } },
     ) { padding ->
         NavHost(
             nav, startDestination = Routes.SPLASH,
@@ -278,15 +304,63 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onDeleted = { nav.popBackStack() },
                 )
             }
+            composable(Routes.FRIENDS) { entry ->
+                val message by entry.savedStateHandle.getStateFlow<String?>(FRIENDS_MESSAGE, null).collectAsState()
+                val highlight by entry.savedStateHandle.getStateFlow(FRIENDS_HIGHLIGHT, false).collectAsState()
+                FriendsScreen(
+                    onBack = { nav.goTab(Routes.HOME) },
+                    onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
+                    onRequests = { nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true } },
+                    onChangeNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    message = message,
+                    highlightTop = highlight,
+                    onMessageShown = {
+                        entry.savedStateHandle[FRIENDS_MESSAGE] = null
+                        entry.savedStateHandle[FRIENDS_HIGHLIGHT] = false
+                    },
+                )
+            }
+            composable(Routes.ADD_FRIEND) {
+                AddFriendScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { message, becameFriends ->
+                        nav.previousBackStackEntry?.savedStateHandle?.let {
+                            it[FRIENDS_MESSAGE] = message
+                            it[FRIENDS_HIGHLIGHT] = becameFriends
+                        }
+                        nav.popBackStack()
+                    },
+                )
+            }
+            composable(Routes.FRIEND_REQUESTS) {
+                FriendRequestsScreen(onBack = { nav.popBackStack() })
+            }
             composable(Routes.SETTINGS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(SETTINGS_MESSAGE, null).collectAsState()
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
                     onLoggedOut = { nav.resetTo(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
+                    onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
+            }
+            composable(Routes.NICKNAME) {
+                NicknameScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { message ->
+                        // 설정과 친구 탭 두 곳에서 들어와요. 돌아갈 화면의 띠 열쇠에 넣어요
+                        val prev = nav.previousBackStackEntry
+                        val key = if (prev?.destination?.route == Routes.FRIENDS) FRIENDS_MESSAGE else SETTINGS_MESSAGE
+                        prev?.savedStateHandle?.set(key, message)
+                        nav.popBackStack()
+                    },
+                )
+            }
+            composable(Routes.BLOCKED) {
+                BlockedScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.PASSWORD_CHANGE) {
                 PasswordChangeScreen(
@@ -302,13 +376,18 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
 }
 
 @Composable
-private fun BottomTabs(current: String?, onTab: (String) -> Unit) {
+private fun BottomTabs(current: String?, receivedCount: Int, onTab: (String) -> Unit) {
     NavigationBar(containerColor = LologColors.Paper, tonalElevation = 0.dp) {
         tabs.forEach { tab ->
             NavigationBarItem(
                 selected = current == tab.route,
                 onClick = { onTab(tab.route) },
-                icon = { Icon(tab.icon, contentDescription = null) },
+                icon = {
+                    val count = if (tab.route == Routes.FRIENDS) receivedCount else 0
+                    BadgedBox(badge = {
+                        if (count > 0) Badge(containerColor = LologColors.Rec, contentColor = LologColors.Paper) { Text(if (count > 99) "99+" else "$count") }
+                    }) { Icon(tab.icon, contentDescription = null) }
+                },
                 label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = LologColors.Accent,

@@ -86,6 +86,17 @@ internal fun mockCheckPasswordChange(currentPassword: String, newPassword: Strin
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
  *  - 대사 중 40자 넘는 게 있으면 만화 FAILED (21번). 카드 고치기에서 줄이면 성공
  *  - 실패한 만화는 3번에 안 세요(11/5 확정). 카드를 지워도 만화는 남고 cardDeleted = true
+ *
+ * 친구 규칙(MockFriends.kt, LOLog-docs spec/friends.md)
+ *  - 처음 내 프로필: 닉네임 없음, 코드 null. 닉네임을 정하면 코드 A7K3QX2M이 생겨요
+ *  - 친구 5명: 민수(K2PH7RTA), 서연, 민수(QW8ZN3EM), 도윤, 하은
+ *  - 받은 요청 2(민수, 하은 Z9CX4WVB), 보낸 요청 1(지아 M4TR8KXH), 차단 1(태오 H6NE2PQD)
+ *  - 코드 넣기
+ *    J8ZN4HQW → 준호와 바로 친구(ACCEPTED) / 받은 요청을 보낸 사람의 코드 → 바로 친구(ACCEPTED)
+ *    내 코드 → 400 CANNOT_FRIEND_SELF / 친구 코드 → 409 ALREADY_FRIENDS / 보낸 요청 코드 → 409 FRIEND_REQUEST_EXISTS
+ *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
+ *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
+ *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
  */
 class MockLologRepository(private val tokens: TokenStore) : LologRepository {
 
@@ -387,6 +398,22 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         net()
         if (!comicStore.removeAll { it.id == id }) throw LologException(ErrorCodes.COMIC_NOT_FOUND, "만화를 찾지 못했어요")
     }
+
+    // ── 친구 ──
+    private val friendBook = MockFriends()
+
+    override suspend fun profile(): Profile = lock.withLock { net(150); friendBook.profile() }
+    override suspend fun updateNickname(nickname: String): Profile = lock.withLock { net(); friendBook.updateNickname(nickname) }
+    override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
+    override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
+        lock.withLock { net(150); friendBook.requests(direction) }
+    override suspend fun acceptFriendRequest(id: Long): Friend = lock.withLock { net(); friendBook.accept(id) }
+    override suspend fun deleteFriendRequest(id: Long) = lock.withLock { net(); friendBook.deleteRequest(id) }
+    override suspend fun friends(): List<Friend> = lock.withLock { net(); friendBook.friends() }
+    override suspend fun removeFriend(userId: Long) = lock.withLock { net(); friendBook.removeFriend(userId) }
+    override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
+    override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
+    override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }
