@@ -436,6 +436,7 @@ private fun Viewer(
                     Modifier.fillMaxWidth(),
                     ratio = comic.ratio,
                     onLoadError = onImageError,
+                    cacheKey = comicCacheKey(comic.id),
                 )
                 // 오른쪽 위 확대 아이콘
                 Box(
@@ -506,6 +507,7 @@ private fun ZoomViewer(comic: ComicDetail, card: CardDetail?, onImageError: () -
                         },
                         ratio = comic.ratio,
                         onLoadError = onImageError,
+                        cacheKey = comicCacheKey(comic.id),
                     )
                 }
             }

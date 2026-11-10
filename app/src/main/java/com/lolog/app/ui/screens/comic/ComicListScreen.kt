@@ -193,7 +193,11 @@ private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit,
     Column(Modifier.fillMaxWidth().softCard(shape).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
             when (stage) {
-                ComicStage.DONE -> ComicImage(c.thumbnailUrl ?: c.imageUrl, emptyList(), Modifier.fillMaxSize(), small = true, onLoadError = onImageError)
+                ComicStage.DONE -> ComicImage(
+                    c.thumbnailUrl ?: c.imageUrl, emptyList(), Modifier.fillMaxSize(), small = true, onLoadError = onImageError,
+                    // thumbnailUrl은 원본과 다른 그림이라 캐시 이름을 따로 둬요
+                    cacheKey = if (c.thumbnailUrl != null) comicThumbCacheKey(c.id) else comicCacheKey(c.id),
+                )
                 ComicStage.FAILED -> if (!c.cardDeleted) Box(
                     Modifier.align(Alignment.Center).clip(LologShape.pill).border(1.dp, LologColors.Rec, LologShape.pill)
                         .clickable(onClick = onRetry).padding(horizontal = 14.dp, vertical = 7.dp),
