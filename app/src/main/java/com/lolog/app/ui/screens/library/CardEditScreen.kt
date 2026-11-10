@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,7 @@ import kotlinx.coroutines.launch
  */
 
 /** 고친 줄 배경 (연한 형광펜) */
-private val ChangedBg = Color(0xFFFFF6D1)
+private val ChangedBg = Color(0xFFFFF6D6) // 11/10 확정: 고친 줄 연노랑
 
 class CardEditViewModel(private val repo: LologRepository, private val id: Long) : ViewModel() {
     data class State(
@@ -163,17 +164,22 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
     val leave = { if (vm.changed) { askLeave = true } else onBack() }
     BackHandler(enabled = vm.changed) { askLeave = true }
 
+    // 고르는 중인 화자: 이름을 바꾸는 화자, 또는 화자를 고르는 대사의 화자
+    val activeSpeaker = renaming?.key ?: pickingFor?.let { vm.lines.getOrNull(it)?.speaker }
+
     Scaffold(
-        modifier = Modifier.noteLines(),
-        containerColor = Color.Transparent,
+        containerColor = LologColors.Paper,
         snackbarHost = { LologSnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("카드 고치기", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = { IconButton(onClick = leave) { Icon(Icons.Default.Close, "닫기") } },
-                actions = { SaveChip(enabled = vm.canSave, loading = state.saving, onClick = vm::save) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-            )
+            // 위 칸: ✕ · "카드 고치기" · 코랄 작은 알약 "저장". 아래 1dp 선
+            Column(Modifier.background(LologColors.Paper).statusBarsPadding()) {
+                Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = leave) { Icon(Icons.Default.Close, "닫기") }
+                    Text("카드 고치기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    SaveChip(enabled = vm.canSave, loading = state.saving, onClick = vm::save)
+                }
+                HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+            }
         },
     ) { pad ->
         val original = state.original
@@ -183,7 +189,7 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
             return@Scaffold
         }
         Column(
-            Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+            Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (original.locked) {
@@ -195,19 +201,18 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
             }
 
             // 화자: 이름표를 누르면 이름 바꾸기
-            SectionTitle("화자")
+            EditLabel("화자 (눌러서 이름 바꾸기)")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 vm.speakers.forEachIndexed { i, sp ->
-                    SpeakerChip(vm.speakers.displayName(sp.key), i, changed = vm.speakerChanged(sp)) { renaming = sp }
+                    SpeakerChip(vm.speakers.displayName(sp.key), i, active = sp.key == activeSpeaker) { renaming = sp }
                 }
             }
 
             // 장소 (선택, 20자)
-            SectionTitle("장소")
             PlaceField(vm.place) { vm.place = it.take(TextLimits.PLACE) }
 
             // 대사: 글자를 누르면 바로 고치기, 이름표를 누르면 화자 고르기
-            SectionTitle("대사")
+            EditLabel("대사")
             vm.lines.forEachIndexed { i, line ->
                 LineRow(
                     line = line,
@@ -239,7 +244,6 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
     pickingFor?.let { i ->
         vm.lines.getOrNull(i)?.let { line ->
             SpeakerSheet(
-                quote = line.text,
                 speakers = vm.speakers,
                 selected = line.speaker,
                 onPick = { vm.setLineSpeaker(i, it) },
@@ -276,27 +280,37 @@ private fun SaveChip(enabled: Boolean, loading: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SpeakerChip(name: String, index: Int, changed: Boolean, onClick: () -> Unit) {
+private fun EditLabel(text: String) {
+    Text(text, fontSize = 11.5.sp, color = LologColors.Muted)
+}
+
+/** 화자 칩 바탕: 화자 색을 옅게 */
+private fun speakerSoft(index: Int): Color = speakerColor(index).copy(alpha = 0.35f).compositeOver(LologColors.Paper)
+
+/** 화자 칩(알약): 누르면 이름 바꾸기. 고르는 중인 칩은 코랄 테두리 + 연필 */
+@Composable
+private fun SpeakerChip(name: String, index: Int, active: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.clip(LologShape.sm)
-            .background(LologColors.Paper)
-            .border(if (changed) 1.5.dp else 1.dp, if (changed) LologColors.Accent else LologColors.Line, LologShape.sm)
+        Modifier.clip(LologShape.pill)
+            .background(speakerSoft(index))
+            .then(if (active) Modifier.border(1.5.dp, LologColors.Accent, LologShape.pill) else Modifier)
             .clickable(onClick = onClick)
-            .height(36.dp).padding(horizontal = 12.dp),
+            .height(34.dp).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(speakerColor(index)))
-        Spacer(Modifier.width(6.dp))
-        Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Spacer(Modifier.width(4.dp))
-        Icon(Icons.Outlined.Edit, "이름 바꾸기", tint = LologColors.Muted, modifier = Modifier.size(14.dp))
+        Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        if (active) {
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Outlined.Edit, "이름 바꾸기", tint = LologColors.Ink, modifier = Modifier.size(14.dp))
+        }
     }
 }
 
+/** 장소 칸: 핀 아이콘 + 글 + 오른쪽 "n/20" */
 @Composable
 private fun PlaceField(value: String, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().softCard(LologShape.sm).height(48.dp).padding(horizontal = 14.dp),
+        Modifier.fillMaxWidth().clip(LologShape.sm).border(1.dp, LologColors.Line, LologShape.sm).height(48.dp).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Outlined.Place, null, tint = LologColors.Muted, modifier = Modifier.size(18.dp))
@@ -310,10 +324,14 @@ private fun PlaceField(value: String, onChange: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        Text("${value.length}/${TextLimits.PLACE}", fontSize = 11.sp, color = LologColors.Muted)
     }
 }
 
-/** 대사 한 줄: 이름표 + 글자. 고치는 중엔 파란 테두리와 남은 글자 수, 비면 빨간 테두리와 안내 */
+/**
+ * 대사 한 줄: 왼쪽 화자 칩, 오른쪽 글. 고친 줄은 연노랑 바탕,
+ * 지금 고치는 줄은 글 칸에 코랄 1.5dp 테두리 + 오른쪽 아래 "n/200". 비거나 너무 길면 빨간 테두리와 안내
+ */
 @Composable
 private fun LineRow(
     line: Line,
@@ -333,23 +351,26 @@ private fun LineRow(
         Modifier.fillMaxWidth()
             .clip(LologShape.sm)
             .background(if (changed && !focused && !error) ChangedBg else LologColors.Paper)
-            .border(1.5.dp, border, LologShape.sm)
-            .then(
-                if (changed && !focused && !error) Modifier.drawBehind {
-                    drawLine(LologColors.Laugh, Offset(0f, 0f), Offset(0f, size.height), 6.dp.toPx())
-                } else Modifier,
-            )
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = if (focused || error) 6.dp else 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             SpeakerTag(speakers, line.speaker, onPickSpeaker)
             Spacer(Modifier.width(10.dp))
-            BasicTextField(
-                line.text, onText,
-                textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = LologColors.Ink),
-                cursorBrush = SolidColor(LologColors.Accent),
-                modifier = Modifier.weight(1f).padding(top = 3.dp).onFocusChanged { focused = it.isFocused },
-            )
+            Column(
+                Modifier.weight(1f).clip(LologShape.sm).border(1.5.dp, border, LologShape.sm)
+                    .padding(horizontal = if (focused || error) 8.dp else 0.dp, vertical = if (focused || error) 8.dp else 3.dp),
+            ) {
+                BasicTextField(
+                    line.text, onText,
+                    textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = LologColors.Ink),
+                    cursorBrush = SolidColor(LologColors.Accent),
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+                )
+                if (focused && !error) Text(
+                    "${line.text.length}/${TextLimits.LINE}", fontSize = 11.sp, color = LologColors.Muted,
+                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
+                )
+            }
         }
         when {
             error && line.text.isBlank() -> Text(
@@ -360,53 +381,52 @@ private fun LineRow(
                 "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요", fontSize = 12.sp, color = LologColors.Rec,
                 modifier = Modifier.padding(start = 64.dp, top = 6.dp),
             )
-            focused -> Text(
-                "${line.text.length} / ${TextLimits.LINE}", fontSize = 11.sp, color = LologColors.Muted,
-                modifier = Modifier.align(Alignment.End).padding(top = 6.dp),
-            )
         }
     }
 }
 
-/** 대사 앞 이름표: 누르면 화자 고르기 창 */
+/** 대사 앞 화자 칩: 누르면 화자 고르기 시트 */
 @Composable
 private fun SpeakerTag(speakers: List<Speaker>, key: String, onClick: () -> Unit) {
-    val idx = speakers.indexOfFirst { it.key == key }
-    Row(
-        Modifier.clip(LologShape.pill).background(LologColors.Canvas).clickable(onClick = onClick)
-            .height(26.dp).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val idx = speakers.indexOfFirst { it.key == key }.coerceAtLeast(0)
+    Box(
+        Modifier.clip(LologShape.pill).background(speakerSoft(idx)).clickable(onClick = onClick)
+            .height(28.dp).widthIn(min = 46.dp).padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(speakerColor(idx)))
-        Spacer(Modifier.width(4.dp))
         Text(speakers.displayName(key), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
-/** ③ 누가 한 말인가요? */
-@OptIn(ExperimentalMaterial3Api::class)
+/** ③ 누가 한 말인가요? 화자 버튼들(고른 것은 코랄 테두리 + ✓) */
 @Composable
-private fun SpeakerSheet(quote: String, speakers: List<Speaker>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LologColors.Paper) {
+private fun SpeakerSheet(speakers: List<Speaker>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text("누가 한 말인가요?", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text("\"$quote\"", fontSize = 13.sp, color = LologColors.Muted, maxLines = 2)
-            Spacer(Modifier.height(12.dp))
-            speakers.forEachIndexed { i, sp ->
-                if (i > 0) HorizontalDivider(color = LologColors.Line)
-                Row(
-                    Modifier.fillMaxWidth().clickable { onPick(sp.key) }.padding(vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(speakerColor(i)))
-                    Spacer(Modifier.width(10.dp))
-                    Text(speakers.displayName(sp.key), fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    if (sp.key == selected) Icon(Icons.Default.Check, "선택됨", tint = LologColors.Accent)
+            Text("누가 한 말인가요?", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(14.dp))
+            // 한 줄에 2개씩
+            speakers.withIndex().chunked(2).forEach { row ->
+                Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { (_, sp) ->
+                        val on = sp.key == selected
+                        Row(
+                            Modifier.weight(1f).height(50.dp).clip(LologShape.pill)
+                                .border(if (on) 1.5.dp else 1.dp, if (on) LologColors.Accent else LologColors.Line, LologShape.pill)
+                                .clickable { onPick(sp.key) },
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(speakers.displayName(sp.key), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            if (on) {
+                                Spacer(Modifier.width(6.dp))
+                                Icon(Icons.Default.Check, "선택됨", tint = LologColors.Accent, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            GhostButton("닫기", onDismiss)
         }
     }
 }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -154,14 +153,10 @@ fun KindFilterPill(text: String, kind: CardKind?, selected: Boolean, onClick: ()
 /** 아래 시트: 흰 바탕, 위쪽 모서리 22dp */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LologSheet(
-    onDismiss: () -> Unit,
-    sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    content: @Composable ColumnScope.() -> Unit,
-) {
+fun LologSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = LologShape.sheet,
         containerColor = LologColors.Paper,
         content = content,
