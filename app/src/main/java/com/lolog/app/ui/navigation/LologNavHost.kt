@@ -172,6 +172,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onRecord = { nav.navigate(Routes.RECORDING) },
                     onCard = { nav.navigate(Routes.card(it)) },
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
+                    onComics = { nav.goTab(Routes.COMICS) },
                     onSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     finishedRecordingId = finished,
                     onFinishedShown = { entry.savedStateHandle[FINISHED_RECORDING] = null },
