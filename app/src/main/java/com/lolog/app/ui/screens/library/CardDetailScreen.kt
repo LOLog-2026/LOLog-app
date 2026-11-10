@@ -215,6 +215,8 @@ private val Cream = Color(0xFFFFFCF5)
 /** 위 칸: ← · 제목(13.5sp) + "11월 4일 오후 7:20 녹음 · 홍대 카페"(10sp) · 오른쪽 아이콘들. 아래 1dp 선 */
 @Composable
 private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit) {
+    // 제목·아이콘은 진한 Ink (탭 Scaffold의 기본 글자색은 회색이라 정해 줘요)
+    CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
     Column(Modifier.fillMaxWidth().background(LologColors.Paper).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
@@ -230,6 +232,7 @@ private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composab
             actions()
         }
         HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+    }
     }
 }
 

@@ -159,7 +159,7 @@ private fun CardList(state: LibraryViewModel.State, vm: LibraryViewModel, seenBe
         groups.forEach { (day, cards) ->
             item(key = "day-$day") {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
-                    Text(day?.let { dayWithWeek(it) } ?: "날짜 없음", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(day?.let { dayWithWeek(it) } ?: "날짜 없음", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
                     Spacer(Modifier.width(6.dp))
                     Text("카드 ${cards.size}개", fontSize = 11.sp, color = LologColors.Muted)
                 }
@@ -196,7 +196,7 @@ private fun GridCard(card: CardSummary, isNew: Boolean, onClick: () -> Unit, mod
         ) {
             KindChip(card.kind, onCard = true)
             Spacer(Modifier.height(8.dp))
-            Text(card.summary, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(card.summary, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
             val meta = listOfNotNull(
                 card.lineCount?.let { "대사 $it" },
@@ -216,7 +216,7 @@ private fun MoreButton(onClick: () -> Unit) {
             .border(1.dp, LologColors.Line, LologShape.pill).clickable(onClick = onClick).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("더보기", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("더보기", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
         Icon(Icons.Filled.KeyboardArrowDown, null, tint = LologColors.Ink, modifier = Modifier.size(18.dp))
     }
 }

@@ -1,5 +1,6 @@
 package com.lolog.app.ui.screens.home
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -173,6 +174,8 @@ fun HomeScreen(
     // "새로!" 기준: 에피소드 탭을 마지막으로 연 뒤에 만든 카드
     val seenAt = remember(state) { EpisodeSeen.lastOpened(context) }
 
+    // 탭 Scaffold(Canvas 바탕)의 기본 글자색이 회색(Muted)이라 홈 글자는 진한 Ink로
+    CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
     Box(Modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxSize().noteLines().statusBarsPadding().verticalScroll(rememberScrollState())
@@ -233,6 +236,7 @@ fun HomeScreen(
         Spacer(Modifier.height(16.dp))
     }
     LologSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+    }
     }
 }
 

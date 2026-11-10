@@ -208,7 +208,7 @@ private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit,
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(c.cardSummary ?: "4컷만화", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(c.cardSummary ?: "4컷만화", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     when {
                         stage == ComicStage.WAITING || stage == ComicStage.MAKING -> "방금"

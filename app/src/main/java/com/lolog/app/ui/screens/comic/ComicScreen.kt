@@ -238,6 +238,8 @@ private fun recordedLine(card: CardDetail): String =
 /** 위 칸: ← · 제목(+ 작은 줄) · 오른쪽 아이콘. 아래 1dp 선 */
 @Composable
 private fun ComicTopBar(title: String, sub: String?, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit) {
+    // 제목·아이콘은 진한 Ink (탭 Scaffold의 기본 글자색은 회색이라 정해 줘요)
+    CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
     Column(Modifier.fillMaxWidth().background(LologColors.Paper).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
@@ -248,6 +250,7 @@ private fun ComicTopBar(title: String, sub: String?, onBack: () -> Unit, actions
             actions()
         }
         HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+    }
     }
 }
 
