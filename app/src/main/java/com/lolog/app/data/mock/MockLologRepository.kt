@@ -102,7 +102,11 @@ internal fun mockCheckPasswordChange(currentPassword: String, newPassword: Strin
  *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,
  *    썸네일은 명세 레포의 공개 그림 주소(raw.githubusercontent.com/…/<id>_thumb.webp)
  *  - 친구 중 서연·민수(K2PH7RTA)는 프로필 캐릭터 있음, 도윤·하은·민수(QW8ZN3EM)는 없음
- *  - 내 프로필: 캐릭터 없음(시안 15), 내 회원 ID는 "1"
+ *  - 내 프로필: 처음엔 캐릭터 없음(시안 15), 내 회원 ID는 "1"
+ *  - 프로필 캐릭터 만들기: 사진을 올리면 PROCESSING, 4초 뒤 READY(그림은 기본 화자 young-f-02를 빌려 씀) + 푸시 PROFILE_CHARACTER_READY.
+ *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
+ *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
+ *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
  *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
  *  - 카드 고치기(PATCH)에서 그림 붙이기
  *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
@@ -417,6 +421,30 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
 
     override suspend fun profile(): Profile = lock.withLock { net(150); friendBook.profile() }
     override suspend fun updateNickname(nickname: String): Profile = lock.withLock { net(); friendBook.updateNickname(nickname) }
+
+    override suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter = lock.withLock {
+        net(800)
+        friendBook.uploadCharacter(photo.size).also {
+            val failed = photo.size < 1024 * 1024
+            scope.launch {
+                delay(4_000)
+                val done = lock.withLock { friendBook.finishCharacter(failed, MockCharacters.thumb("young-f-02")) }
+                if (done) _push.emit(PushPayload(if (failed) PushType.PROFILE_CHARACTER_FAILED else PushType.PROFILE_CHARACTER_READY))
+            }
+        }
+    }
+
+    override suspend fun deleteProfileCharacter() = lock.withLock {
+        net()
+        friendBook.deleteCharacter()
+        // 서버처럼 내 카드 화자에서 내 캐릭터를 빼요
+        val me = MockFriends.MY_USER_ID.toString()
+        cardStore.replaceAll { card ->
+            card.copy(speakers = card.speakers.map { sp ->
+                if (sp.character?.type == CharacterType.PROFILE && sp.character.id == me) sp.copy(character = null) else sp
+            })
+        }
+    }
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
         lock.withLock { net(150); friendBook.requests(direction) }

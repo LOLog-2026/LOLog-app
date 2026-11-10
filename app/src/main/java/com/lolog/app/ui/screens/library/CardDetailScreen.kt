@@ -140,6 +140,8 @@ fun CardDetailScreen(
     onComic: (Long) -> Unit,
     onDeleted: () -> Unit,
     onNotFound: () -> Unit,
+    /** 화자 팝업의 "내 캐릭터 만들기" */
+    onMakeCharacter: () -> Unit = {},
     savedJustNow: Boolean = false,
     onSavedShown: () -> Unit = {},
 ) {
@@ -226,6 +228,7 @@ fun CardDetailScreen(
             data = charState,
             onRetry = { charVm.open() },
             onClose = { pick -> speakerSheet = null; vm.saveSpeaker(key, pick) },
+            onMakeMine = onMakeCharacter,
         )
     }
     if (askDelete) {
