@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -71,7 +72,7 @@ fun LologTopBar(
     )
 }
 
-/** 알약 모양 주 버튼 (높이 52) */
+/** 알약 모양 주 버튼 (11/10 확정: 높이 46, 기본 Accent 바탕 흰 글자, 꺼짐은 Canvas 바탕 회색 글자) */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -85,12 +86,12 @@ fun PrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled && !loading,
-        modifier = modifier.fillMaxWidth().height(52.dp),
+        modifier = modifier.fillMaxWidth().height(46.dp),
         shape = LologShape.pill,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (danger) LologColors.Rec else LologColors.Accent,
             contentColor = LologColors.Paper,
-            disabledContainerColor = if (loading) (if (danger) LologColors.Rec else LologColors.Accent).copy(alpha = 0.8f) else LologColors.Line,
+            disabledContainerColor = if (loading) (if (danger) LologColors.Rec else LologColors.Accent).copy(alpha = 0.8f) else LologColors.Canvas,
             disabledContentColor = LologColors.Muted,
         ),
     ) {
@@ -105,15 +106,19 @@ fun PrimaryButton(
     }
 }
 
+/** 보조 알약 버튼: 흰 바탕 + Line 테두리 1.5dp (높이 46) */
 @Composable
 fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.fillMaxWidth().height(52.dp),
+        modifier = modifier.fillMaxWidth().height(46.dp),
         shape = LologShape.pill,
-        border = androidx.compose.foundation.BorderStroke(1.dp, LologColors.Line),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = LologColors.Paper, contentColor = LologColors.Ink),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, LologColors.Line),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = LologColors.Paper, contentColor = LologColors.Ink,
+            disabledContainerColor = LologColors.Canvas, disabledContentColor = LologColors.Muted,
+        ),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
@@ -144,21 +149,34 @@ fun CardKind.soft(): Color = when (this) {
     CardKind.OTHER -> LologColors.Canvas
 }
 
-/** 카드 종류 칩: 작은 색 점 + 연한 배경, 살짝 기울임(볼펜 노트) */
+/** 종류 칩 글자 색: 웃김은 진한 노랑(Laugh를 Ink 쪽으로 어둡게), 황당 Absurd, 추억 MemoryText */
+fun CardKind.text(): Color = when (this) {
+    CardKind.FUNNY -> lerp(LologColors.Laugh, LologColors.Ink, 0.35f)
+    CardKind.ABSURD -> LologColors.Absurd
+    CardKind.MEMORY -> LologColors.MemoryText
+    CardKind.OTHER -> LologColors.Muted
+}
+
+/**
+ * 카드 종류 칩(11/10 확정): 알약 + 앞에 ● 점, 종류 연한 색 바탕 + 종류 글자 색.
+ * [onCard] = 종류 색 카드 위에 놓을 때는 흰 바탕(에피소드 2열 카드).
+ */
 @Composable
-fun KindChip(kind: CardKind, modifier: Modifier = Modifier) {
+fun KindChip(kind: CardKind, modifier: Modifier = Modifier, height: Dp = 22.dp, onCard: Boolean = false, suffix: String? = null) {
     Row(
         modifier
-            .rotate(-1f)
-            .clip(RoundedCornerShape(4.dp))
-            .background(kind.soft())
-            .height(24.dp)
-            .padding(horizontal = 10.dp),
+            .clip(LologShape.pill)
+            .background(if (onCard) LologColors.Paper else kind.soft())
+            .height(height)
+            .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(kind.dot()))
+        Box(Modifier.size(7.dp).clip(CircleShape).background(kind.text()))
         Spacer(Modifier.width(4.dp))
-        Text(kind.label, style = MaterialTheme.typography.labelMedium)
+        Text(
+            if (suffix == null) kind.label else "${kind.label} · $suffix",
+            fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = kind.text(),
+        )
     }
 }
 
@@ -198,18 +216,16 @@ fun StageBadge(stage: ComicStage, modifier: Modifier = Modifier) {
     }
 }
 
-private val avatarColors = listOf(LologColors.Laugh, LologColors.Memory, LologColors.Absurd, LologColors.AccentSoft)
-
-/** 화자 점 색: 순서대로 주황 · 초록 · 빨강 · 파랑 (카드 고치기 시안) */
+/** 화자 색: 화자 순서대로 노랑 · 민트 · 분홍 · 하늘 (11/10 확정) */
 fun speakerColor(index: Int): Color =
-    listOf(LologColors.Laugh, LologColors.Memory, LologColors.Absurd, LologColors.Accent)[index.coerceAtLeast(0) % 4]
+    LologColors.Speakers[index.coerceAtLeast(0) % LologColors.Speakers.size]
 
 /** 화자 동그라미: 이름 첫 글자, 순서별 색 */
 @Composable
 fun SpeakerAvatar(name: String, index: Int, size: Dp = 32.dp) {
     val label = if (name.startsWith("화자")) name.removePrefix("화자") else name.take(1)
     Box(
-        Modifier.size(size).clip(CircleShape).background(avatarColors[index.coerceAtLeast(0) % avatarColors.size]),
+        Modifier.size(size).clip(CircleShape).background(speakerColor(index)),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.Bold, color = LologColors.Ink) }
 }
