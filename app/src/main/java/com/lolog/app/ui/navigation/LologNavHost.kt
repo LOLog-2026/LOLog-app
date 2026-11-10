@@ -32,6 +32,9 @@ import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
+import com.lolog.app.ui.screens.rooms.Features
+import com.lolog.app.ui.screens.rooms.RoomCreateScreen
+import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
@@ -84,11 +87,15 @@ object Routes {
     const val CARD = "card/{cardId}"
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
+    /** 친구 방(목업에서만) */
+    const val ROOM = "room/{id}"
+    const val ROOM_CREATE = "rooms/create"
 
     fun analyzing(id: Long) = "analyzing/$id"
     fun card(id: Long) = "card/$id"
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
+    fun room(id: Long) = "room/$id"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -326,7 +333,26 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         entry.savedStateHandle[FRIENDS_MESSAGE] = null
                         entry.savedStateHandle[FRIENDS_HIGHLIGHT] = false
                     },
+                    onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
+                    onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
                 )
+            }
+            if (Features.ROOMS) {
+                composable(Routes.ROOM_CREATE) {
+                    RoomCreateScreen(
+                        onBack = { nav.popBackStack() },
+                        // 만들면 그 방으로. 뒤로 가면 방 만들기 대신 방 목록으로
+                        onCreated = { id -> nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } } },
+                        onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
+                    )
+                }
+                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                    RoomScreen(
+                        roomId = it.arguments!!.getLong("id"),
+                        onBack = { nav.popBackStack() },
+                        onLeft = { nav.popBackStack() },
+                    )
+                }
             }
             composable(Routes.ADD_FRIEND) {
                 AddFriendScreen(

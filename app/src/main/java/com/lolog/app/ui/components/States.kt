@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lolog.app.data.model.COMIC_LIMIT_PER_CARD
 import com.lolog.app.data.model.ErrorCodes
+import com.lolog.app.data.model.RoomErrorCodes
+import com.lolog.app.data.model.RoomRules
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.ui.theme.LologColors
 
@@ -73,6 +75,12 @@ fun errorText(e: Throwable): String {
         ErrorCodes.CHARACTER_IN_PROGRESS -> "캐릭터를 그리는 중이에요. 다 되면 다시 만들 수 있어요"
         ErrorCodes.CHARACTER_LIMIT -> "캐릭터는 하루에 3번까지 만들 수 있어요. 내일 다시 해 주세요"
         ErrorCodes.PAYLOAD_TOO_LARGE, "HTTP_413" -> "사진이 너무 커요. 다른 사진을 골라 주세요"
+        // 친구 방 (코드는 rooms.md 오류 코드, 문구는 프론트가 정함)
+        RoomErrorCodes.ROOM_POST_EXISTS -> "이미 이 방에 올린 만화예요"
+        RoomErrorCodes.ROOM_POST_NOT_MINE -> "올린 사람만 내릴 수 있어요"
+        RoomErrorCodes.ROOM_MEMBER_LIMIT -> "나를 포함해 ${RoomRules.MEMBER_MAX}명까지 들어갈 수 있어요"
+        RoomErrorCodes.ROOM_NOT_FOUND -> "방을 찾지 못했어요"
+        RoomErrorCodes.ROOM_POST_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         // 서버의 message는 개발자용이라 화면에 그대로 띄우지 않아요(api-dto ErrorResponse)
         else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else "문제가 생겼어요. 잠시 후 다시 시도해 주세요"
     }

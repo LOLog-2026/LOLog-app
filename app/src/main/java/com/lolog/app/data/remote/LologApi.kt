@@ -97,6 +97,19 @@ interface MainApi {
     // 화자 그림 (LOLog-docs spec/characters.md 4장)
     @GET("api/characters/defaults") suspend fun defaultCharacters(): DefaultCharacterListDto
 
+    // 친구와 같이 쓰는 방 (LOLog-docs spec/rooms.md 2장). 멤버가 아니면 404 ROOM_NOT_FOUND
+    @GET("api/rooms") suspend fun rooms(): RoomListDto
+    @POST("api/rooms") suspend fun createRoom(@Body body: RoomCreateDto): RoomItemDto
+    @GET("api/rooms/{id}") suspend fun room(@Path("id") id: Long): RoomItemDto
+    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long)
+    @GET("api/rooms/{id}/posts") suspend fun roomPosts(@Path("id") id: Long): RoomPostListDto
+    @POST("api/rooms/{id}/posts") suspend fun postToRoom(@Path("id") id: Long, @Body body: RoomPostCreateDto): RoomPostDto
+    @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
+    @PUT("api/rooms/{id}/posts/{postId}/like") suspend fun likeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
+    @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
+    @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
+    @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
+
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)
     suspend fun deleteFcmToken(@Body body: FcmTokenDto)
