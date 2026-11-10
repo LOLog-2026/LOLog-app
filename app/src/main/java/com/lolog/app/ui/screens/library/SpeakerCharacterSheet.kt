@@ -55,6 +55,30 @@ import kotlinx.coroutines.coroutineScope
 /** 팝업에서 고른 결과. [characterChanged]가 false면 그림은 그대로예요(character는 보지 않아요) */
 data class SpeakerPick(val name: String?, val character: SpeakerCharacter?, val characterChanged: Boolean)
 
+/**
+ * 팝업 결과를 PATCH 내용으로 바꿔요. 이름·그림 중 바뀐 것만 넣고, 아무것도 안 바뀌었으면 null.
+ * 같은 그림(type+id)을 다시 고르면 그림은 안 바뀐 걸로 봐요
+ */
+internal fun Speaker.editFor(pick: SpeakerPick): CardEdit? {
+    val nameChanged = pick.name != name
+    val picChanged = pick.characterChanged && characterDiffers(character, pick.character)
+    if (!nameChanged && !picChanged) return null
+    return CardEdit(
+        speakers = if (nameChanged) listOf(Speaker(key, pick.name)) else null,
+        characters = if (picChanged) mapOf(key to pick.character) else null,
+    )
+}
+
+internal fun characterDiffers(before: SpeakerCharacter?, after: SpeakerCharacter?): Boolean =
+    if (before == null) after != null else !before.sameAs(after)
+
+/** 성공 띠(시안 16): 친구 그림 "서연님 캐릭터를 붙였어요", 기본 화자 "그림을 붙였어요", 떼면 "그림을 뗐어요" */
+internal fun speakerSavedText(edit: CardEdit): String {
+    val pics = edit.characters ?: return "이름을 바꿨어요"
+    val c = pics.values.firstOrNull() ?: return "그림을 뗐어요"
+    return if (c.type == CharacterType.PROFILE && c.label != null) "${c.label}님 캐릭터를 붙였어요" else "그림을 붙였어요"
+}
+
 /** 팝업이 쓰는 데이터. 기본 화자 목록은 처음 열 때 한 번 받아 들고 있어요 */
 class SpeakerCharacterViewModel(private val repo: LologRepository) : ViewModel() {
     data class State(

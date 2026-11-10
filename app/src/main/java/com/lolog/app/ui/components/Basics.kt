@@ -34,6 +34,8 @@ import com.lolog.app.data.model.ComicStage
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.ui.theme.LologText
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
 /** 볼펜 노트 배경: 흰 바탕 + 28dp 간격 아주 옅은 줄 (B안) */
@@ -222,9 +224,20 @@ fun StageBadge(stage: ComicStage, modifier: Modifier = Modifier) {
 fun speakerColor(index: Int): Color =
     LologColors.Speakers[index.coerceAtLeast(0) % LologColors.Speakers.size]
 
-/** 화자 동그라미: 이름 첫 글자, 순서별 색 */
+/**
+ * 화자 동그라미: 이름 첫 글자, 순서별 색.
+ * [thumbnailUrl]이 있으면(화자에 그림을 붙였으면) 둥근 그림. [cacheKey]는 characterImage() 참고
+ */
 @Composable
-fun SpeakerAvatar(name: String, index: Int, size: Dp = 32.dp) {
+fun SpeakerAvatar(name: String, index: Int, size: Dp = 32.dp, thumbnailUrl: String? = null, cacheKey: String? = null) {
+    if (thumbnailUrl != null) {
+        AsyncImage(
+            model = if (cacheKey != null) characterImage(thumbnailUrl, cacheKey) else thumbnailUrl,
+            contentDescription = name, contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(CircleShape).background(LologColors.Canvas),
+        )
+        return
+    }
     val label = if (name.startsWith("화자")) name.removePrefix("화자") else name.take(1)
     Box(
         Modifier.size(size).clip(CircleShape).background(speakerColor(index)),

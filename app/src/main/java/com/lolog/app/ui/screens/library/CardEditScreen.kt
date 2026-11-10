@@ -94,9 +94,10 @@ class CardEditViewModel(private val repo: LologRepository, private val id: Long)
 
     private fun patch(): CardEdit {
         val o = _state.value.original ?: return CardEdit()
-        // 명세 PATCH: 바꾼 화자·대사만 보내요
+        // 명세 PATCH: 바꾼 화자·대사만 보내요. 화자는 이름과 그림을 따로 봐요
         return CardEdit(
             speakers = speakers.filter { speakerChanged(it) }.ifEmpty { null },
+            characters = speakers.filter { characterChanged(it) }.associate { it.key to it.character }.ifEmpty { null },
             lines = lines.mapNotNull { now ->
                 val before = o.lines.firstOrNull { it.id == now.id } ?: return@mapNotNull LineEdit(now.id, now.speaker, now.text)
                 LineEdit(
@@ -115,10 +116,13 @@ class CardEditViewModel(private val repo: LologRepository, private val id: Long)
 
     fun lineChanged(line: Line): Boolean = _state.value.original?.lines?.firstOrNull { it.id == line.id } != line
     fun speakerChanged(sp: Speaker): Boolean = _state.value.original?.speakers?.firstOrNull { it.key == sp.key }?.name != sp.name
+    fun characterChanged(sp: Speaker): Boolean =
+        characterDiffers(_state.value.original?.speakers?.firstOrNull { it.key == sp.key }?.character, sp.character)
 
-    fun renameSpeaker(key: String, name: String) {
+    /** 화자 고치기 팝업에서 고른 이름·그림. 서버에는 "저장" 때 한꺼번에 보내요 */
+    fun applySpeaker(key: String, pick: SpeakerPick) {
         val i = speakers.indexOfFirst { it.key == key }
-        if (i >= 0) speakers[i] = speakers[i].copy(name = name.trim().take(TextLimits.SPEAKER_NAME).ifBlank { null })
+        if (i >= 0) speakers[i] = speakers[i].copy(name = pick.name, character = if (pick.characterChanged) pick.character else speakers[i].character)
     }
 
     fun setLineText(i: Int, text: String) {
@@ -155,6 +159,8 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
     val snackbar = remember { SnackbarHostState() }
     var askLeave by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Speaker?>(null) }
+    val charVm = viewModel { SpeakerCharacterViewModel(repo) }
+    val charState by charVm.state.collectAsState()
     var pickingFor by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(state.saved) { if (state.saved) onSaved() }
@@ -200,11 +206,13 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
                 )
             }
 
-            // 화자: 이름표를 누르면 이름 바꾸기
-            EditLabel("화자 (눌러서 이름 바꾸기)")
+            // 화자: 이름표를 누르면 화자 고치기 팝업(이름·그림)
+            EditLabel("화자 (눌러서 이름·그림 바꾸기)")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 vm.speakers.forEachIndexed { i, sp ->
-                    SpeakerChip(vm.speakers.displayName(sp.key), i, active = sp.key == activeSpeaker) { renaming = sp }
+                    SpeakerChip(vm.speakers.displayName(sp.key), i, active = sp.key == activeSpeaker, character = sp.character) {
+                        renaming = sp; charVm.open()
+                    }
                 }
             }
 
@@ -234,11 +242,12 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
     }
 
     renaming?.let { sp ->
-        RenameDialog(
-            current = sp.name.orEmpty(),
+        SpeakerCharacterSheet(
+            speaker = sp,
             placeholder = "화자${vm.speakers.indexOfFirst { it.key == sp.key } + 1}",
-            onDone = { vm.renameSpeaker(sp.key, it); renaming = null },
-            onDismiss = { renaming = null },
+            data = charState,
+            onRetry = { charVm.open() },
+            onClose = { vm.applySpeaker(sp.key, it); renaming = null },
         )
     }
     pickingFor?.let { i ->
@@ -287,17 +296,21 @@ private fun EditLabel(text: String) {
 /** 화자 칩 바탕: 화자 색을 옅게 */
 private fun speakerSoft(index: Int): Color = speakerColor(index).copy(alpha = 0.35f).compositeOver(LologColors.Paper)
 
-/** 화자 칩(알약): 누르면 이름 바꾸기. 고르는 중인 칩은 코랄 테두리 + 연필 */
+/** 화자 칩(알약): 누르면 화자 고치기 팝업. 고르는 중인 칩은 코랄 테두리 + 연필. 그림이 붙었으면 앞에 작은 그림 */
 @Composable
-private fun SpeakerChip(name: String, index: Int, active: Boolean, onClick: () -> Unit) {
+private fun SpeakerChip(name: String, index: Int, active: Boolean, character: SpeakerCharacter?, onClick: () -> Unit) {
     Row(
         Modifier.clip(LologShape.pill)
             .background(speakerSoft(index))
             .then(if (active) Modifier.border(1.5.dp, LologColors.Accent, LologShape.pill) else Modifier)
             .clickable(onClick = onClick)
-            .height(34.dp).padding(horizontal = 14.dp),
+            .height(34.dp).padding(start = if (character != null) 4.dp else 14.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (character?.thumbnailUrl != null) {
+            SpeakerAvatar(name, index, size = 26.dp, thumbnailUrl = character.thumbnailUrl, cacheKey = character.cacheKey)
+            Spacer(Modifier.width(6.dp))
+        }
         Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         if (active) {
             Spacer(Modifier.width(4.dp))
@@ -429,32 +442,4 @@ private fun SpeakerSheet(speakers: List<Speaker>, selected: String, onPick: (Str
             }
         }
     }
-}
-
-/** 화자 이름 바꾸기 (10자까지, 비우면 다시 "화자1") */
-@Composable
-private fun RenameDialog(current: String, placeholder: String, onDone: (String) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf(current) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = LologColors.Paper,
-        title = { Text("이름 바꾸기", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text, onValueChange = { text = it.take(TextLimits.SPEAKER_NAME) }, singleLine = true,
-                    placeholder = { Text(placeholder, color = LologColors.Muted) },
-                    shape = LologShape.sm,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LologColors.Accent, unfocusedBorderColor = LologColors.Line),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    "${text.length} / ${TextLimits.SPEAKER_NAME} · 비우면 \"$placeholder\"처럼 순서대로 불러요",
-                    fontSize = 11.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { onDone(text) }) { Text("확인", fontWeight = FontWeight.Bold, color = LologColors.Accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소", color = LologColors.Muted) } },
-    )
 }
