@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import coil.imageLoader
 import com.lolog.app.data.remote.ApiClient
 import com.lolog.app.ui.components.ComicBitmap
 import kotlinx.coroutines.Dispatchers
@@ -18,15 +19,19 @@ import java.io.File
 
 /**
  * 14 저장·공유: GET /api/comics/{id}의 imageUrl 이미지를 받아 갤러리에 저장하거나 공유해요.
+ * 화면에 그릴 때 Coil 디스크 캐시에 받아 둔 원본이 있으면 그걸 먼저 써요(#35).
  * 목업 주소(mock://)면 대사로 그린 임시 그림을 써요.
  */
 object ComicExport {
 
     /**
+     * @param cacheKey comicCacheKey(id). 화면의 ComicImage와 같은 이름이어야 디스크 캐시를 찾아요
      * @param freshUrl 서명 주소가 만료(403)됐을 때 GET /api/comics/{id}로 새 주소를 받아 와요(명세 imageUrl). 한 번만 다시 받아요
      */
     suspend fun pngBytes(
+        context: Context,
         imageUrl: String,
+        cacheKey: String,
         mockLines: List<String>,
         network: ApiClient?,
         freshUrl: suspend () -> String?,
@@ -36,15 +41,31 @@ object ComicExport {
             ComicBitmap.render(mockLines).compress(Bitmap.CompressFormat.PNG, 100, out)
             return@withContext out.toByteArray()
         }
-        when (val first = network.download(imageUrl)) {
+        fetchPng(imageUrl, cached = { cachedBytes(context, cacheKey) }, download = network::download, freshUrl = freshUrl)
+    }
+
+    /** 캐시 → 받기 → (403이면) 새 주소로 한 번 더. 테스트에서 가짜 받기를 넣으려고 나눠 뒀어요 */
+    internal suspend fun fetchPng(
+        imageUrl: String,
+        cached: () -> ByteArray?,
+        download: (String) -> ApiClient.Download,
+        freshUrl: suspend () -> String?,
+    ): ByteArray? {
+        cached()?.let { return it }
+        return when (val first = download(imageUrl)) {
             is ApiClient.Download.Ok -> first.bytes
             ApiClient.Download.Failed -> null
             ApiClient.Download.Expired -> {
-                val again = freshUrl()?.let { network.download(it) }
+                val again = freshUrl()?.let(download)
                 (again as? ApiClient.Download.Ok)?.bytes
             }
         }
     }
+
+    /** Coil 디스크 캐시의 파일은 서버에서 받은 원본 PNG 그대로예요. 없거나 못 읽으면 null */
+    private fun cachedBytes(context: Context, cacheKey: String): ByteArray? = runCatching {
+        context.imageLoader.diskCache?.openSnapshot(cacheKey)?.use { it.data.toFile().readBytes() }
+    }.getOrNull()
 
     /** 갤러리(Pictures/LOLog)에 저장 */
     suspend fun saveToGallery(context: Context, bytes: ByteArray, name: String): Boolean = withContext(Dispatchers.IO) {

@@ -153,6 +153,28 @@ fun ComicScreen(
     var askDelete by remember { mutableStateOf(false) }
     var shareSheet by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(false) }
+    // 저장·공유할 그림을 준비하는 동안 true. "내보내기" 버튼에 점이 돌고 다시 못 눌러요(#35)
+    var exporting by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    /** 시트는 바로 닫고, 그림을 받는 동안은 버튼의 점으로 기다리는 걸 보여 줘요. 끝나면 결과를 띠로 */
+    fun export(block: suspend (ByteArray) -> String?) {
+        val c = state.comic ?: return
+        if (exporting) return
+        shareSheet = false
+        exporting = true
+        scope.launch {
+            try {
+                val bytes = c.imageUrl?.let {
+                    ComicExport.pngBytes(context, it, comicCacheKey(c.id), state.card?.lines?.map { l -> l.text }.orEmpty(), container.network, vm::freshImageUrl)
+                }
+                vm.toast(if (bytes == null) "이미지를 받지 못했어요" else block(bytes))
+            } finally {
+                exporting = false
+            }
+        }
+    }
 
     LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }
     LaunchedEffect(state.newComicId) { state.newComicId?.let(onOtherComic) }
@@ -196,7 +218,8 @@ fun ComicScreen(
             stage == ComicStage.DONE -> Viewer(
                 comic, card, onCard,
                 onZoom = { zoom = true },
-                onExport = { shareSheet = true },
+                onExport = { if (!exporting) shareSheet = true },
+                exporting = exporting,
                 onImageError = vm::imageFailed,
                 modifier = m,
             )
@@ -212,7 +235,7 @@ fun ComicScreen(
         ZoomViewer(comic, card, onImageError = vm::imageFailed, onClose = { zoom = false })
     }
     if (shareSheet && comic != null) {
-        ShareSheet(comic, card, container.network, vm::freshImageUrl, onDone = { msg -> shareSheet = false; vm.toast(msg) }, onDismiss = { shareSheet = false })
+        ShareSheet(comic, enabled = !exporting, onPick = ::export, onDismiss = { shareSheet = false })
     }
     if (askDelete) {
         LologDialog(
@@ -401,6 +424,7 @@ private fun Viewer(
     onExport: () -> Unit,
     onImageError: () -> Unit,
     modifier: Modifier,
+    exporting: Boolean = false,
 ) {
     Column(modifier.fillMaxSize()) {
         // 세로 4칸 긴 한 장: 적당한 크기(화면 너비 약 70%, 최대 300dp)로 가운데, 세로로 길면 아래로 내려 봐요
@@ -456,7 +480,7 @@ private fun Viewer(
         }
         // 맨 아래 흰 띠 안에 "내보내기". 지워진 카드여도 그대로 돼요
         Box(Modifier.fillMaxWidth().background(LologColors.Paper).navigationBarsPadding().padding(16.dp)) {
-            PrimaryButton("내보내기", onExport)
+            PrimaryButton("내보내기", onExport, loading = exporting)
         }
     }
 }
@@ -538,21 +562,15 @@ private val ZoomBg = Color(0xFF0E1013)
 @Composable
 private fun ShareSheet(
     comic: ComicDetail,
-    card: CardDetail?,
-    network: ApiClient?,
-    freshUrl: suspend () -> String?,
-    onDone: (String?) -> Unit,
+    enabled: Boolean,
+    /** 고른 내보내기. 그림 받기는 화면(ComicScreen)이 해요. 시트가 닫혀도 멈추지 않게요 */
+    onPick: (suspend (ByteArray) -> String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val lines = card?.lines?.map { it.text }.orEmpty()
     val name = "lolog_comic_${comic.id}"
 
-    fun withBytes(block: suspend (ByteArray) -> String?) = scope.launch {
-        val bytes = comic.imageUrl?.let { ComicExport.pngBytes(it, lines, network, freshUrl) }
-        onDone(if (bytes == null) "이미지를 받지 못했어요" else block(bytes))
-    }
+    fun withBytes(block: suspend (ByteArray) -> String?) { if (enabled) onPick(block) }
 
     LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
