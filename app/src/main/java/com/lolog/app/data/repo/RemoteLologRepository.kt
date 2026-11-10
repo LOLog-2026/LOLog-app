@@ -34,7 +34,8 @@ class RemoteLologRepository(
 
     private fun save(t: TokenDto) = tokens.save(t.accessToken, t.refreshToken)
 
-    override suspend fun signup(email: String, password: String) = call { save(auth.signup(EmailAuthDto(email, password))) }
+    override suspend fun requestEmailCode(email: String) = call { auth.requestEmailCode(EmailCodeDto(email)) }
+    override suspend fun signup(email: String, password: String, code: String) = call { save(auth.signup(SignupDto(email, password, code))) }
     override suspend fun login(email: String, password: String) = call { save(auth.login(EmailAuthDto(email, password))) }
 
     override suspend fun socialLogin(provider: SocialProvider, providerToken: String): Boolean = call {

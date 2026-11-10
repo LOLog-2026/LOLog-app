@@ -30,6 +30,9 @@ object ErrorCodes {
     const val COMIC_LIMIT = "COMIC_LIMIT"               // 409 한 카드 3번 (실패는 안 셈)
     const val PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"   // 413 녹음 올리기
     const val INTERNAL_ERROR = "INTERNAL_ERROR"         // 500
+    const val INVALID_CODE = "INVALID_CODE"             // 400 가입 인증번호가 틀림
+    const val CODE_EXPIRED = "CODE_EXPIRED"             // 400 인증번호가 없거나 10분 지남·5번 틀림
+    const val TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS"   // 429 같은 이메일로 60초 안에 인증번호를 또 요청
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -42,6 +45,10 @@ object TextLimits {
     const val LINE = 200
 }
 
+/** 이메일 가입 인증번호: 숫자 6자리 문자열(앞 0 유지), 같은 이메일은 60초 뒤에 다시 받을 수 있어요 */
+const val EMAIL_CODE_LENGTH = 6
+const val EMAIL_CODE_RESEND_SECONDS = 60
+
 /** FR-AUTH-01 + api-dto.md: 8~64자, 영문·숫자 포함, UTF-8로 72바이트 이하(BCrypt 한도) */
 const val PASSWORD_MIN = 8
 const val PASSWORD_MAX = 64
@@ -52,7 +59,8 @@ fun isValidPassword(pw: String): Boolean =
         pw.any { it in 'a'..'z' || it in 'A'..'Z' } && // isLetter()는 한글도 문자로 쳐서 영문만 봐요
         pw.any { it in '0'..'9' }
 
-enum class SocialProvider(val label: String) { KAKAO("카카오"), GOOGLE("Google"), NAVER("네이버") }
+/** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
+enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
 /** GET /auth/me */
 data class Account(val email: String, val linkedProviders: Set<SocialProvider>)

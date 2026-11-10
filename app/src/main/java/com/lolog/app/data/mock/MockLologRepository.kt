@@ -15,15 +15,20 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.OffsetDateTime
 
+/** 목업에서 늘 맞는 가입 인증번호 */
+private const val MOCK_EMAIL_CODE = "123456"
+
 /**
  * 백엔드 없이 화면 흐름을 다 돌려 볼 수 있는 메모리 목업이에요.
  * 앱 모델을 바로 돌려줘요(서버 DTO·변환은 거치지 않음). 상태 변화(감지·만화)는 몇 초 단위로 흉내 내요.
  *
  * 오류 화면 확인용 규칙
+ *  - 이메일 가입 인증번호는 123456. 다른 번호 → 400 INVALID_CODE, 000000·5번 틀림 → 400 CODE_EXPIRED
+ *  - 인증번호를 60초 안에 또 받기 → 429 TOO_MANY_REQUESTS
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
- *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번)
+ *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번), 네이버 연결 → 연결됨
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
  *  - 대사 중 40자 넘는 게 있으면 만화 FAILED (21번). 카드 고치기에서 줄이면 성공
  *  - 실패한 만화는 3번에 안 세요(11/5 확정). 카드를 지워도 만화는 남고 cardDeleted = true
@@ -34,7 +39,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private val lock = Mutex()
     private val cardStore = MockData.cards()
     private val comicStore = MockData.comics()
-    private val linked = mutableSetOf(SocialProvider.KAKAO)
+    private val linked = mutableSetOf<SocialProvider>()
     private val recordings = java.util.concurrent.ConcurrentHashMap<Long, RecordingProgress>()
     private val recordingParts = mutableMapOf<String, Long>() // clientRecordingId → recordingId
     private val recordingSentences = mutableMapOf<Long, MutableList<Sentence>>()
@@ -57,8 +62,36 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private fun now(): String = OffsetDateTime.now().toString()
 
     // ── 인증 ──
-    override suspend fun signup(email: String, password: String) {
+    /** 이메일 → 인증번호를 보낸 시각(ms). 목업 인증번호는 늘 MOCK_EMAIL_CODE */
+    private val codeSentAt = mutableMapOf<String, Long>()
+    private val codeFails = mutableMapOf<String, Int>()
+
+    override suspend fun requestEmailCode(email: String) {
         net()
+        val key = email.lowercase()
+        val sent = codeSentAt[key]
+        val nowMs = System.currentTimeMillis()
+        if (sent != null && nowMs - sent < EMAIL_CODE_RESEND_SECONDS * 1000L) {
+            throw LologException(ErrorCodes.TOO_MANY_REQUESTS, "잠시 뒤에 다시 받아 주세요")
+        }
+        codeSentAt[key] = nowMs
+        codeFails.remove(key)
+    }
+
+    override suspend fun signup(email: String, password: String, code: String) {
+        net()
+        val key = email.lowercase()
+        val sent = codeSentAt[key]
+        // 번호를 안 받았거나 10분 지났거나 5번 틀리면 만료. 시험용으로 000000도 만료
+        if (sent == null || System.currentTimeMillis() - sent > 10 * 60 * 1000L || code == "000000") {
+            throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요")
+        }
+        if (code != MOCK_EMAIL_CODE) {
+            val fails = (codeFails[key] ?: 0) + 1
+            codeFails[key] = fails
+            if (fails >= 5) { codeSentAt.remove(key); throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요") }
+            throw LologException(ErrorCodes.INVALID_CODE, "인증번호가 맞지 않아요")
+        }
         if (email.equals("taken@lolog.app", true)) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         if (!isValidPassword(password)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "password")
         tokens.save("mock-access", "mock-refresh")

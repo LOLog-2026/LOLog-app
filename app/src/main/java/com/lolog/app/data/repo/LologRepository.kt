@@ -15,7 +15,10 @@ interface LologRepository {
     val isLoggedIn: Flow<Boolean>
 
     // 인증
-    suspend fun signup(email: String, password: String)
+    /** 가입 인증번호를 메일로 보내 달라고 해요. 가입 여부와 관계없이 성공해요(60초 안에 또 부르면 TOO_MANY_REQUESTS) */
+    suspend fun requestEmailCode(email: String)
+    /** code는 메일로 받은 6자리 문자열(앞 0 유지) */
+    suspend fun signup(email: String, password: String, code: String)
     suspend fun login(email: String, password: String)
     /** providerToken은 각 소셜 SDK에서 받은 토큰. 반환값은 isNewUser */
     suspend fun socialLogin(provider: SocialProvider, providerToken: String): Boolean
