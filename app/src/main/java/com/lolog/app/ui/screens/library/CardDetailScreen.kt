@@ -126,6 +126,15 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         }
     }
 
+    /**
+     * 음성 서명 주소(10분)가 만료됐을 때 카드 자세히를 다시 불러 새 주소를 받아요(replay.md 3장).
+     * 그사이 음성 상태가 바뀌었으면 화면도 같이 바뀌어요
+     */
+    suspend fun freshAudioUrl(): String? = runCatching { repo.card(id) }.getOrNull()?.let { card ->
+        _state.update { it.copy(card = card) }
+        card.audio.url
+    }
+
     fun consumed() = _state.update { it.copy(requestedComicId = null, toast = null, deleteFailed = false) }
 }
 
@@ -209,6 +218,7 @@ fun CardDetailScreen(
             card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
             else -> CardBody(
                 card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
+                freshAudioUrl = vm::freshAudioUrl,
                 // 만화 그리는 중에는 고칠 수 없어서(409 CARD_LOCKED) 화자를 눌러도 팝업을 열지 않아요
                 onSpeakerClick = if (card.locked) null else { key -> speakerSheet = key; charVm.open() },
             )
@@ -316,6 +326,7 @@ private fun CardBody(
     onRetry: () -> Unit,
     modifier: Modifier,
     onSpeakerClick: ((String) -> Unit)? = null,
+    freshAudioUrl: suspend () -> String? = { null },
 ) {
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -323,6 +334,8 @@ private fun CardBody(
     ) {
         // 가운데 위 "● 웃김 · 대화 n줄"
         KindChip(card.kind, Modifier.align(Alignment.CenterHorizontally), suffix = "대화 ${card.lines.size}줄")
+        // 순간 다시 듣기: 대사 위에 재생 줄(READY) 또는 안내 한 줄(PENDING). NONE이면 아무것도 없어요
+        CardAudioSection(card, freshAudioUrl)
         // 대사는 처음부터 전부 말풍선으로(재생 없음)
         CardLines(card, onSpeakerClick = onSpeakerClick)
 

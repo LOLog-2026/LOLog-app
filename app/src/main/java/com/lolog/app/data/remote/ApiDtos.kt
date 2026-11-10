@@ -150,6 +150,8 @@ data class CardSummaryDto(
     // 목록에 "장소 · 대사 N개"를 보여 줘요. lineCount는 명세상 필수지만 서버가 빼도 화면이 깨지지 않게 null을 받아요
     val place: String? = null,
     val lineCount: Int? = null,
+    /** 들을 수 있는 카드 구간 음성이 있으면 true(audio.status가 READY). 서버가 안 보내면 false(replay.md 4장) */
+    val hasAudio: Boolean = false,
 )
 
 @Serializable
@@ -171,6 +173,15 @@ data class CardDetailDto(
     val comics: List<ComicRefDto> = emptyList(), // 최신순
     val createdAt: String = "",
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
+    val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
+)
+
+/** CardAudio — CardDetail.audio. url·durationMs는 READY일 때만 와요 */
+@Serializable
+data class CardAudioDto(
+    val status: String? = null, // READY · PENDING · NONE
+    val url: String? = null, // 10분 서명 주소
+    val durationMs: Long? = null, // 카드 구간 + 앞뒤 0.5초. 파일에 길이가 없어서 재생 바는 이 값으로 그려요
 )
 
 // PATCH /api/cards/{id} 본문(CardUpdateRequest)은 "null을 보내면 지움" 규칙이 있어서

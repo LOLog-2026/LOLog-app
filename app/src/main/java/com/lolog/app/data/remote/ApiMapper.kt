@@ -101,8 +101,18 @@ object ApiMapper {
 
     fun CardSummaryDto.toModel() = CardSummary(
         id = id, kind = cardKind(kind), summary = summary, recordedAt = recordedAt,
-        comicCount = comicCount, createdAt = createdAt, place = place, lineCount = lineCount,
+        comicCount = comicCount, createdAt = createdAt, place = place, lineCount = lineCount, hasAudio = hasAudio,
     )
+
+    /** 모르는 상태값이거나, READY인데 주소·길이가 없으면 들을 수 없으니 NONE으로 봐요 */
+    fun CardAudioDto?.toModel(): CardAudio {
+        val status = when (this?.status?.trim()?.uppercase()) {
+            "READY" -> if (url.isNullOrBlank() || durationMs == null || durationMs <= 0) AudioStatus.NONE else AudioStatus.READY
+            "PENDING" -> AudioStatus.PENDING
+            else -> AudioStatus.NONE
+        }
+        return if (status == AudioStatus.READY) CardAudio(status, this!!.url, durationMs) else CardAudio(status)
+    }
 
     fun CardPageDto.toModel() = CardPage(cards.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
 
@@ -114,6 +124,7 @@ object ApiMapper {
         comics = comics.map { ComicRef(it.id, comicStatus(it.status)) },
         createdAt = createdAt, recordedAt = recordedAt, comicRemaining = comicRemaining,
         recordingId = recordingId,
+        audio = audio.toModel(),
     )
 
     /**
