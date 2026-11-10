@@ -26,6 +26,8 @@ import com.lolog.app.ui.components.rememberIsOnline
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
+import com.lolog.app.ui.screens.friends.BlockedScreen
+import com.lolog.app.ui.screens.friends.NicknameScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
@@ -71,6 +73,8 @@ object Routes {
     const val FRIENDS = "friends"
     const val ADD_FRIEND = "friends/add"
     const val FRIEND_REQUESTS = "friends/requests"
+    const val NICKNAME = "nickname"
+    const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val RECORDING = "recording"
@@ -307,7 +311,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onBack = { nav.goTab(Routes.HOME) },
                     onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
                     onRequests = { nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true } },
-                    onChangeNickname = {},
+                    onChangeNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
                     message = message,
                     highlightTop = highlight,
                     onMessageShown = {
@@ -337,9 +341,26 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onBack = { nav.popBackStack() },
                     onLoggedOut = { nav.resetTo(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
+                    onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
+            }
+            composable(Routes.NICKNAME) {
+                NicknameScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { message ->
+                        // 설정과 친구 탭 두 곳에서 들어와요. 돌아갈 화면의 띠 열쇠에 넣어요
+                        val prev = nav.previousBackStackEntry
+                        val key = if (prev?.destination?.route == Routes.FRIENDS) FRIENDS_MESSAGE else SETTINGS_MESSAGE
+                        prev?.savedStateHandle?.set(key, message)
+                        nav.popBackStack()
+                    },
+                )
+            }
+            composable(Routes.BLOCKED) {
+                BlockedScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.PASSWORD_CHANGE) {
                 PasswordChangeScreen(

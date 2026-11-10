@@ -54,6 +54,8 @@ class SettingsViewModel(
 ) : ViewModel() {
     data class State(
         val me: Account? = null,
+        val nickname: String? = null,   // 친구에게 보여질 별명. 없으면 "정하기"
+        val blockedCount: Int? = null,
         val linking: SocialProvider? = null,
         val busy: Boolean = false,
         val loggedOut: Boolean = false,
@@ -65,7 +67,10 @@ class SettingsViewModel(
 
     /** GET /auth/me → email, linkedProviders[] */
     fun load() = viewModelScope.launch {
-        runCatching { repo.me() }.onSuccess { me -> _state.update { it.copy(me = me) } }
+        launch { runCatching { repo.me() }.onSuccess { me -> _state.update { it.copy(me = me) } } }
+        // 친구 기능: 닉네임과 차단한 사람 수 (GET /api/me/profile, GET /api/blocks)
+        launch { runCatching { repo.profile() }.onSuccess { p -> _state.update { it.copy(nickname = p.nickname) } } }
+        launch { runCatching { repo.blocks().size }.onSuccess { n -> _state.update { it.copy(blockedCount = n) } } }
     }
 
     /**
@@ -125,6 +130,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onLoggedOut: () -> Unit,
     onChangePassword: () -> Unit,
+    onNickname: () -> Unit,
+    onBlocked: () -> Unit,
     message: String? = null,
     onMessageShown: () -> Unit = {},
 ) {
@@ -196,6 +203,9 @@ fun SettingsScreen(
             if (state.me?.hasPassword == true) {
                 SettingsRow("비밀번호 바꾸기", onClick = onChangePassword)
             }
+            // 친구 기능 두 줄은 소셜 계정에도 보여요
+            SettingsRow("닉네임 바꾸기", trailing = state.nickname ?: "정하기", onClick = onNickname)
+            SettingsRow("차단한 사람", trailing = state.blockedCount?.let { "${it}명" }, onClick = onBlocked)
             // 알림 스위치는 API에 없어 안드로이드 알림 설정으로 보내요 (협의 2-5)
             SettingsRow("알림 설정", trailing = "휴대폰 설정 ›") {
                 context.startActivity(

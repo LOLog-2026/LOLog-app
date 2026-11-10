@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.EMAIL_CODE_LENGTH
 import com.lolog.app.data.model.EMAIL_CODE_RESEND_SECONDS
 import com.lolog.app.data.model.ErrorCodes
+import com.lolog.app.data.model.FriendRules
 import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.model.PASSWORD_MAX
 import com.lolog.app.data.model.PASSWORD_MIN
@@ -166,11 +168,16 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
 
     fun clearCodeError() = _state.update { it.copy(codeError = null, codeExpired = false) }
 
-    fun signup(rawEmail: String, password: String, code: String) {
+    /** [nickname]은 선택. 적었으면 가입에 성공한 뒤 받은 토큰으로 바로 정해요(friends.md). 실패해도 가입은 성공으로 두고 넘어가요 */
+    fun signup(rawEmail: String, password: String, code: String, nickname: String = "") {
         val email = normalizeEmail(rawEmail)
         // 화면에서 규칙을 다 맞춰야 버튼이 켜지지만, 한 번 더 확인 (FR-AUTH-01)
         if (!isEmail(email) || !isValidPassword(password) || code.length != EMAIL_CODE_LENGTH) return
-        submit(null, isSignup = true) { repo.signup(email, password, code) }
+        submit(null, isSignup = true) {
+            repo.signup(email, password, code)
+            // 저장이 안 되면 친구 화면의 같은 입력 칸에서 다시 정해요
+            if (nickname.isNotBlank()) runCatching { repo.updateNickname(nickname) }
+        }
     }
 
     /** 비밀번호 찾기: 인증번호로 새 비밀번호를 정해요. 토큰은 안 받아서 성공하면 로그인 화면으로 가요 */
@@ -349,6 +356,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var nickname by remember { mutableStateOf("") }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.done) { if (state.done) onDone() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
@@ -421,6 +429,14 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                     error = if (confirm.isNotEmpty() && !confirmOk) "비밀번호가 서로 달라요" else null,
                     enabled = !state.loading,
                 )
+                Spacer(Modifier.height(2.dp))
+                // 친구 기능 닉네임(선택). 비워도 가입돼요
+                LabeledField(
+                    "닉네임 (선택)", nickname, { nickname = it.take(FriendRules.NICKNAME_MAX) },
+                    icon = Icons.Outlined.Person, placeholder = "친구에게 보여질 별명을 입력해 주세요",
+                    info = "나중에 설정에서 바꿀 수 있어요", enabled = !state.loading,
+                    counter = "${nickname.length} / ${FriendRules.NICKNAME_MAX}",
+                )
             }
             Text(
                 buildAnnotatedString {
@@ -433,7 +449,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 fontSize = 12.sp, color = LologColors.Muted, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
             )
-            PrimaryButton("가입하기", { vm.signup(email.trim(), password, code) }, enabled = allOk, loading = state.loading)
+            PrimaryButton("가입하기", { vm.signup(email.trim(), password, code, nickname) }, enabled = allOk, loading = state.loading)
             Spacer(Modifier.height(16.dp))
         }
     }
