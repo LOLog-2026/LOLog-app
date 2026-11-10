@@ -48,6 +48,7 @@ import kotlinx.coroutines.coroutineScope
  *    그림이 없으면 회색 안내 + 기본 화자 가로 줄 + "AI에게 맡기기". 나는 "내 캐릭터 만들기"(이번엔 자리만)
  *  - 기본: 나이대·성별 거르기 + 격자. 이름은 그대로 둬요
  *  - 맨 아래 "그림 떼기"(지금 그림이 붙어 있을 때만)
+ *  - 그 아래 "이 화자 빼기"(onRemove를 넘긴 카드 고치기에서만). 대사가 남아 있으면 꺼지고 회색 안내
  *  - "AI에게 맡기기"·그냥 닫기 = 그림은 그대로 두고 이름만 저장
  * 저장(PATCH)은 부르는 화면이 해요: 카드 보기는 바로, 카드 고치기는 "저장" 때 한꺼번에.
  */
@@ -124,12 +125,17 @@ class SpeakerCharacterViewModel(private val repo: LologRepository) : ViewModel()
 }
 
 /** 친구 프로필 탭의 한 사람(나 또는 친구) */
-private data class Person(val id: String?, val nickname: String, val thumbnailUrl: String?, val isMe: Boolean) {
-    /** 화자에 붙일 수 있는 그림. 회원 ID를 모르면(실서버의 나) 붙일 수 없어요 */
+internal data class Person(val id: String?, val nickname: String, val thumbnailUrl: String?, val isMe: Boolean) {
+    /** 화자에 붙일 수 있는 그림. 회원 ID를 모르면(userId를 아직 안 주는 서버의 나) 붙일 수 없어요 */
     val character: SpeakerCharacter?
         get() = if (id != null && thumbnailUrl != null) SpeakerCharacter(CharacterType.PROFILE, id, nickname, thumbnailUrl) else null
     val key: String get() = if (isMe) "me" else "friend-$id"
 }
+
+/** 친구 프로필 탭 목록: 맨 앞 "나"(내 회원 ID = 프로필 userId), 그 뒤 친구 전부 */
+internal fun peopleOf(me: Profile?, friends: List<Friend>): List<Person> =
+    listOfNotNull(me?.let { Person(it.userId, it.nickname ?: "나", it.character?.thumbnailUrl, isMe = true) }) +
+        friends.map { Person(it.userId.toString(), it.nickname, it.thumbnailUrl, isMe = false) }
 
 private enum class SheetTab(val label: String) { DEFAULT("기본"), FRIENDS("친구 프로필") }
 
@@ -141,6 +147,10 @@ fun SpeakerCharacterSheet(
     data: SpeakerCharacterViewModel.State,
     onRetry: () -> Unit,
     onClose: (SpeakerPick) -> Unit,
+    /** 카드 고치기에서만 넘겨요(화자 2명 이상). null이면 "이 화자 빼기"가 안 보여요 */
+    onRemove: (() -> Unit)? = null,
+    /** false면 그 화자의 대사가 남아 있어 버튼이 꺼져요 */
+    removeEnabled: Boolean = true,
     /** "내 캐릭터 만들기": 팝업을 닫고(적은 이름은 저장) 내 캐릭터 화면으로 가요 */
     onMakeMine: () -> Unit = {},
 ) {
@@ -152,11 +162,7 @@ fun SpeakerCharacterSheet(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val people = remember(data.me, data.friends) {
-        // 내 회원 ID는 GET /api/me/profile의 userId. 예전 서버라 없으면 "나"에 PROFILE을 붙이지 않아요
-        val me = data.me?.let { Person(it.userId, it.nickname ?: "나", it.character?.thumbnailUrl, isMe = true) }
-        listOfNotNull(me) + data.friends.map { Person(it.userId.toString(), it.nickname, it.thumbnailUrl, isMe = false) }
-    }
+    val people = remember(data.me, data.friends) { peopleOf(data.me, data.friends) }
     // 처음 열 때: 지금 붙은 PROFILE의 사람을 골라 둬요
     LaunchedEffect(people) {
         if (person == null && current?.type == CharacterType.PROFILE) person = people.firstOrNull { it.id == current.id }?.key
@@ -218,6 +224,15 @@ fun SpeakerCharacterSheet(
                     TextButton(onClick = { onClose(SpeakerPick(cleanName, null, characterChanged = true)) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text("그림 떼기", fontSize = 13.sp, color = LologColors.Muted)
                     }
+                }
+                if (onRemove != null) {
+                    TextButton(onClick = onRemove, enabled = removeEnabled, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        Text("이 화자 빼기", fontSize = 13.sp, color = if (removeEnabled) LologColors.Rec else LologColors.Muted)
+                    }
+                    if (!removeEnabled) Text(
+                        "이 화자의 대사를 다른 화자로 바꾸면 뺄 수 있어요", fontSize = 12.sp, color = LologColors.Muted,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
                 }
             }
             LologSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))

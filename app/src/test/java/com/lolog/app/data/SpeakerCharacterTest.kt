@@ -103,7 +103,7 @@ class SpeakerCharacterTest {
     @Test
     fun 그림_없는_친구와_나는_CHARACTER_NOT_READY() {
         assertEquals(ErrorCodes.CHARACTER_NOT_READY, attach("A" to SpeakerCharacter(CharacterType.PROFILE, "14"))) // 도윤
-        assertEquals(ErrorCodes.CHARACTER_NOT_READY, attach("A" to SpeakerCharacter(CharacterType.PROFILE, "1"))) // 나
+        assertEquals(ErrorCodes.CHARACTER_NOT_READY, attach("A" to SpeakerCharacter(CharacterType.PROFILE, MockFriends.MY_USER_ID.toString()))) // 나
     }
 
     @Test

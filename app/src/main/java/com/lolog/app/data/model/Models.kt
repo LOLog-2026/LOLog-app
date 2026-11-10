@@ -47,6 +47,9 @@ object ErrorCodes {
     const val UNKNOWN_CHARACTER = "UNKNOWN_CHARACTER"     // 400 없는 기본 화자 id, 나도 친구도 아닌 회원 ID
     const val DUPLICATE_CHARACTER = "DUPLICATE_CHARACTER" // 400 한 카드에서 같은 그림을 두 화자에 붙임
     const val CHARACTER_NOT_READY = "CHARACTER_NOT_READY" // 409 쓸 수 있는 그림이 없는 사람의 캐릭터를 붙임
+    // 화자 더하기·빼기 (LOLog-docs api-dto.md CardUpdateRequest)
+    const val SPEAKER_LIMIT = "SPEAKER_LIMIT"             // 409 더하고 뺀 뒤 화자가 4명을 넘음
+    const val SPEAKER_HAS_LINES = "SPEAKER_HAS_LINES"     // 409 대사가 남은 화자를 빼려 함
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
@@ -103,6 +106,9 @@ data class RecordingAccepted(val recordingId: Long, val status: RecordingStatus)
 data class RecordingProgress(val status: RecordingStatus, val cardCount: Int)
 
 // ── 카드 ──────────────────────────────────────────────
+
+/** 한 카드의 화자 수 한도(FR-EDIT-01). 더하고 뺀 뒤 1~4명이어야 해요(넘으면 409 SPEAKER_LIMIT) */
+const val SPEAKER_MAX = 4
 
 /** character는 이 화자에 붙인 그림. null이면 그림 없이 AI가 외모를 정해요 */
 data class Speaker(val key: String, val name: String? = null, val character: SpeakerCharacter? = null)
@@ -220,14 +226,21 @@ data class LineEdit(val id: Long, val speaker: String? = null, val text: String?
  *  speakers = 이름을 바꾼 화자만(name null = 이름 지움, character는 보지 않아요)
  *  characters = 그림을 바꾼 화자만. 화자 key → 새 그림(null = 그림 떼기)
  *  lines = 고친 대사만, place = 장소를 지우면 ""
+ *  newSpeakers = 새로 만드는 화자 key(다음 번호, 화자가 2명이면 "화자3"). 이름·그림을 정했으면 speakers·characters에도 들어가요
+ *  removeSpeakers = 뺄 화자 key. 대사가 하나도 없는 화자만 뺄 수 있어요
+ * key는 모두 빼기 전 기준이에요. 서버가 뺀 뒤 "화자1"부터 다시 매겨서 돌려줘요(api-dto CardUpdateRequest)
  */
 data class CardEdit(
     val speakers: List<Speaker>? = null,
     val lines: List<LineEdit>? = null,
     val place: String? = null,
     val characters: Map<String, SpeakerCharacter?>? = null,
+    val newSpeakers: List<String>? = null,
+    val removeSpeakers: List<String>? = null,
 ) {
-    val isEmpty: Boolean get() = speakers == null && lines == null && place == null && characters == null
+    val isEmpty: Boolean
+        get() = speakers == null && lines == null && place == null && characters == null &&
+            newSpeakers == null && removeSpeakers == null
 }
 
 // ── 만화 ──────────────────────────────────────────────
@@ -302,7 +315,7 @@ object FriendRules {
 /**
  * GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null.
  * character는 내 프로필 캐릭터(만든 적이 없으면 null).
- * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID. 명세에 아직 없어서 실서버에서는 null이에요
+ * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID(문자열, docs #56)
  */
 data class Profile(
     val nickname: String? = null,
