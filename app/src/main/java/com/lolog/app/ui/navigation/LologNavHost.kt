@@ -33,6 +33,7 @@ import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
 import com.lolog.app.ui.screens.rooms.Features
 import com.lolog.app.ui.screens.rooms.RoomCreateScreen
+import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
@@ -324,7 +325,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         entry.savedStateHandle[FRIENDS_MESSAGE] = null
                         entry.savedStateHandle[FRIENDS_HIGHLIGHT] = false
                     },
-                    onRoom = if (Features.ROOMS) { _ -> } else null,
+                    onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
                     onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
                 )
             }
@@ -332,8 +333,16 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 composable(Routes.ROOM_CREATE) {
                     RoomCreateScreen(
                         onBack = { nav.popBackStack() },
-                        onCreated = { nav.popBackStack() },
+                        // 만들면 그 방으로. 뒤로 가면 방 만들기 대신 방 목록으로
+                        onCreated = { id -> nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } } },
                         onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
+                    )
+                }
+                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                    RoomScreen(
+                        roomId = it.arguments!!.getLong("id"),
+                        onBack = { nav.popBackStack() },
+                        onLeft = { nav.popBackStack() },
                     )
                 }
             }
