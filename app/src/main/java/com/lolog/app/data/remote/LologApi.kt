@@ -69,6 +69,25 @@ interface MainApi {
     @GET("api/comics/{id}") suspend fun comic(@Path("id") id: Long): ComicDto
     @DELETE("api/comics/{id}") suspend fun deleteComic(@Path("id") id: Long)
 
+    // 친구·프로필·차단 (LOLog-docs spec/friends.md 2장)
+    @GET("api/me/profile") suspend fun profile(): ProfileResponse
+    @PATCH("api/me/profile") suspend fun updateProfile(@Body body: ProfileUpdateRequest): ProfileResponse
+    /** 201. 상대가 이미 나에게 요청했으면 바로 친구가 되고 status가 ACCEPTED */
+    @POST("api/friend-requests") suspend fun sendFriendRequest(@Body body: FriendRequestCreate): FriendRequestResponse
+    /** direction: received·sent (필수) */
+    @GET("api/friend-requests") suspend fun friendRequests(@Query("direction") direction: String): FriendRequestListResponse
+    @POST("api/friend-requests/{id}/accept") suspend fun acceptFriendRequest(@Path("id") id: Long): FriendItem
+    /** 204. 받은 요청 거절, 보낸 요청 취소 */
+    @DELETE("api/friend-requests/{id}") suspend fun deleteFriendRequest(@Path("id") id: Long)
+    @GET("api/friends") suspend fun friends(): FriendListResponse
+    /** 204. 친구가 아니어도 204 */
+    @DELETE("api/friends/{userId}") suspend fun removeFriend(@Path("userId") userId: Long)
+    /** 204 */
+    @POST("api/blocks") suspend fun block(@Body body: BlockCreate)
+    @GET("api/blocks") suspend fun blocks(): BlockListResponse
+    /** 204. 차단한 적 없어도 204 */
+    @DELETE("api/blocks/{userId}") suspend fun unblock(@Path("userId") userId: Long)
+
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)
     suspend fun deleteFcmToken(@Body body: FcmTokenDto)
