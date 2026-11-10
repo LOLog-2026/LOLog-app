@@ -52,6 +52,26 @@ interface LologRepository {
     suspend fun comic(id: Long): ComicDetail
     suspend fun deleteComic(id: Long)
 
+    // 친구·프로필·차단 (LOLog-docs spec/friends.md)
+    /** 처음 부르면 서버가 프로필을 만들어요. 닉네임을 정하기 전에는 friendCode가 null */
+    suspend fun profile(): Profile
+    /** 앞뒤 공백을 잘라 보내요(1~10자) */
+    suspend fun updateNickname(nickname: String): Profile
+    /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
+    suspend fun sendFriendRequest(code: String): FriendRequest
+    /** 최신순 */
+    suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest>
+    suspend fun acceptFriendRequest(id: Long): Friend
+    /** 받은 요청 거절, 보낸 요청 취소 */
+    suspend fun deleteFriendRequest(id: Long)
+    /** 최근에 친구가 된 사람이 위 */
+    suspend fun friends(): List<Friend>
+    suspend fun removeFriend(userId: Long)
+    suspend fun block(userId: Long)
+    /** 최신순 */
+    suspend fun blocks(): List<BlockedUser>
+    suspend fun unblock(userId: Long)
+
     // 기기
     suspend fun registerFcmToken(token: String)
     suspend fun unregisterFcmToken(token: String)

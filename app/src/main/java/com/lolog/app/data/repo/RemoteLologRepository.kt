@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import retrofit2.HttpException
 import java.io.IOException
+import java.util.Locale
 
 /** 실제 서버용 구현. DTO → 앱 모델 변환은 ApiMapper가 해요. */
 class RemoteLologRepository(
@@ -78,6 +79,20 @@ class RemoteLologRepository(
     override suspend fun comics(cursor: String?, size: Int, sort: SortOrder) = call { api.comics(cursor, size, sort.query).toModel() }
     override suspend fun comic(id: Long) = call { api.comic(id).toDetail(id) }
     override suspend fun deleteComic(id: Long) = call { api.deleteComic(id) }
+
+    override suspend fun profile() = call { api.profile().toModel() }
+    override suspend fun updateNickname(nickname: String) = call { api.updateProfile(ProfileUpdateRequest(nickname.trim())).toModel() }
+    override suspend fun sendFriendRequest(code: String) =
+        call { api.sendFriendRequest(FriendRequestCreate(code.trim().uppercase(Locale.ROOT))).toModel() }
+    override suspend fun friendRequests(direction: FriendRequestDirection) =
+        call { api.friendRequests(direction.query).requests.map { it.toModel() } }
+    override suspend fun acceptFriendRequest(id: Long) = call { api.acceptFriendRequest(id).toModel() }
+    override suspend fun deleteFriendRequest(id: Long) = call { api.deleteFriendRequest(id) }
+    override suspend fun friends() = call { api.friends().friends.map { it.toModel() } }
+    override suspend fun removeFriend(userId: Long) = call { api.removeFriend(userId) }
+    override suspend fun block(userId: Long) = call { api.block(BlockCreate(userId)) }
+    override suspend fun blocks() = call { api.blocks().blocks.map { it.toModel() } }
+    override suspend fun unblock(userId: Long) = call { api.unblock(userId) }
 
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
