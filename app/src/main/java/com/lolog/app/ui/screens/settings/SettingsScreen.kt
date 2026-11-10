@@ -146,7 +146,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
         Column(
             Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
-            // 맨 위 Canvas 상자: 연노랑 동그라미 안 편지 아이콘 + 이메일 + 가입 방법
+            // 맨 위 Canvas 상자: 연노랑 동그라미 안 편지 아이콘 + 이메일
             val email = state.me?.email.orEmpty()
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LologColors.Canvas).padding(18.dp),
@@ -156,11 +156,8 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                     Icon(Icons.Outlined.MailOutline, null, tint = LologColors.Laugh, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(14.dp))
-                Column {
-                    Text(email.ifBlank { "불러오는 중…" }, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    // 가입 방법은 /auth/me에 없어서 연결된 소셜 계정으로 짐작해요
-                    Text(if (state.me?.linkedProviders.isNullOrEmpty()) "이메일로 가입" else "소셜 계정 연결됨", fontSize = 12.sp, color = LologColors.Muted)
-                }
+                // 가입 방법은 /auth/me에 없어서 이메일만 보여 줘요
+                Text(email.ifBlank { "불러오는 중…" }, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(22.dp))
