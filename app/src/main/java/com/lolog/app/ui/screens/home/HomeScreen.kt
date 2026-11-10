@@ -48,6 +48,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.lolog.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 
 class HomeViewModel(private val repo: LologRepository) : ViewModel() {
     data class State(val cardCount: String = "-", val comicCount: String = "-", val recent: CardSummary? = null)
@@ -147,7 +150,10 @@ fun HomeScreen(
     ) {
         // 위쪽 줄: 왼쪽 LOLog, 오른쪽 설정 톱니
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("LOLog", style = LologText.brand, modifier = Modifier.padding(vertical = 4.dp))
+            // 로고: 작은 코랄 마크 + LOLog 글자
+            Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(32.dp))
+            Spacer(Modifier.width(8.dp))
+            Image(painterResource(R.drawable.logo_word), contentDescription = "LOLog", modifier = Modifier.height(20.dp))
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onSettings) {
                 Icon(Icons.Outlined.Settings, contentDescription = "설정", tint = LologColors.Muted)
@@ -170,8 +176,8 @@ fun HomeScreen(
         analysis?.let { a -> AnalysisStrip(a, onLibrary = { vm.dismiss(); onLibrary() }, onDismiss = vm::dismiss) }
         val newCards = analysis?.progress?.takeIf { it.status == RecordingStatus.DONE }?.cardCount ?: 0
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat(state.cardCount, "모은 이야기 카드", Modifier.weight(1f).clickable(onClick = onLibrary), plus = newCards)
-            Stat(state.comicCount, "완성된 4컷만화", Modifier.weight(1f))
+            Stat(state.cardCount, "이야기 카드", Modifier.weight(1f).clickable(onClick = onLibrary), plus = newCards)
+            Stat(state.comicCount, "4컷만화", Modifier.weight(1f))
         }
         state.recent?.let { card ->
             Row(verticalAlignment = Alignment.Bottom) {
@@ -211,7 +217,7 @@ private fun AnalysisStrip(a: HomeViewModel.Analysis, onLibrary: () -> Unit, onDi
         )
         p?.status == RecordingStatus.DETECTING -> Strip(
             title = "재밌는 이야기 찾는 중…", body = "보통 30초쯤 걸려요. 그동안 다시 녹음해도 돼요",
-            bg = Color(0xFFF6F8FF), border = LologColors.AccentSoft,
+            bg = Color(0xFFFFFAEB), border = LologColors.AccentSoft,
             lead = { TypingDots(dot = 6.dp) },
         )
         else -> Strip(
@@ -264,11 +270,10 @@ private fun RecordButton(onClick: () -> Unit) {
 
 @Composable
 private fun Stat(value: String, label: String, modifier: Modifier, plus: Int = 0) {
-    Column(modifier.softCard().padding(12.dp)) {
-        Row {
-            Text(value, style = LologText.stat)
-            if (plus > 0) Text("+$plus", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Rec, modifier = Modifier.padding(start = 3.dp))
-        }
-        Text(label, fontSize = 12.sp, color = LologColors.Muted)
+    // 한 줄: 이름은 왼쪽, 숫자(코랄)는 오른쪽. 새 카드 "+n"은 숫자 옆에 그대로
+    Row(modifier.softCard().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(value, style = LologText.stat.copy(fontSize = 30.sp, lineHeight = 34.sp), maxLines = 1)
+        if (plus > 0) Text("+$plus", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Rec, modifier = Modifier.padding(start = 3.dp).align(Alignment.Top))
     }
 }

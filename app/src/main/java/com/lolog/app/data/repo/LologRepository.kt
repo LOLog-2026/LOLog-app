@@ -34,14 +34,15 @@ interface LologRepository {
     suspend fun analyzingRecordingId(): Long?
 
     // 카드
-    suspend fun cards(cursor: String? = null, size: Int = 20): CardPage
+    /** 다음 쪽도 처음과 같은 sort로 불러요. 정렬을 바꾸면 cursor 없이 처음부터 */
+    suspend fun cards(cursor: String? = null, size: Int = 20, sort: SortOrder = SortOrder.NEWEST): CardPage
     suspend fun card(id: Long): CardDetail
     suspend fun updateCard(id: Long, edit: CardEdit): CardDetail
     suspend fun deleteCard(id: Long)
 
     // 만화
     suspend fun requestComic(cardId: Long): ComicAccepted
-    suspend fun comics(cursor: String? = null, size: Int = 20): ComicPage
+    suspend fun comics(cursor: String? = null, size: Int = 20, sort: SortOrder = SortOrder.NEWEST): ComicPage
     suspend fun comic(id: Long): ComicDetail
     suspend fun deleteComic(id: Long)
 

@@ -18,6 +18,7 @@ import androidx.navigation.navArgument
 import com.lolog.app.AppContainer
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
@@ -67,7 +68,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 
 // 아래 탭 3개: 보관함 · 홈(가운데) · 내 만화. 설정은 홈 위쪽 톱니 버튼으로 들어가요
 private val tabs = listOf(
-    Tab(Routes.LIBRARY, "보관함", Icons.Outlined.Style),
+    Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
     Tab(Routes.COMICS, "내 만화", Icons.Outlined.GridView),
 )
@@ -200,7 +201,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 )
             }
             composable(Routes.LIBRARY) {
-                LibraryScreen(onCard = { nav.navigate(Routes.card(it)) }, onRecord = { nav.navigate(Routes.RECORDING) })
+                LibraryScreen(
+                    onCard = { nav.navigate(Routes.card(it)) },
+                    onRecord = { nav.navigate(Routes.RECORDING) },
+                    onBack = { nav.goTab(Routes.HOME) },
+                )
             }
             composable(Routes.CARD, arguments = listOf(navArgument("cardId") { type = NavType.LongType })) { entry ->
                 val id = entry.arguments!!.getLong("cardId")
@@ -228,7 +233,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 )
             }
             composable(Routes.COMICS) {
-                ComicListScreen(onComic = { nav.navigate(Routes.comic(it)) }, onLibrary = { nav.goTab(Routes.LIBRARY) })
+                ComicListScreen(
+                    onComic = { nav.navigate(Routes.comic(it)) },
+                    onBack = { nav.goTab(Routes.HOME) },
+                    onLibrary = { nav.goTab(Routes.LIBRARY) },
+                )
             }
             composable(Routes.COMIC, arguments = listOf(navArgument("comicId") { type = NavType.LongType })) {
                 ComicScreen(

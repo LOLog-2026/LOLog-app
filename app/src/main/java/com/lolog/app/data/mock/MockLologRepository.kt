@@ -15,6 +15,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.OffsetDateTime
 
+/**
+ * 목업 목록 한 쪽 자르기. 저장소는 최신순(id 내림차순)으로 들고 있어서 오래된 순이면 뒤집어요.
+ * cursor는 시작 위치(문자열)이고, 마지막 쪽이면 다음 cursor는 null이에요.
+ */
+internal fun <T> mockPage(newestFirst: List<T>, cursor: String?, size: Int, sort: SortOrder): Pair<List<T>, String?> {
+    val list = if (sort == SortOrder.OLDEST) newestFirst.asReversed() else newestFirst
+    val start = cursor?.toIntOrNull() ?: 0
+    return list.drop(start).take(size) to (start + size).takeIf { it < list.size }?.toString()
+}
+
 /** 목업에서 늘 맞는 가입 인증번호 */
 private const val MOCK_EMAIL_CODE = "123456"
 
@@ -178,12 +188,10 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     }
 
     // ── 카드 ──
-    override suspend fun cards(cursor: String?, size: Int): CardPage = lock.withLock {
+    override suspend fun cards(cursor: String?, size: Int, sort: SortOrder): CardPage = lock.withLock {
         net()
-        val start = cursor?.toIntOrNull() ?: 0
-        val page = cardStore.drop(start).take(size).map { it.toSummary() }
-        val next = (start + size).takeIf { it < cardStore.size }?.toString()
-        CardPage(page, next)
+        val (page, next) = mockPage(cardStore, cursor, size, sort)
+        CardPage(page.map { it.toSummary() }, next)
     }
 
     override suspend fun card(id: Long): CardDetail = lock.withLock {
@@ -304,10 +312,10 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         _push.emit(PushPayload(PushType.COMIC_DONE, comicId = comicId, cardId = comic.cardId))
     }
 
-    override suspend fun comics(cursor: String?, size: Int): ComicPage = lock.withLock {
+    override suspend fun comics(cursor: String?, size: Int, sort: SortOrder): ComicPage = lock.withLock {
         net()
-        val start = cursor?.toIntOrNull() ?: 0
-        val page = comicStore.drop(start).take(size).map { c ->
+        val (items, next) = mockPage(comicStore, cursor, size, sort)
+        val page = items.map { c ->
             ComicSummary(
                 c.id, c.cardId, c.status, c.imageUrl, c.createdAt ?: "",
                 cardStore.firstOrNull { it.id == c.cardId }?.summary ?: deletedCards[c.cardId],
@@ -315,7 +323,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
                 cardDeleted = c.cardId in deletedCards,
             )
         }
-        ComicPage(page, (start + size).takeIf { it < comicStore.size }?.toString())
+        ComicPage(page, next)
     }
 
     override suspend fun comic(id: Long): ComicDetail = lock.withLock {
