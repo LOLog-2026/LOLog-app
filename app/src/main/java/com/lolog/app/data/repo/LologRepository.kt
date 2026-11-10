@@ -26,6 +26,12 @@ interface LologRepository {
     suspend fun withdraw()
     suspend fun me(): Account
     suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider>
+    /** 비밀번호 찾기 인증번호를 메일로 보내 달라고 해요. 가입 여부와 관계없이 성공해요(60초 안에 또 부르면 TOO_MANY_REQUESTS) */
+    suspend fun requestPasswordResetCode(email: String)
+    /** 인증번호로 새 비밀번호를 정해요. 성공해도 토큰은 받지 않아서 다시 로그인해야 해요 */
+    suspend fun resetPassword(email: String, code: String, newPassword: String)
+    /** 로그인한 채로 비밀번호를 바꿔요. 받은 새 토큰으로 저장한 토큰을 바꿔요 */
+    suspend fun changePassword(currentPassword: String, newPassword: String)
 
     // 녹음
     suspend fun uploadRecording(part: RecordingPart): RecordingAccepted

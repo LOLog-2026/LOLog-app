@@ -55,9 +55,25 @@ data class TokenDto(
     val isNewUser: Boolean? = null,
 )
 
-/** MeResponse. linkedProviders는 대문자 GOOGLE·NAVER */
+/**
+ * MeResponse. linkedProviders는 대문자 GOOGLE·NAVER.
+ * hasPassword는 LOLog-docs #45 댓글에서 새로 생긴 필드예요. 서버가 아직 안 보내면 false라서
+ * 설정의 "비밀번호 바꾸기" 줄이 숨어요(일부러 이렇게 둬요)
+ */
 @Serializable
-data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList())
+data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList(), val hasPassword: Boolean = false)
+
+/** PasswordResetCodeRequest. 응답은 늘 204(본문 없음) */
+@Serializable
+data class PasswordResetCodeDto(val email: String)
+
+/** PasswordResetRequest. 응답은 204(본문 없음). code는 6자리 문자열(앞 0 유지) */
+@Serializable
+data class PasswordResetDto(val email: String, val code: String, val newPassword: String)
+
+/** PasswordChangeRequest. 응답은 TokenResponse(새 토큰 한 벌) */
+@Serializable
+data class PasswordChangeDto(val currentPassword: String, val newPassword: String)
 
 /** POST /auth/me/social/{provider} 200 */
 @Serializable
