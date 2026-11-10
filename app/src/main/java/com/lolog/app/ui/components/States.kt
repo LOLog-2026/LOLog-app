@@ -70,6 +70,9 @@ fun errorText(e: Throwable): String {
         ErrorCodes.DUPLICATE_CHARACTER -> "이 그림은 다른 화자에 이미 붙어 있어요"
         ErrorCodes.CHARACTER_NOT_READY -> "이 친구의 캐릭터를 지금은 쓸 수 없어요"
         ErrorCodes.UNKNOWN_CHARACTER -> "이 캐릭터를 찾지 못했어요. 다시 골라 주세요"
+        ErrorCodes.CHARACTER_IN_PROGRESS -> "캐릭터를 그리는 중이에요. 다 되면 다시 만들 수 있어요"
+        ErrorCodes.CHARACTER_LIMIT -> "캐릭터는 하루에 3번까지 만들 수 있어요. 내일 다시 해 주세요"
+        ErrorCodes.PAYLOAD_TOO_LARGE, "HTTP_413" -> "사진이 너무 커요. 다른 사진을 골라 주세요"
         // 서버의 message는 개발자용이라 화면에 그대로 띄우지 않아요(api-dto ErrorResponse)
         else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else "문제가 생겼어요. 잠시 후 다시 시도해 주세요"
     }

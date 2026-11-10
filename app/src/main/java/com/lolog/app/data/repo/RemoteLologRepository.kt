@@ -7,6 +7,9 @@ import com.lolog.app.data.remote.ApiMapper.toDetail
 import com.lolog.app.data.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.Locale
@@ -82,6 +85,11 @@ class RemoteLologRepository(
 
     override suspend fun profile() = call { api.profile().toModel() }
     override suspend fun updateNickname(nickname: String) = call { api.updateProfile(ProfileUpdateRequest(nickname.trim())).toModel() }
+    override suspend fun uploadProfileCharacter(photo: ByteArray) = call {
+        val part = MultipartBody.Part.createFormData("photo", "photo.jpg", photo.toRequestBody("image/jpeg".toMediaType()))
+        api.uploadProfileCharacter(part).toModel()
+    }
+    override suspend fun deleteProfileCharacter() = call { api.deleteProfileCharacter() }
     override suspend fun sendFriendRequest(code: String) =
         call { api.sendFriendRequest(FriendRequestCreate(code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =

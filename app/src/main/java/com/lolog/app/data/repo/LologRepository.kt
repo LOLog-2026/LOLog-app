@@ -57,6 +57,10 @@ interface LologRepository {
     suspend fun profile(): Profile
     /** 앞뒤 공백을 잘라 보내요(1~10자) */
     suspend fun updateNickname(nickname: String): Profile
+    /** 프로필 캐릭터 만들기·다시 만들기. photo는 JPEG 바이트. 202면 PROCESSING (characters.md 3장) */
+    suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter
+    /** 프로필 캐릭터 지우기. 붙여 둔 카드 화자에서도 빠져요 */
+    suspend fun deleteProfileCharacter()
     /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
     suspend fun sendFriendRequest(code: String): FriendRequest
     /** 최신순 */

@@ -177,13 +177,14 @@ object ApiMapper {
 
     // ── 친구·프로필 ──
 
-    // TODO 명세에 내 userId 필요: GET /auth/me·GET /api/me/profile 어디에도 내 회원 ID가 없어서 userId는 null로 둬요.
-    //  null이면 화자 고르기 팝업의 "나"는 그림이 없을 때처럼 동작해요(PROFILE을 보내지 않아요)
+    // userId(내 회원 ID)가 없으면(예전 서버) 화자 고르기 팝업의 "나"는 그림이 없을 때처럼 동작해요(PROFILE을 보내지 않아요)
     fun ProfileResponse.toModel() = Profile(
         nickname?.ifBlank { null }, friendCode?.ifBlank { null },
-        character = character?.let { ProfileCharacter(profileCharacterStatus(it.status), it.thumbnailUrl?.ifBlank { null }, it.updatedAt) },
-        userId = null,
+        character = character?.toModel(),
+        userId = userId?.toString(),
     )
+
+    fun ProfileCharacterDto.toModel() = ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt)
 
     fun DefaultCharacterItem.toModel() = DefaultCharacter(
         id = id, label = label, ageGroup = ageGroup(ageGroup), gender = gender(gender),
