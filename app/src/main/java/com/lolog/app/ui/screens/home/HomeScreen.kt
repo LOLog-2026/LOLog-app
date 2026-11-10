@@ -121,6 +121,8 @@ fun HomeScreen(
     onRecord: () -> Unit,
     onCard: (Long) -> Unit,
     onLibrary: () -> Unit,
+    /** "4컷만화" 숫자 칸을 누르면 내 만화 탭으로 */
+    onComics: () -> Unit,
     onSettings: () -> Unit,
     /** 방금 끝낸 녹음 ID (녹음 화면에서 끝내고 돌아오면 들어와요) */
     finishedRecordingId: Long? = null,
@@ -177,7 +179,7 @@ fun HomeScreen(
         val newCards = analysis?.progress?.takeIf { it.status == RecordingStatus.DONE }?.cardCount ?: 0
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Stat(state.cardCount, "이야기 카드", Modifier.weight(1f).clickable(onClick = onLibrary), plus = newCards)
-            Stat(state.comicCount, "4컷만화", Modifier.weight(1f))
+            Stat(state.comicCount, "4컷만화", Modifier.weight(1f).clickable(onClick = onComics))
         }
         state.recent?.let { card ->
             Row(verticalAlignment = Alignment.Bottom) {
