@@ -257,13 +257,15 @@ fun LoginScreen(
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.done) { if (state.done) onLoggedIn() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
-    // 비밀번호 찾기에서 바꾸고 돌아오면 이메일 칸을 채운 채로 두고 아래 띠로 알려요(FR-AUTH-07)
+    // 비밀번호 찾기에서 바꾸고 돌아오면 이메일 칸을 채운 채로 두고 아래 띠로 알려요(FR-AUTH-07).
+    // 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
     LaunchedEffect(resetEmail) {
         val e = resetEmail ?: return@LaunchedEffect
         email = e
         password = ""
         onResetShown()
-        snackbar.showSnackbar("비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요")
+        scope.launch { snackbar.showSnackbar("비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요") }
     }
 
     // ① 입력 오류: 이메일 형식이 틀리면 칸 아래 빨간 안내. 둘 다 채워야 버튼이 켜져요
@@ -540,7 +542,7 @@ fun PasswordResetScreen(initialEmail: String, onBack: () -> Unit, onDone: (email
 
 /** 비밀번호 규칙 한 줄: 맞으면 파란 체크, 틀리면 빨간 ✕, 아직 입력 전이면 회색 */
 @Composable
-private fun RuleLine(text: String, ok: Boolean, touched: Boolean) {
+internal fun RuleLine(text: String, ok: Boolean, touched: Boolean) {
     val color = when { !touched -> LologColors.Muted; ok -> LologColors.Accent; else -> LologColors.Rec }
     val icon = when { !touched -> Icons.Outlined.RadioButtonUnchecked; ok -> Icons.Outlined.Check; else -> Icons.Outlined.Close }
     Row(verticalAlignment = Alignment.CenterVertically) {
