@@ -35,6 +35,7 @@ import com.lolog.app.data.model.ComicStatus
 import com.lolog.app.data.model.RecordingProgress
 import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.RecordingState
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
@@ -214,6 +215,7 @@ fun HomeScreen(
             Text("눌러서 녹음", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
             Text("최대 3시간 · 1시간마다 자동으로 올려요", fontSize = 11.sp, color = LologColors.Muted)
             SaveAudioCheck(container)
+            AudioUploadLine(container)
         }
         Spacer(Modifier.height(14.dp))
         // 마이크 아래 상태 띠
@@ -327,6 +329,18 @@ private fun SaveAudioCheck(container: com.lolog.app.AppContainer) {
             color = if (busy) LologColors.Muted else LologColors.Ink,
             modifier = Modifier.clickable(enabled = !busy) { checked = !checked; container.saveAudio = checked },
         )
+    }
+}
+
+/** 녹음을 끝낸 뒤 음성 파일을 뒤에서 올리는 동안만 체크 아래 한 줄. 다 올리면 사라져요 */
+@Composable
+private fun AudioUploadLine(container: com.lolog.app.AppContainer) {
+    val upload by container.recorder.audioUpload.collectAsState()
+    val sending = upload as? AudioUpload.Sending ?: return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TypingDots(dot = 5.dp)
+        Spacer(Modifier.width(6.dp))
+        Text("음성 ${sending.seq}번째 파일 올리는 중", fontSize = 11.sp, color = LologColors.Muted)
     }
 }
 

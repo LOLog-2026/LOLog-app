@@ -73,6 +73,8 @@ class RealRecordingController(
     @Volatile private var discarding = false
 
     override val state: StateFlow<RecordingState> = _state.asStateFlow()
+    private val _audioUpload = MutableStateFlow<AudioUpload>(AudioUpload.None)
+    override val audioUpload: StateFlow<AudioUpload> = _audioUpload.asStateFlow()
 
     init {
         // 지난번에 앱이 죽어 남은 글을 마감해서 올린다.
@@ -155,7 +157,7 @@ class RealRecordingController(
         state.first { it !is RecordingState.Recording && it !is RecordingState.Uploading }
         // 올릴 수 있는 음성(Wi-Fi이거나 "지금 올리기")은 한 번 더 올려 본다. 다시 시도는 하지 않는다.
         audioRetryJob?.cancel()
-        audioLock.withLock { audioUploader.uploadPending() }
+        audioLock.withLock { sendAudioFiles(stop = { false }) }
         // 그래도 남은 글·음성은 다음에 로그인한 계정으로 올라가지 않게 지운다(audio.md "로그아웃할 때").
         discardAll()
     }
@@ -280,6 +282,13 @@ class RealRecordingController(
         launchAudioUpload()
     }
 
+    // audioLock을 잡은 채로 부른다. 보내는 동안 화면에 몇 번 파일을 올리는지 알린다.
+    private suspend fun sendAudioFiles(stop: () -> Boolean): AudioUploader.Result = try {
+        audioUploader.uploadPending(stop = stop, onSending = { _audioUpload.value = AudioUpload.Sending(it) })
+    } finally {
+        _audioUpload.value = AudioUpload.None
+    }
+
     private fun launchAudioUpload() {
         scope.launch { uploadAudio() }
     }
@@ -292,7 +301,7 @@ class RealRecordingController(
     private suspend fun uploadAudio() {
         if (discarding || !audioLock.tryLock()) return
         val result = try {
-            audioUploader.uploadPending(stop = { discarding })
+            sendAudioFiles(stop = { discarding })
         } finally {
             audioLock.unlock()
         }

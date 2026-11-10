@@ -90,6 +90,17 @@ class AudioUploaderTest {
     }
 
     @Test
+    fun 보내기_직전마다_파일_번호를_알린다() = runBlocking {
+        recording(files = 2)
+        uploadText(1)
+        val seen = mutableListOf<Int>()
+        failWith[2] = IOException()
+        uploader.uploadPending(onSending = { seen += it })
+        // 실패한 파일도 보내 보기는 했으므로 알린다
+        assertEquals(listOf(1, 2), seen)
+    }
+
+    @Test
     fun Wi_Fi에서_올리기는_Wi_Fi가_될_때까지_둔다() = runBlocking {
         recording(files = 1)
         uploadText(1)

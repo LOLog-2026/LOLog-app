@@ -42,6 +42,7 @@ import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.model.RecordingProgress
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.AudioSave
+import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.Networks
 import com.lolog.app.recording.PartUpload
 import com.lolog.app.recording.RecordingState
@@ -64,6 +65,7 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
     val container = LocalContainer.current
     val recorder = container.recorder
     val state by recorder.state.collectAsState()
+    val audioUpload by recorder.audioUpload.collectAsState()
     val context = LocalContext.current
     var askStop by remember { mutableStateOf(false) }
     var denied by remember { mutableStateOf(false) }
@@ -173,10 +175,14 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
                     }
                 }
             }
-            // 1시간 묶음 올리는 중·올림 표시는 있을 때만 판 아래쪽에
-            if (partUpload is PartUpload.Sending || sentPartNo > 0) {
+            // 1시간 묶음·음성 파일 올리는 중, 묶음 올림 표시는 있을 때만 판 아래쪽에. 글 묶음이 먼저 가므로 둘이 같이 뜨지 않아요
+            val audioSending = audioUpload as? AudioUpload.Sending
+            if (partUpload is PartUpload.Sending || audioSending != null || sentPartNo > 0) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (partUpload is PartUpload.Sending) StatusPill("↑ ${partUpload.partNo}번째 묶음 올리는 중", LologColors.AccentSoft, LologColors.Accent)
+                    when {
+                        partUpload is PartUpload.Sending -> StatusPill("↑ ${partUpload.partNo}번째 묶음 올리는 중", LologColors.AccentSoft, LologColors.Accent)
+                        audioSending != null -> StatusPill("↑ 음성 ${audioSending.seq}번째 파일 올리는 중", LologColors.AccentSoft, LologColors.Accent)
+                    }
                     Spacer(Modifier.weight(1f))
                     if (sentPartNo > 0) Text("${sentPartNo}번째 묶음 올림 ✓", fontSize = 12.sp, color = LologColors.Muted)
                 }

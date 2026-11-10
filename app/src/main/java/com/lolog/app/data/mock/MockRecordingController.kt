@@ -4,6 +4,7 @@ import com.lolog.app.data.model.RecordingPart
 import com.lolog.app.data.model.Sentence
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.AudioSave
+import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.RecordingController
 import com.lolog.app.recording.RecordingState
 import kotlinx.coroutines.CancellationException
@@ -29,6 +30,8 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     override val state: StateFlow<RecordingState> = _state.asStateFlow()
+    private val _audioUpload = MutableStateFlow<AudioUpload>(AudioUpload.None)
+    override val audioUpload: StateFlow<AudioUpload> = _audioUpload.asStateFlow()
 
     private var ticker: Job? = null
     private var uploadJob: Job? = null
@@ -57,7 +60,7 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
 
     @Synchronized
     override fun stop() {
-        if (_state.value !is RecordingState.Recording) return
+        val recording = _state.value as? RecordingState.Recording ?: return
         ticker?.cancel()
         _state.value = RecordingState.Uploading
         uploadJob = scope.launch {
@@ -77,6 +80,18 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
                 throw e
             } catch (e: Exception) {
                 RecordingState.UploadFailed("대화 텍스트를 올리지 못했어요. 인터넷 연결을 확인해 주세요")
+            }
+            // 음성 저장을 켰으면 글 다음에 음성 파일을 올리는 척해요(10분마다 한 파일, 한 파일에 3초). 화면 표시 시험용
+            if (recording.audioSaved && _state.value is RecordingState.Uploaded) {
+                val files = (elapsedSec / 600 + 1).toInt()
+                try {
+                    for (seq in 1..files) {
+                        _audioUpload.value = AudioUpload.Sending(seq)
+                        delay(3_000)
+                    }
+                } finally {
+                    _audioUpload.value = AudioUpload.None
+                }
             }
         }
     }

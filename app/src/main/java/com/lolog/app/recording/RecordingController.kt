@@ -24,6 +24,9 @@ import kotlinx.coroutines.flow.StateFlow
 interface RecordingController {
     val state: StateFlow<RecordingState>
 
+    /** 음성 파일 올리기 상태. 녹음이 끝난 뒤에도 뒤에서 올라가서 state와 따로 알려요 */
+    val audioUpload: StateFlow<AudioUpload>
+
     /** @param audio 음성 저장 설정. 화면이 "음성도 저장" 체크와 모바일 데이터 창 결과로 정해요 */
     fun start(audio: AudioSave = AudioSave.OFF)
     fun stop()
@@ -74,6 +77,14 @@ sealed interface RecordingState {
 
     /** 올리지 못함. message는 화면에 그대로 보여 줘도 되는 문장 */
     data class UploadFailed(val message: String) : RecordingState
+}
+
+/** 음성 파일 올리기 상태(audio.md 3장). 실패·Wi-Fi 대기는 녹음 서비스가 알아서 다시 올리므로 따로 알리지 않아요 */
+sealed interface AudioUpload {
+    data object None : AudioUpload
+
+    /** seq번(1부터) 음성 파일을 올리는 중 */
+    data class Sending(val seq: Int) : AudioUpload
 }
 
 /** 녹음 중 1시간 묶음 업로드 상태 */

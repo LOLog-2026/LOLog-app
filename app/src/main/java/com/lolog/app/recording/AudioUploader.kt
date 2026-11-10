@@ -34,8 +34,9 @@ class AudioUploader(
 
     /**
      * @param stop true를 돌려주면 다음 파일로 넘어가지 않고 멈춘다(로그아웃·탈퇴로 버리는 중).
+     * @param onSending 파일 하나를 보내기 직전에 그 번호로 부른다. 화면의 "올리는 중" 표시에 쓴다.
      */
-    suspend fun uploadPending(stop: () -> Boolean = { false }): Result {
+    suspend fun uploadPending(stop: () -> Boolean = { false }, onSending: (seq: Int) -> Unit = {}): Result {
         val expired = store.deleteExpiredAudio(now())
         if (expired > 0) warn("7일이 지나도 못 올린 음성 파일 ${expired}개를 지웠습니다")
         var uploaded = 0
@@ -48,6 +49,7 @@ class AudioUploader(
             }
             for (file in rec.files) {
                 if (stop()) return Result(uploaded, retryLater = false, waiting = true)
+                onSending(file.seq)
                 when (val outcome = sendOne(recordingId, file)) {
                     Outcome.Sent -> {
                         store.removeAudio(rec.recordingDir, file.seq)
