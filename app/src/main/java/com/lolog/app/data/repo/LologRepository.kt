@@ -72,6 +72,10 @@ interface LologRepository {
     suspend fun blocks(): List<BlockedUser>
     suspend fun unblock(userId: Long)
 
+    // 화자 그림 (LOLog-docs spec/characters.md)
+    /** 기본 화자 24명. 썸네일 주소는 10분마다 바뀌니 캐시는 id 기준으로 해요 */
+    suspend fun defaultCharacters(): List<DefaultCharacter>
+
     // 기기
     suspend fun registerFcmToken(token: String)
     suspend fun unregisterFcmToken(token: String)

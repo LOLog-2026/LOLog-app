@@ -97,6 +97,18 @@ internal fun mockCheckPasswordChange(currentPassword: String, newPassword: Strin
  *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
  *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
  *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
+ *
+ * 화자 그림 규칙(MockCharacters.kt, LOLog-docs spec/characters.md)
+ *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,
+ *    썸네일은 명세 레포의 공개 그림 주소(raw.githubusercontent.com/…/<id>_thumb.webp)
+ *  - 친구 중 서연·민수(K2PH7RTA)는 프로필 캐릭터 있음, 도윤·하은·민수(QW8ZN3EM)는 없음
+ *  - 내 프로필: 캐릭터 없음(시안 15), 내 회원 ID는 "1"
+ *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
+ *  - 카드 고치기(PATCH)에서 그림 붙이기
+ *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
+ *    그림 없는 친구·나의 PROFILE → 409 CHARACTER_NOT_READY
+ *    목록에 없는 기본 id, 친구가 아닌 회원 ID → 400 UNKNOWN_CHARACTER
+ *    성공하면 화자 character에 label(기본은 label, 친구는 닉네임)과 thumbnailUrl을 채워 돌려줘요
  */
 class MockLologRepository(private val tokens: TokenStore) : LologRepository {
 
@@ -280,6 +292,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             }
         }
         patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
+        patch.characters?.keys?.forEach { if (it !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요") }
     }
 
     override suspend fun updateCard(id: Long, patch: CardEdit): CardDetail = lock.withLock {
@@ -289,11 +302,11 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             throw LologException(ErrorCodes.CARD_LOCKED, "만화를 만드는 중이에요")
         }
         validate(card, patch)
-        // 바꾼 것만 왔으니 원래 카드에 덮어써요 (명세 PATCH)
-        val sp = patch.speakers?.associateBy { it.key }.orEmpty()
+        // 바꾼 것만 왔으니 원래 카드에 덮어써요 (명세 PATCH). 이름과 그림은 따로 덮어써요
+        val speakers = MockCharacters.applySpeakers(card.speakers, patch, friendBook.friends(), friendBook.profile())
         val ln = patch.lines?.associateBy { it.id }.orEmpty()
         val updated = card.copy(
-            speakers = card.speakers.map { sp[it.key] ?: it },
+            speakers = speakers,
             lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old },
             place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
         )
@@ -414,6 +427,9 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
     override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
     override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
+
+    // ── 화자 그림 ──
+    override suspend fun defaultCharacters(): List<DefaultCharacter> { net(); return MockCharacters.defaults }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }
