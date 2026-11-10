@@ -41,7 +41,7 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     private fun now() = OffsetDateTime.now().toString()
     private fun fail(code: String, msg: String): Nothing = throw LologException(code, msg)
 
-    /** 내 프로필 캐릭터는 없어요(시안 15). 내 회원 ID는 목업에서만 "1" */
+    /** 내 프로필 캐릭터는 없어요(시안 15). 내 회원 ID(userId)는 MY_USER_ID */
     fun profile() = Profile(nickname, if (nickname != null) MY_CODE else null, character = null, userId = MY_USER_ID.toString())
 
     fun updateNickname(raw: String): Profile {

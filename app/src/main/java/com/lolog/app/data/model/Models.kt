@@ -290,7 +290,7 @@ object FriendRules {
 /**
  * GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null.
  * character는 내 프로필 캐릭터(만든 적이 없으면 null).
- * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID. 명세에 아직 없어서 실서버에서는 null이에요
+ * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID(문자열, docs #56)
  */
 data class Profile(
     val nickname: String? = null,

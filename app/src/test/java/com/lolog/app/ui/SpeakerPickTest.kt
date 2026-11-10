@@ -3,8 +3,15 @@ package com.lolog.app.ui
 import com.lolog.app.data.model.CharacterType
 import com.lolog.app.data.model.Speaker
 import com.lolog.app.data.model.SpeakerCharacter
+import com.lolog.app.data.remote.ApiMapper
+import com.lolog.app.data.remote.ProfileCharacterDto
+import com.lolog.app.data.remote.ProfileResponse
 import com.lolog.app.ui.screens.library.SpeakerPick
 import com.lolog.app.ui.screens.library.editFor
+import com.lolog.app.ui.screens.library.peopleOf
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.lolog.app.ui.screens.library.speakerSavedText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -37,5 +44,24 @@ class SpeakerPickTest {
         assertNull(off.speakers)
         assertEquals(mapOf("A" to null), off.characters)
         assertEquals("그림을 뗐어요", speakerSavedText(off))
+    }
+
+    @Test
+    fun 나를_고르면_내_프로필_userId로_PROFILE을_보낸다() {
+        // docs #56: GET /api/me/profile의 userId(Long)를 CharacterRef id(문자열)로 써요
+        val me = with(ApiMapper) {
+            ProfileResponse(userId = 42, nickname = "지원", character = ProfileCharacterDto("READY", "https://x/me.png", "2026-11-11T10:00:00+09:00")).toModel()
+        }
+        val pick = peopleOf(me, emptyList()).first { it.isMe }.character!!
+        val edit = Speaker("화자1").editFor(SpeakerPick("지원", pick, characterChanged = true))!!
+        val c = with(ApiMapper) { edit.patchBody() }["speakers"]!!.jsonArray.single().jsonObject["character"]!!.jsonObject
+        assertEquals("PROFILE", c["type"]!!.jsonPrimitive.content)
+        assertEquals("42", c["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun userId를_안_주는_서버면_나에게_그림을_붙이지_않는다() {
+        val me = with(ApiMapper) { ProfileResponse(nickname = "지원", character = ProfileCharacterDto("READY", "https://x/me.png")).toModel() }
+        assertNull(peopleOf(me, emptyList()).first { it.isMe }.character)
     }
 }

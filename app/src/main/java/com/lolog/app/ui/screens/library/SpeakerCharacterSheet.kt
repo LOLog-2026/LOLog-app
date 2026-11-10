@@ -125,12 +125,17 @@ class SpeakerCharacterViewModel(private val repo: LologRepository) : ViewModel()
 }
 
 /** 친구 프로필 탭의 한 사람(나 또는 친구) */
-private data class Person(val id: String?, val nickname: String, val thumbnailUrl: String?, val isMe: Boolean) {
-    /** 화자에 붙일 수 있는 그림. 회원 ID를 모르면(실서버의 나) 붙일 수 없어요 */
+internal data class Person(val id: String?, val nickname: String, val thumbnailUrl: String?, val isMe: Boolean) {
+    /** 화자에 붙일 수 있는 그림. 회원 ID를 모르면(userId를 아직 안 주는 서버의 나) 붙일 수 없어요 */
     val character: SpeakerCharacter?
         get() = if (id != null && thumbnailUrl != null) SpeakerCharacter(CharacterType.PROFILE, id, nickname, thumbnailUrl) else null
     val key: String get() = if (isMe) "me" else "friend-$id"
 }
+
+/** 친구 프로필 탭 목록: 맨 앞 "나"(내 회원 ID = 프로필 userId), 그 뒤 친구 전부 */
+internal fun peopleOf(me: Profile?, friends: List<Friend>): List<Person> =
+    listOfNotNull(me?.let { Person(it.userId, it.nickname ?: "나", it.character?.thumbnailUrl, isMe = true) }) +
+        friends.map { Person(it.userId.toString(), it.nickname, it.thumbnailUrl, isMe = false) }
 
 private enum class SheetTab(val label: String) { DEFAULT("기본"), FRIENDS("친구 프로필") }
 
@@ -155,11 +160,7 @@ fun SpeakerCharacterSheet(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val people = remember(data.me, data.friends) {
-        // TODO 명세에 내 userId 필요: 실서버에서는 me.userId가 null이라 "나"에 PROFILE을 붙이지 않아요
-        val me = data.me?.let { Person(it.userId, it.nickname ?: "나", it.character?.thumbnailUrl, isMe = true) }
-        listOfNotNull(me) + data.friends.map { Person(it.userId.toString(), it.nickname, it.thumbnailUrl, isMe = false) }
-    }
+    val people = remember(data.me, data.friends) { peopleOf(data.me, data.friends) }
     // 처음 열 때: 지금 붙은 PROFILE의 사람을 골라 둬요
     LaunchedEffect(people) {
         if (person == null && current?.type == CharacterType.PROFILE) person = people.firstOrNull { it.id == current.id }?.key

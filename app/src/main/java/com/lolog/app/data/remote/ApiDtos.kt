@@ -222,6 +222,8 @@ data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor
 /** ProfileResponse — GET·PATCH /api/me/profile. character는 내 프로필 캐릭터(만든 적이 없으면 null) */
 @Serializable
 data class ProfileResponse(
+    /** 내 회원 ID(docs #56). 화자에 내 프로필 캐릭터를 붙일 때 CharacterRef id(문자열)로 써요. 아직 안 주는 서버면 null */
+    val userId: Long? = null,
     val nickname: String? = null,
     val friendCode: String? = null, // 닉네임을 정하기 전에는 null
     val character: ProfileCharacterDto? = null,
