@@ -3,8 +3,7 @@ package com.lolog.app.data.repo
 import com.lolog.app.data.model.*
 
 /**
- * 친구와 같이 쓰는 방. 명세·서버가 아직 없어서 지금은 목업(MockRooms)만 있어요.
- * 명세가 나오면 실서버 구현을 붙이고, 목업 규칙(RoomRules)도 명세에 맞춰요.
+ * 친구와 같이 쓰는 방(LOLog-docs spec/rooms.md). 실서버는 RemoteRoomRepository, 목업은 MockRooms예요.
  * 실패하면 LologException(code는 RoomErrorCodes)을 던져요.
  */
 interface RoomRepository {

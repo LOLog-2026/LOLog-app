@@ -1,11 +1,11 @@
 package com.lolog.app.data.model
 
 /*
- * 친구와 같이 쓰는 방(시안 20~24). 명세·서버가 아직 없어서 목업(MockRooms)으로만 돌아요.
- * 명세가 나오면 이 모양과 규칙(RoomRules)을 명세에 맞춰 고쳐요.
+ * 친구와 같이 쓰는 방(시안 20~24). 명세는 LOLog-docs spec/rooms.md(초안 docs #57), 서버는 lolog-api #51.
+ * 실서버는 RemoteRoomRepository, 목업은 MockRooms예요. 규칙(RoomRules)은 서버와 같아요.
  */
 
-/** 목업 규칙: 방 인원은 나 포함 2~6명, 방 이름 1~20자, 댓글 1~200자 */
+/** 규칙(서버와 같음): 방 인원은 나 포함 2~6명, 방 이름 1~20자, 댓글 1~200자 */
 object RoomRules {
     const val NAME_MAX = 20
     const val MEMBER_MIN = 2
@@ -13,7 +13,7 @@ object RoomRules {
     const val COMMENT_MAX = 200
 }
 
-/** 방 오류 코드. 명세에 없어서 목업에서만 쓰는 임시 이름이에요 */
+/** 방 오류 코드(rooms.md 오류 코드). ROOM_POST_NOT_MINE는 403, ROOM_POST_EXISTS·ROOM_MEMBER_LIMIT는 409 */
 object RoomErrorCodes {
     const val ROOM_NOT_FOUND = "ROOM_NOT_FOUND"
     const val ROOM_POST_NOT_FOUND = "ROOM_POST_NOT_FOUND"

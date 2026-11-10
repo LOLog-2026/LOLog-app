@@ -8,7 +8,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.lolog.app.BuildConfig
 import com.lolog.app.data.model.CharacterType
 import com.lolog.app.data.model.RoomMember
 import com.lolog.app.data.model.SpeakerCharacter
@@ -20,9 +19,9 @@ import com.lolog.app.ui.theme.LologColors
  * 시안의 얼굴 그림은 자리 표시예요. 멤버의 프로필 캐릭터가 있으면 그 그림, 없으면 이름 첫 글자 동그라미(SpeakerAvatar).
  */
 
-/** 친구 방은 명세·서버가 아직 없어서 목업(USE_MOCK=true)에서만 보여요 */
+/** 친구 방 화면 켜기. 목업과 실서버(lolog-api #51) 모두 켜요 */
 object Features {
-    val ROOMS = BuildConfig.USE_MOCK
+    val ROOMS = true
 }
 
 /** 멤버 그림을 화자 그림 모양으로. 말풍선(ChatBubble)에 넘길 때 써요 */
