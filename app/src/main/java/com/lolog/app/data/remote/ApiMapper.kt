@@ -50,7 +50,7 @@ object ApiMapper {
 
     // ── 인증 ──
 
-    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet())
+    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet(), hasPassword)
     fun providers(raw: List<String>) = raw.mapNotNull(::provider).toSet()
 
     // ── 녹음 ──

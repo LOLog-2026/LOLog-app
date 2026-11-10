@@ -22,6 +22,14 @@ interface AuthApi {
     @GET("auth/me") suspend fun me(): MeDto
     @POST("auth/me/social/{provider}")
     suspend fun linkSocial(@Path("provider") provider: String, @Body body: SocialAuthDto): LinkedProvidersDto
+
+    // 비밀번호 찾기·바꾸기 (FR-AUTH-07, LOLog-docs #45)
+    /** 204 본문 없음. 가입 여부와 관계없이 늘 204 */
+    @POST("auth/password/reset/code") suspend fun requestPasswordResetCode(@Body body: PasswordResetCodeDto)
+    /** 204 본문 없음. 토큰은 주지 않아요 */
+    @POST("auth/password/reset") suspend fun resetPassword(@Body body: PasswordResetDto)
+    /** 다른 기기 로그인은 끊고 이 기기에는 새 토큰 한 벌을 줘요 */
+    @POST("auth/me/password") suspend fun changePassword(@Body body: PasswordChangeDto): TokenDto
 }
 
 /** 메인 백엔드 (/api). Authorization: Bearer <액세스 토큰> 필요 */

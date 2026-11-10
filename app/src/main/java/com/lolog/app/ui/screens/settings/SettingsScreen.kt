@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -120,7 +121,13 @@ class SettingsViewModel(
 // ── 16 설정 · 19 소셜 연결 실패 · 23 탈퇴 ──────────────
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onLoggedOut: () -> Unit,
+    onChangePassword: () -> Unit,
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
+) {
     val container = LocalContainer.current
     val vm = viewModel { SettingsViewModel(container.repository, container.recorder) }
     val state by vm.state.collectAsState()
@@ -135,6 +142,9 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
     LaunchedEffect(Unit) { vm.load() }
     LaunchedEffect(state.loggedOut) { if (state.loggedOut) onLoggedOut() }
     LaunchedEffect(state.toast) { state.toast?.let { snackbar.showSnackbar(it); vm.toastShown() } }
+    // 비밀번호 바꾸기에서 돌아오면 아래 띠로 결과를 알려요. 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(message) { message?.let { onMessageShown(); scope.launch { snackbar.showSnackbar(it) } } }
 
     Scaffold(
         modifier = Modifier.noteLines(),
@@ -177,6 +187,13 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                             else -> SmallPillButton("연결하기", { vm.link(p, signIn) })
                         }
                     }
+                }
+            }
+
+            // 비밀번호가 있는 계정만 보여 줘요. 소셜로만 가입했으면 줄이 아예 없어요(FR-AUTH-07, 시안 12)
+            if (state.me?.hasPassword == true) {
+                Column(Modifier.fillMaxWidth().softCard()) {
+                    SettingsRow(Icons.Outlined.Key, "비밀번호 바꾸기", onClick = onChangePassword)
                 }
             }
 

@@ -57,6 +57,12 @@ class RemoteLologRepository(
         ApiMapper.providers(auth.linkSocial(ApiMapper.providerPath(provider), SocialAuthDto(providerToken)).linkedProviders)
     }
 
+    override suspend fun requestPasswordResetCode(email: String) = call { auth.requestPasswordResetCode(PasswordResetCodeDto(email)) }
+    override suspend fun resetPassword(email: String, code: String, newPassword: String) =
+        call { auth.resetPassword(PasswordResetDto(email, code, newPassword)) }
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        call { save(auth.changePassword(PasswordChangeDto(currentPassword, newPassword))) }
+
     override suspend fun uploadRecording(part: RecordingPart) = call { api.uploadRecording(part.toDto()).toModel() }
     override suspend fun recordingStatus(recordingId: Long) = call { api.recording(recordingId).toModel() }
     override suspend fun analyzingRecordingId(): Long? = call {
