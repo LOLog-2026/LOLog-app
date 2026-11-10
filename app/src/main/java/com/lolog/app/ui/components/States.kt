@@ -72,7 +72,10 @@ fun errorText(e: Throwable): String {
         ErrorCodes.DUPLICATE_CHARACTER -> "이 그림은 다른 화자에 이미 붙어 있어요"
         ErrorCodes.CHARACTER_NOT_READY -> "이 친구의 캐릭터를 지금은 쓸 수 없어요"
         ErrorCodes.UNKNOWN_CHARACTER -> "이 캐릭터를 찾지 못했어요. 다시 골라 주세요"
-        // 친구 방 (명세가 없어서 목업 코드, 문구는 프론트가 정함)
+        ErrorCodes.CHARACTER_IN_PROGRESS -> "캐릭터를 그리는 중이에요. 다 되면 다시 만들 수 있어요"
+        ErrorCodes.CHARACTER_LIMIT -> "캐릭터는 하루에 3번까지 만들 수 있어요. 내일 다시 해 주세요"
+        ErrorCodes.PAYLOAD_TOO_LARGE, "HTTP_413" -> "사진이 너무 커요. 다른 사진을 골라 주세요"
+        // 친구 방 (코드는 rooms.md 오류 코드, 문구는 프론트가 정함)
         RoomErrorCodes.ROOM_POST_EXISTS -> "이미 이 방에 올린 만화예요"
         RoomErrorCodes.ROOM_POST_NOT_MINE -> "올린 사람만 내릴 수 있어요"
         RoomErrorCodes.ROOM_MEMBER_LIMIT -> "나를 포함해 ${RoomRules.MEMBER_MAX}명까지 들어갈 수 있어요"

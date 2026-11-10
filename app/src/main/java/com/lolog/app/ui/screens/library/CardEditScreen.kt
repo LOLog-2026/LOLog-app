@@ -152,7 +152,13 @@ class CardEditViewModel(private val repo: LologRepository, private val id: Long)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBack) {
+fun CardEditScreen(
+    cardId: Long,
+    onBack: () -> Unit,
+    onSaved: () -> Unit = onBack,
+    /** 화자 팝업의 "내 캐릭터 만들기". 고치던 내용은 이 화면에 그대로 남아요 */
+    onMakeCharacter: () -> Unit = {},
+) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { CardEditViewModel(repo, cardId) }
     val state by vm.state.collectAsState()
@@ -248,6 +254,7 @@ fun CardEditScreen(cardId: Long, onBack: () -> Unit, onSaved: () -> Unit = onBac
             data = charState,
             onRetry = { charVm.open() },
             onClose = { vm.applySpeaker(sp.key, it); renaming = null },
+            onMakeMine = onMakeCharacter,
         )
     }
     pickingFor?.let { i ->

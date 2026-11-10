@@ -141,6 +141,8 @@ fun SpeakerCharacterSheet(
     data: SpeakerCharacterViewModel.State,
     onRetry: () -> Unit,
     onClose: (SpeakerPick) -> Unit,
+    /** "내 캐릭터 만들기": 팝업을 닫고(적은 이름은 저장) 내 캐릭터 화면으로 가요 */
+    onMakeMine: () -> Unit = {},
 ) {
     val current = speaker.character
     var name by remember { mutableStateOf(speaker.name.orEmpty()) }
@@ -151,7 +153,7 @@ fun SpeakerCharacterSheet(
     val scope = rememberCoroutineScope()
 
     val people = remember(data.me, data.friends) {
-        // TODO 명세에 내 userId 필요: 실서버에서는 me.userId가 null이라 "나"에 PROFILE을 붙이지 않아요
+        // 내 회원 ID는 GET /api/me/profile의 userId. 예전 서버라 없으면 "나"에 PROFILE을 붙이지 않아요
         val me = data.me?.let { Person(it.userId, it.nickname ?: "나", it.character?.thumbnailUrl, isMe = true) }
         listOfNotNull(me) + data.friends.map { Person(it.userId.toString(), it.nickname, it.thumbnailUrl, isMe = false) }
     }
@@ -201,7 +203,7 @@ fun SpeakerCharacterSheet(
                         defaults = data.defaults, picked = picked, onPickDefault = { picked = it },
                         onChoose = { p -> person = p.key; name = p.nickname.take(TextLimits.SPEAKER_NAME); picked = null },
                         onAttach = ::attach, onKeep = ::keep, attachDefault = { pickedDefault()?.let(::attach) },
-                        onMakeMine = { scope.launch { snackbar.showSnackbar("곧 만들 수 있어요") } },
+                        onMakeMine = { keep(); onMakeMine() },
                         onGoDefault = { tab = SheetTab.DEFAULT },
                     )
                     SheetTab.DEFAULT -> DefaultTab(
