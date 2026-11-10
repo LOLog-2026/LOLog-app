@@ -672,7 +672,7 @@ fun PermissionScreen(onDone: () -> Unit) {
         Text("시작하기 전에", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
         Text("두 가지만 허락해 주세요", fontSize = 16.sp, color = LologColors.Muted)
         Spacer(Modifier.height(8.dp))
-        PermissionItem(Icons.Outlined.Mic, LologColors.RecSoft, "마이크", "필수", "대화를 녹음하면서 폰 안에서 바로 글자로 바꿔요. 음성 파일은 폰 밖으로 나가지 않아요.")
+        PermissionItem(Icons.Outlined.Mic, LologColors.RecSoft, "마이크", "필수", "대화를 녹음하면서 폰 안에서 바로 글자로 바꿔요. 음성 저장을 켜면 다시 듣기에 쓰려고 음성을 보관해요. 카드에 담긴 부분만 남기고 나머지는 7일 뒤에 지워요.")
         PermissionItem(Icons.Outlined.Notifications, LologColors.AccentSoft, "알림", "선택", "새 이야기 카드가 생기거나 4컷만화가 완성되면 알려 드려요.")
         PrivacyNote("대화 텍스트는 외부 AI 서비스로 보내지 않고 LOLog 서버에서만 분석해요.")
         Spacer(Modifier.weight(1f))

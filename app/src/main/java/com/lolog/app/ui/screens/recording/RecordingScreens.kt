@@ -41,6 +41,8 @@ import com.lolog.app.BuildConfig
 import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.model.RecordingProgress
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.recording.AudioSave
+import com.lolog.app.recording.Networks
 import com.lolog.app.recording.PartUpload
 import com.lolog.app.recording.RecordingState
 import com.lolog.app.ui.components.*
@@ -59,21 +61,34 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
-    val recorder = LocalContainer.current.recorder
+    val container = LocalContainer.current
+    val recorder = container.recorder
     val state by recorder.state.collectAsState()
     val context = LocalContext.current
     var askStop by remember { mutableStateOf(false) }
     var denied by remember { mutableStateOf(false) }
+    var askNetwork by remember { mutableStateOf(false) }
+
+    // 홈의 "음성도 저장" 체크로 정해요(audio.md 1장 표).
+    // 꺼짐 → 저장 안 함, 켜짐 + Wi-Fi → 저장하고 Wi-Fi에서 올림(녹음 중 모바일 데이터로 바뀌면 Wi-Fi가 될 때까지 둠),
+    // 켜짐 + 모바일 데이터 → 창을 띄워 "지금 올리기"/"Wi-Fi에서 올리기"를 고르게 해요(녹음을 시작할 때만, 매번)
+    fun begin() {
+        when {
+            !container.saveAudio -> recorder.start(AudioSave.OFF)
+            Networks.onMobileData(context) -> askNetwork = true
+            else -> recorder.start(AudioSave.WIFI_ONLY)
+        }
+    }
 
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) recorder.start() else denied = true
+        if (ok) begin() else denied = true
     }
     // 들어왔을 때의 상태. 지난 녹음의 Uploaded·UploadFailed가 남아 있으면 새 녹음을 시작해요
     val entered = remember { recorder.state.value }
     LaunchedEffect(Unit) {
         if (entered !is RecordingState.Recording && entered !is RecordingState.Uploading) {
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            if (granted) recorder.start() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            if (granted) begin() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
     // 약속: "업로드 완료"를 받으면 그 녹음 ID로 분석 중 화면
@@ -99,6 +114,9 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
     LaunchedEffect(s) { if (s is RecordingState.Recording) lastElapsed = s.elapsedSec }
     val elapsedSec = (s as? RecordingState.Recording)?.elapsedSec ?: lastElapsed
     val partUpload = (s as? RecordingState.Recording)?.partUpload ?: PartUpload.None
+    // 녹음이 끝나 Uploading이 되어도 이 녹음의 음성 저장 여부로 아래 작은 글을 보여 줘요
+    var audioSaved by remember { mutableStateOf(container.saveAudio) }
+    LaunchedEffect(s) { if (s is RecordingState.Recording) audioSaved = s.audioSaved }
 
     // 1시간 묶음을 다 올리면(Sending → None) 위에 작은 띠를 4초 동안
     var sentPartNo by remember { mutableIntStateOf(0) }
@@ -168,7 +186,11 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Lock, null, tint = LologColors.Muted, modifier = Modifier.size(13.dp))
             Spacer(Modifier.width(4.dp))
-            Text("말은 폰 안에서만 글자로 바꿔요. 글자만 올라가요.", fontSize = 11.sp, color = LologColors.Muted)
+            // 문구는 audio.md 1장 "안내 문구" 표 그대로
+            Text(
+                if (audioSaved) "카드에 담긴 음성만 남고, 나머지는 7일 뒤에 지워져요" else "음성 파일은 올리지 않아요",
+                fontSize = 11.sp, color = LologColors.Muted,
+            )
         }
         Spacer(Modifier.height(12.dp))
         if (s is RecordingState.UploadFailed) {
@@ -184,6 +206,18 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
                 leading = { Icon(Icons.Default.Stop, null) },
             )
         }
+    }
+
+    if (askNetwork) {
+        // 문구·버튼은 audio.md 1장 "모바일 데이터 창" 그대로. 창 밖을 눌러 닫으면 데이터를 쓰지 않는 "Wi-Fi에서 올리기"로 봐요
+        LologDialog(
+            title = "모바일 데이터를 쓰고 있어요.",
+            body = "녹음한 음성을 지금 올릴까요, Wi-Fi에 연결되면 올릴까요?",
+            confirmText = "지금 올리기",
+            dismissText = "Wi-Fi에서 올리기",
+            onConfirm = { askNetwork = false; recorder.start(AudioSave.ANY_NETWORK) },
+            onDismiss = { askNetwork = false; recorder.start(AudioSave.WIFI_ONLY) },
+        )
     }
 
     if (askStop) {

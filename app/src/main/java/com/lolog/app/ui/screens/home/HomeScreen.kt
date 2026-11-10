@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
@@ -33,6 +35,7 @@ import com.lolog.app.data.model.ComicStatus
 import com.lolog.app.data.model.RecordingProgress
 import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.recording.RecordingState
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -151,7 +154,8 @@ fun HomeScreen(
     finishedRecordingId: Long? = null,
     onFinishedShown: () -> Unit = {},
 ) {
-    val repo = LocalContainer.current.repository
+    val container = LocalContainer.current
+    val repo = container.repository
     val vm = viewModel { HomeViewModel(repo) }
     val state by vm.state.collectAsState()
     val analysis by vm.analysis.collectAsState()
@@ -209,6 +213,7 @@ fun HomeScreen(
             Spacer(Modifier.height(10.dp))
             Text("눌러서 녹음", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
             Text("최대 3시간 · 1시간마다 자동으로 올려요", fontSize = 11.sp, color = LologColors.Muted)
+            SaveAudioCheck(container)
         }
         Spacer(Modifier.height(14.dp))
         // 마이크 아래 상태 띠
@@ -298,6 +303,30 @@ private fun Strip(
             Text(body, fontSize = 11.sp, color = LologColors.Muted)
         }
         if (action != null) Text(action, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted)
+    }
+}
+
+/**
+ * "음성도 저장" 체크(audio.md 1장). 기본은 꺼짐, 한 번 고른 값은 폰이 기억해요.
+ * 녹음 중(올리는 중 포함)에는 바꿀 수 없어요. 녹음 화면이 시작할 때 이 값을 읽어요
+ */
+@Composable
+private fun SaveAudioCheck(container: com.lolog.app.AppContainer) {
+    var checked by remember { mutableStateOf(container.saveAudio) }
+    val recorderState by container.recorder.state.collectAsState()
+    val busy = recorderState is RecordingState.Recording || recorderState is RecordingState.Uploading
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { checked = it; container.saveAudio = it },
+            enabled = !busy,
+            colors = CheckboxDefaults.colors(checkedColor = LologColors.Accent),
+        )
+        Text(
+            "음성도 저장", fontSize = 12.5.sp, fontWeight = FontWeight.Bold,
+            color = if (busy) LologColors.Muted else LologColors.Ink,
+            modifier = Modifier.clickable(enabled = !busy) { checked = !checked; container.saveAudio = checked },
+        )
     }
 }
 
