@@ -39,7 +39,7 @@ val LologTypography = Typography(
 )
 
 object LologText {
-    val memo = TextStyle(fontFamily = PenScript, fontSize = 20.sp, lineHeight = 20.sp, color = LologColors.Accent)
+    val memo = TextStyle(fontFamily = PenScript, fontSize = 20.sp, lineHeight = 20.sp, color = LologColors.Pen)
     val timer = TextStyle(fontFamily = Pretendard, fontWeight = FontWeight.SemiBold, fontSize = 40.sp, letterSpacing = (-1).sp)
     val stat = TextStyle(fontFamily = Pretendard, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, lineHeight = 29.sp, color = LologColors.Accent)
     val brand = TextStyle(fontFamily = Pretendard, fontWeight = FontWeight.Black, fontSize = 24.sp, letterSpacing = (-1).sp, color = LologColors.Accent)

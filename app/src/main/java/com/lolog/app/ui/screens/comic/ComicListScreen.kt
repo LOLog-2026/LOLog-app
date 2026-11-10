@@ -1,5 +1,6 @@
 package com.lolog.app.ui.screens.comic
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.ComicStage
 import com.lolog.app.data.model.ComicSummary
+import com.lolog.app.data.model.SortOrder
 import com.lolog.app.data.model.inProgress
 import com.lolog.app.data.model.stage
 import com.lolog.app.data.repo.LologException
@@ -50,18 +52,22 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
         val error: String? = null,
         val toast: String? = null,
         val openComicId: Long? = null,
+        /** 앱을 다시 켜면 최신순으로 돌아가요 */
+        val sort: SortOrder = SortOrder.NEWEST,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    /** GET /api/comics?size=20 */
+    /** GET /api/comics?size=20(&sort=oldest) */
     fun refresh() = viewModelScope.launch {
+        val sort = _state.value.sort
         try {
-            val p = repo.comics(null, 20)
-            _state.update { it.copy(comics = p.comics, nextCursor = p.nextCursor, loading = false, error = null) }
+            val p = repo.comics(null, 20, sort)
+            // 받는 사이에 정렬을 바꿨으면 버려요
+            _state.update { if (it.sort != sort) it else it.copy(comics = p.comics, nextCursor = p.nextCursor, loading = false, error = null) }
         } catch (e: LologException) {
-            _state.update { it.copy(loading = false, error = errorText(e)) }
+            _state.update { if (it.sort != sort) it else it.copy(loading = false, error = errorText(e)) }
         }
     }
 
@@ -71,10 +77,18 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
         if (st.loadingMore) return // 중복 요청 막기
         _state.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
-            runCatching { repo.comics(cursor, 20) }
-                .onSuccess { p -> _state.update { it.copy(comics = it.comics + p.comics, nextCursor = p.nextCursor, loadingMore = false) } }
-                .onFailure { _state.update { it.copy(loadingMore = false) } }
+            // 다음 쪽도 처음과 같은 sort로
+            runCatching { repo.comics(cursor, 20, st.sort) }
+                .onSuccess { p -> _state.update { if (it.sort != st.sort) it else it.copy(comics = it.comics + p.comics, nextCursor = p.nextCursor, loadingMore = false) } }
+                .onFailure { _state.update { if (it.sort != st.sort) it else it.copy(loadingMore = false) } }
         }
+    }
+
+    /** 정렬을 바꾸면 cursor·목록을 비우고 처음부터 다시 불러요 (명세) */
+    fun setSort(sort: SortOrder) {
+        if (sort == _state.value.sort) return
+        _state.update { it.copy(sort = sort, comics = emptyList(), nextCursor = null, loading = true, loadingMore = false, error = null) }
+        refresh()
     }
 
     /** 실패한 만화 "다시 시도" = 같은 카드로 POST /api/cards/{id}/comics 다시 */
@@ -102,7 +116,7 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
 // ── 15 내 만화 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
 
 @Composable
-fun ComicListScreen(onComic: (Long) -> Unit, onLibrary: () -> Unit = {}) {
+fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -> Unit = {}) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { ComicListViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -111,44 +125,55 @@ fun ComicListScreen(onComic: (Long) -> Unit, onLibrary: () -> Unit = {}) {
         // 그리는 중인 게 있으면 가끔 새로 고침
         while (true) {
             vm.refresh().join()
-            if (vm.state.value.comics.none { it.status.inProgress }) break
+            // 정렬을 바꿔 다시 받는 중이면 아직 멈추지 않아요
+            val st = vm.state.value
+            if (!st.loading && st.comics.none { it.status.inProgress }) break
             delay(5_000)
         }
     }
     LaunchedEffect(state.openComicId) { state.openComicId?.let { vm.consumed(); onComic(it) } }
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }
+    // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
+    BackHandler(onBack = onBack)
 
-    val grid = rememberLazyGridState()
+    // 정렬을 바꾸면 맨 위부터 보여 줘요
+    val grid = key(state.sort) { rememberLazyGridState() }
     val last by remember { derivedStateOf { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 } }
     LaunchedEffect(last, state.comics.size) { if (last >= state.comics.size - 4) vm.loadMore() }
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().noteLines()) {
-            LologTopBar("내 만화")
-            when {
-                state.loading -> SkeletonList(count = 4)
-                state.error != null && state.comics.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
-                state.comics.isEmpty() -> EmptyState(
-                    icon = Icons.Outlined.GridView,
-                    title = "아직 만화가 없어요",
-                    body = "보관함에서 카드를 골라 4컷만화로 만들어 보세요",
-                    memo = "카드 하나면 충분해요 ✎",
-                    buttonText = "보관함 가기",
-                    onButton = onLibrary,
-                    primary = false,
-                )
-                // 최신순, 20개씩 (cursor)
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    state = grid,
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(state.comics, key = { it.id }) { c -> ComicTile(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed) }
-                    when {
-                        state.loadingMore -> item(span = { GridItemSpan(2) }) { LoadMoreDots() }
-                        state.nextCursor == null -> item(span = { GridItemSpan(2) }) { ListEnd() }
+        Column(Modifier.fillMaxSize()) {
+            // 위 칸: 흰 바탕 제목 줄
+            ListHeader {
+                LologTopBar("내 만화", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
+            }
+            // 아래 칸: 연한 회색, 노트 줄 없음
+            Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
+                when {
+                    state.loading -> SkeletonList(count = 4)
+                    state.error != null && state.comics.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
+                    state.comics.isEmpty() -> EmptyState(
+                        icon = Icons.Outlined.GridView,
+                        title = "아직 만화가 없어요",
+                        body = "${LIBRARY_NAME}에서 카드를 골라 4컷만화로 만들어 보세요",
+                        memo = "카드 하나면 충분해요 ✎",
+                        buttonText = "$LIBRARY_NAME 가기",
+                        onButton = onLibrary,
+                        primary = false,
+                    )
+                    // 고른 정렬로 20개씩 (cursor)
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        state = grid,
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(state.comics, key = { it.id }) { c -> ComicTile(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed) }
+                        when {
+                            state.loadingMore -> item(span = { GridItemSpan(2) }) { LoadMoreDots() }
+                            state.nextCursor == null -> item(span = { GridItemSpan(2) }) { ListEnd() }
+                        }
                     }
                 }
             }

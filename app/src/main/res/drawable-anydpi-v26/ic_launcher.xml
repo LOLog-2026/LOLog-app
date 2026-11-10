@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 아이콘(안드로이드 8 이상은 이 파일을 써요. 매니페스트는 그대로 @drawable/ic_launcher): 크림색 바탕 + 코랄 로고 마크(파란 선). 폰마다 동그라미·둥근 네모로 잘려요 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_bg" />
+    <foreground android:drawable="@drawable/ic_launcher_fg" />
+</adaptive-icon>

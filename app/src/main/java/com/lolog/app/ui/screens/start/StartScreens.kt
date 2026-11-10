@@ -68,6 +68,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
+import com.lolog.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 
 // ── 01 스플래시: SplashScreen.kt (3D 얼굴이 떠오르는 첫 화면) ──
 
@@ -248,7 +251,11 @@ fun LoginScreen(onLoggedIn: () -> Unit, onSignup: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.height(24.dp))
-            Text("LOLog", fontSize = 34.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.5).sp, color = LologColors.Accent)
+            // 로고: 코랄 마크 + LOLog 글자
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(52.dp))
+                Image(painterResource(R.drawable.logo_word), contentDescription = "LOLog", modifier = Modifier.height(30.dp))
+            }
             Text(
                 buildAnnotatedString {
                     append("오늘 나눈 ")

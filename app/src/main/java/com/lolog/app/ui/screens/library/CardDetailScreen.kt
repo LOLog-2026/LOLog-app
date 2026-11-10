@@ -145,7 +145,7 @@ fun CardDetailScreen(
     }
     // 카드 고치기에서 저장하고 돌아오면
     LaunchedEffect(savedJustNow) {
-        if (savedJustNow) { onSavedShown(); snackbar.showSnackbar("저장했어요. 보관함에도 바로 반영됐어요") }
+        if (savedJustNow) { onSavedShown(); snackbar.showSnackbar("저장했어요. ${LIBRARY_NAME}에도 바로 반영됐어요") }
     }
 
     val card = state.card
