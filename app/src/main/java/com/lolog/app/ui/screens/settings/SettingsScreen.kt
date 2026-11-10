@@ -36,7 +36,6 @@ import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.RecordingController
 import com.lolog.app.recording.RecordingState
-import kotlinx.coroutines.flow.first
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.social.SocialSignIn
@@ -99,11 +98,9 @@ class SettingsViewModel(
     /** POST /auth/logout + DELETE /api/devices/fcm-token */
     fun logout() = viewModelScope.launch {
         _state.update { it.copy(busy = true) }
-        // 녹음 중이면 마감해 올린 뒤 로그아웃해요(FR-AUTH-04)
-        recorder.stop()
-        recorder.state.first { it !is RecordingState.Recording && it !is RecordingState.Uploading }
-        // 그래도 못 올린 글은 다음에 로그인한 계정으로 올라가지 않게 토큰을 지우기 전에 버려요
-        recorder.discardAll()
+        // 녹음 중이면 마감해 글을 올리고, 올릴 수 있는 음성도 올린 뒤 로그아웃해요(FR-AUTH-04, audio.md "로그아웃할 때").
+        // 그래도 못 올린 글·음성은 다음에 로그인한 계정으로 올라가지 않게 토큰을 지우기 전에 녹음 서비스가 지워요
+        recorder.prepareLogout()
         repo.logout()
         _state.update { it.copy(busy = false, loggedOut = true) }
     }
@@ -113,7 +110,7 @@ class SettingsViewModel(
         _state.update { it.copy(busy = true) }
         try {
             repo.withdraw()
-            // 진행 중인 녹음은 올리지 않고 버려요(FR-AUTH-05)
+            // 진행 중인 녹음과 폰에 남은 글·음성은 올리지 않고 버려요(FR-AUTH-05, audio.md 3장)
             recorder.discardAll()
             _state.update { it.copy(busy = false, loggedOut = true) }
         }
@@ -143,7 +140,10 @@ fun SettingsScreen(
     val snackbar = remember { SnackbarHostState() }
     var askLogout by remember { mutableStateOf(false) }
     val recorderState by container.recorder.state.collectAsState()
-    val recording = recorderState is RecordingState.Recording
+    val recording = recorderState as? RecordingState.Recording
+    // 녹음 중이 아닐 때 폰에 못 올린 글·음성이 남았는지. 로그아웃 창을 열 때 확인해요
+    var unsent by remember { mutableStateOf(false) }
+    LaunchedEffect(askLogout) { if (askLogout) unsent = container.recorder.hasUnsent() }
     var askWithdraw by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.load() }
@@ -223,10 +223,12 @@ fun SettingsScreen(
     if (askLogout) {
         LologDialog(
             title = "로그아웃할까요?",
-            body = if (recording) {
-                "녹음 중이에요. 로그아웃하면 녹음이 멈추고, 지금까지 녹음한 내용은 올린 뒤 로그아웃돼요"
-            } else {
-                "이 폰에서는 알림이 오지 않아요. 카드와 만화는 그대로 남아 있어요."
+            // 녹음 중·남은 녹음 문구는 audio.md "로그아웃할 때" 표 그대로
+            body = when {
+                recording?.audioSaved == true -> "녹음 중이에요. 로그아웃하면 녹음이 멈춰요. 글은 올리고, 올리지 못한 음성은 지워져요."
+                recording != null -> "녹음 중이에요. 로그아웃하면 녹음이 멈추고, 지금까지 녹음한 내용은 올린 뒤 로그아웃돼요"
+                unsent -> "아직 올리지 못한 녹음이 있어요. 로그아웃하면 지워져요."
+                else -> "이 폰에서는 알림이 오지 않아요. 카드와 만화는 그대로 남아 있어요."
             },
             confirmText = "로그아웃",
             loading = state.busy,

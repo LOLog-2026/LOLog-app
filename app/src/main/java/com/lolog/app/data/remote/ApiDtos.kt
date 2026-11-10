@@ -96,6 +96,8 @@ data class UploadRecordingRequest(
     /** 명세는 Int(0~86,400). 녹음 서비스가 Long으로 계산해서 Long으로 둠(JSON은 같음) */
     val durationSec: Long,
     val sentences: List<Sentence>,
+    /** 이 녹음에서 음성 저장을 켰는지. 서버는 첫 묶음 값만 저장해요. 묶음마다 같은 값을 보내요(명세 audio.md 6장) */
+    val audioSaved: Boolean = false,
 )
 
 /** 명세 이름 RecordingUploadResponse (202). 녹음 서비스(지원)가 쓰는 이름에 맞춤 */
