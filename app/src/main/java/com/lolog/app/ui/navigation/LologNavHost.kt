@@ -32,6 +32,7 @@ import com.lolog.app.ui.screens.recording.AnalyzingScreen
 import com.lolog.app.ui.screens.recording.RecordingScreen
 import com.lolog.app.ui.screens.settings.SettingsScreen
 import com.lolog.app.ui.screens.start.LoginScreen
+import com.lolog.app.ui.screens.start.PasswordResetScreen
 import com.lolog.app.ui.screens.start.PermissionScreen
 import com.lolog.app.ui.screens.start.SignupScreen
 import com.lolog.app.ui.screens.start.SplashScreen
@@ -42,11 +43,16 @@ val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContaine
 private const val CARD_SAVED = "cardSaved"
 /** 녹음을 끝내고 홈으로 돌아갈 때 넘기는 녹음 번호 */
 private const val FINISHED_RECORDING = "finishedRecording"
+/** 로그인 → 비밀번호 찾기로 넘기는 이메일(찾기 화면 이메일 칸을 미리 채워요) */
+private const val RESET_EMAIL_INPUT = "resetEmailInput"
+/** 비밀번호 찾기에서 바꾸고 로그인으로 돌아갈 때 넘기는 이메일 */
+private const val PASSWORD_RESET_DONE = "passwordResetDone"
 
 object Routes {
     const val SPLASH = "splash"
     const val LOGIN = "login"
     const val SIGNUP = "signup"
+    const val PASSWORD_RESET = "passwordReset"
     const val PERMISSION = "permission"
     const val HOME = "home"
     const val LIBRARY = "library"
@@ -154,10 +160,28 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     )
                 })
             }
-            composable(Routes.LOGIN) {
+            composable(Routes.LOGIN) { entry ->
+                val resetEmail by entry.savedStateHandle.getStateFlow<String?>(PASSWORD_RESET_DONE, null).collectAsState()
                 LoginScreen(
                     onLoggedIn = { nav.resetTo(if (container.permissionAsked) Routes.HOME else Routes.PERMISSION) },
                     onSignup = { nav.navigate(Routes.SIGNUP) },
+                    onFindPassword = { email ->
+                        entry.savedStateHandle[RESET_EMAIL_INPUT] = email
+                        nav.navigate(Routes.PASSWORD_RESET) { launchSingleTop = true }
+                    },
+                    resetEmail = resetEmail,
+                    onResetShown = { entry.savedStateHandle[PASSWORD_RESET_DONE] = null },
+                )
+            }
+            composable(Routes.PASSWORD_RESET) {
+                val login = nav.previousBackStackEntry
+                PasswordResetScreen(
+                    initialEmail = remember { login?.savedStateHandle?.get<String>(RESET_EMAIL_INPUT).orEmpty() },
+                    onBack = { nav.popBackStack() },
+                    onDone = { email ->
+                        login?.savedStateHandle?.set(PASSWORD_RESET_DONE, email)
+                        nav.popBackStack()
+                    },
                 )
             }
             composable(Routes.SIGNUP) {
