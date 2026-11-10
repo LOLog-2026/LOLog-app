@@ -40,3 +40,7 @@ internal fun FriendAvatar(thumbnailUrl: String?, size: Dp = 44.dp) {
     }
 }
 
+
+/** 친구 코드에 넣을 수 있는 글자만 남겨요: 영문·숫자, 소문자는 대문자로, 8자까지 */
+internal fun cleanFriendCode(raw: String, max: Int): String =
+    raw.filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }.uppercase().take(max)

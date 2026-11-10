@@ -25,6 +25,8 @@ import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
+import com.lolog.app.ui.screens.friends.AddFriendScreen
+import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
@@ -67,6 +69,8 @@ object Routes {
     const val LIBRARY = "library"
     const val COMICS = "comics"
     const val FRIENDS = "friends"
+    const val ADD_FRIEND = "friends/add"
+    const val FRIEND_REQUESTS = "friends/requests"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val RECORDING = "recording"
@@ -301,8 +305,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 val highlight by entry.savedStateHandle.getStateFlow(FRIENDS_HIGHLIGHT, false).collectAsState()
                 FriendsScreen(
                     onBack = { nav.goTab(Routes.HOME) },
-                    onAddFriend = {},
-                    onRequests = {},
+                    onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
+                    onRequests = { nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true } },
                     onChangeNickname = {},
                     message = message,
                     highlightTop = highlight,
@@ -311,6 +315,21 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         entry.savedStateHandle[FRIENDS_HIGHLIGHT] = false
                     },
                 )
+            }
+            composable(Routes.ADD_FRIEND) {
+                AddFriendScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { message, becameFriends ->
+                        nav.previousBackStackEntry?.savedStateHandle?.let {
+                            it[FRIENDS_MESSAGE] = message
+                            it[FRIENDS_HIGHLIGHT] = becameFriends
+                        }
+                        nav.popBackStack()
+                    },
+                )
+            }
+            composable(Routes.FRIEND_REQUESTS) {
+                FriendRequestsScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.SETTINGS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(SETTINGS_MESSAGE, null).collectAsState()
