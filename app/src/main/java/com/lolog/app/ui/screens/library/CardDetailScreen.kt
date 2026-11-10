@@ -10,6 +10,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -359,37 +363,29 @@ fun LineBubble(card: CardDetail, line: Line, modifier: Modifier = Modifier, cont
     ChatBubble(card.speakers.displayName(line.speaker), idx, line.text, left = idx % 2 == 0, modifier = modifier, content = content)
 }
 
-/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받아요 */
-@OptIn(ExperimentalMaterial3Api::class)
+/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받고, 남은 횟수를 보여 줘요 */
 @Composable
 private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LologColors.Paper) {
+    LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                KindChip(card.kind)
-                Text(card.summary, fontSize = 14.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
             Text(
-                "세로 4칸으로 그리고, 칸마다 말풍선에 대사를 넣어요. 보통 1~2분 걸리고, 완성되면 알림을 보내 드려요.",
-                fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp,
+                "세로 4칸으로 그려요. 보통 몇 분 걸리고, 다 되면 알림으로 알려 드려요.",
+                fontSize = 13.5.sp, color = LologColors.Muted, lineHeight = 20.sp,
             )
-            Column(Modifier.fillMaxWidth().background(LologColors.Canvas, LologShape.md).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                InfoRow("등장인물", card.speakers.displayNames().joinToString(", "))
-                InfoRow("장소", card.place ?: "없음")
-                InfoRow("대사", "${card.lines.size}개")
-                InfoRow("남은 횟수", "${card.remaining}번 (실패는 안 셈)")
-            }
+            Text(
+                buildAnnotatedString {
+                    append("이 카드로 ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold)) { append("${card.remaining}번") }
+                    append(" 그릴 수 있어요 (실패는 안 세요)")
+                },
+                fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LologColors.AccentSoft).padding(horizontal = 14.dp, vertical = 12.dp),
+            )
+            Spacer(Modifier.height(2.dp))
             PrimaryButton("그려 주세요", onConfirm, loading = busy)
             GhostButton("취소", onDismiss)
         }
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row {
-        Text(label, fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.width(96.dp))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
