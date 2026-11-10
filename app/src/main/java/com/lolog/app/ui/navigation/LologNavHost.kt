@@ -28,9 +28,13 @@ import com.lolog.app.ui.screens.comic.ComicScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
 import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
+import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
+import com.lolog.app.ui.screens.rooms.Features
+import com.lolog.app.ui.screens.rooms.RoomCreateScreen
+import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
@@ -74,6 +78,7 @@ object Routes {
     const val ADD_FRIEND = "friends/add"
     const val FRIEND_REQUESTS = "friends/requests"
     const val NICKNAME = "nickname"
+    const val PROFILE_CHARACTER = "profile/character"
     const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
@@ -82,11 +87,15 @@ object Routes {
     const val CARD = "card/{cardId}"
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
+    /** 친구 방(목업에서만) */
+    const val ROOM = "room/{id}"
+    const val ROOM_CREATE = "rooms/create"
 
     fun analyzing(id: Long) = "analyzing/$id"
     fun card(id: Long) = "card/$id"
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
+    fun room(id: Long) = "room/$id"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -151,6 +160,9 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             PushType.COMIC_DONE -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
             // 실패 → 그 만화 화면. "만들지 못했어요" 안내와 "다시 시도" 버튼이 거기 있어요
             PushType.COMIC_FAILED -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
+            // 내 캐릭터 완성·실패 → 내 캐릭터 화면(api-dto 푸시 표: 프로필 새로고침)
+            PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED ->
+                nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
         }
         onPushHandled()
     }
@@ -275,6 +287,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onComic = { comicId -> nav.navigate(Routes.comic(comicId)) },
                     onDeleted = { nav.popBackStack() },
                     onNotFound = { nav.goTab(Routes.LIBRARY) },
+                    onMakeCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                 )
             }
             composable(Routes.CARD_EDIT, arguments = listOf(navArgument("cardId") { type = NavType.LongType })) {
@@ -285,6 +298,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         nav.previousBackStackEntry?.savedStateHandle?.set(CARD_SAVED, true)
                         nav.popBackStack()
                     },
+                    onMakeCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                 )
             }
             composable(Routes.COMICS) {
@@ -312,13 +326,33 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
                     onRequests = { nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true } },
                     onChangeNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    onMyCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                     message = message,
                     highlightTop = highlight,
                     onMessageShown = {
                         entry.savedStateHandle[FRIENDS_MESSAGE] = null
                         entry.savedStateHandle[FRIENDS_HIGHLIGHT] = false
                     },
+                    onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
+                    onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
                 )
+            }
+            if (Features.ROOMS) {
+                composable(Routes.ROOM_CREATE) {
+                    RoomCreateScreen(
+                        onBack = { nav.popBackStack() },
+                        // 만들면 그 방으로. 뒤로 가면 방 만들기 대신 방 목록으로
+                        onCreated = { id -> nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } } },
+                        onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
+                    )
+                }
+                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                    RoomScreen(
+                        roomId = it.arguments!!.getLong("id"),
+                        onBack = { nav.popBackStack() },
+                        onLeft = { nav.popBackStack() },
+                    )
+                }
             }
             composable(Routes.ADD_FRIEND) {
                 AddFriendScreen(
@@ -346,6 +380,9 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
+            }
+            composable(Routes.PROFILE_CHARACTER) {
+                ProfileCharacterScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.NICKNAME) {
                 NicknameScreen(

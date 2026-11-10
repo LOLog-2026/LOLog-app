@@ -4,8 +4,11 @@ import android.content.Context
 import com.lolog.app.data.remote.ApiClient
 import com.lolog.app.data.mock.MockLologRepository
 import com.lolog.app.data.mock.MockRecordingController
+import com.lolog.app.data.mock.MockRooms
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.data.repo.RemoteLologRepository
+import com.lolog.app.data.repo.RemoteRoomRepository
+import com.lolog.app.data.repo.RoomRepository
 import com.lolog.app.data.repo.TokenStore
 import com.lolog.app.notification.Notifier
 import com.lolog.app.recording.RealRecordingController
@@ -23,6 +26,9 @@ class AppContainer(context: Context) {
 
     val repository: LologRepository =
         if (BuildConfig.USE_MOCK) MockLologRepository(tokens) else RemoteLologRepository(network!!, tokens)
+
+    /** 친구 방(LOLog-docs spec/rooms.md, 서버 lolog-api #51). 목업이면 MockRooms, 아니면 실서버 */
+    val rooms: RoomRepository? = if (BuildConfig.USE_MOCK) MockRooms.of(repository) else RemoteRoomRepository(network!!)
 
     // 화면은 RecordingController 약속만 봐요(지원 ↔ 서현).
     // 목업이면 가짜 녹음, 아니면 마이크·STT·업로드를 하는 실제 녹음이에요.

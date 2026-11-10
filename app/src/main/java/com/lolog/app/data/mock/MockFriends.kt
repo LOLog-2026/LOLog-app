@@ -41,8 +41,42 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     private fun now() = OffsetDateTime.now().toString()
     private fun fail(code: String, msg: String): Nothing = throw LologException(code, msg)
 
-    /** 내 프로필 캐릭터는 없어요(시안 15). 내 회원 ID(userId)는 MY_USER_ID */
-    fun profile() = Profile(nickname, if (nickname != null) MY_CODE else null, character = null, userId = MY_USER_ID.toString())
+    /** 내 프로필 캐릭터. 처음에는 없어요(시안 15) */
+    private var character: ProfileCharacter? = null
+    /** 오늘 받은 만들기(202) 시각(ms). 실패한 것은 빼요 */
+    private val uploads = mutableListOf<Long>()
+
+    /** 내 회원 ID는 목업에서 "1" */
+    fun profile() = Profile(nickname, if (nickname != null) MY_CODE else null, character = character, userId = MY_USER_ID.toString())
+
+    /**
+     * 사진을 올려 만들기(characters.md 3장). 만드는 중이면 409 CHARACTER_IN_PROGRESS, 오늘 3번 받았으면 409 CHARACTER_LIMIT,
+     * 10MB 넘으면 413. 다시 만드는 동안은 예전 그림을 그대로 둬요
+     */
+    fun uploadCharacter(bytes: Int): ProfileCharacter {
+        if (bytes > PHOTO_MAX_BYTES) fail(ErrorCodes.PAYLOAD_TOO_LARGE, "사진이 너무 큽니다")
+        if (character?.status == ProfileCharacterStatus.PROCESSING) fail(ErrorCodes.CHARACTER_IN_PROGRESS, "캐릭터를 만드는 중이에요")
+        val t = nowMs()
+        uploads.removeAll { t - it >= DAY_MS } // 목업은 자정 대신 24시간으로 세요
+        if (uploads.size >= CHARACTER_DAILY_LIMIT) fail(ErrorCodes.CHARACTER_LIMIT, "오늘은 캐릭터를 더 만들 수 없어요")
+        uploads += t
+        return ProfileCharacter(ProfileCharacterStatus.PROCESSING, character?.thumbnailUrl, now()).also { character = it }
+    }
+
+    /** 워커가 그림을 보냄(목업은 몇 초 뒤). failed면 FAILED로 두고 이번 것은 세지 않아요. 만드는 중이 아니었으면 false */
+    fun finishCharacter(failed: Boolean, thumbnailUrl: String): Boolean {
+        val c = character ?: return false
+        if (c.status != ProfileCharacterStatus.PROCESSING) return false
+        character = if (failed) {
+            uploads.removeLastOrNull()
+            c.copy(status = ProfileCharacterStatus.FAILED, updatedAt = now())
+        } else {
+            ProfileCharacter(ProfileCharacterStatus.READY, thumbnailUrl, now())
+        }
+        return true
+    }
+
+    fun deleteCharacter() { character = null }
 
     fun updateNickname(raw: String): Profile {
         val n = raw.trim()
@@ -131,6 +165,9 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
 
     companion object {
         const val MY_USER_ID = 1L
+        const val PHOTO_MAX_BYTES = 10 * 1024 * 1024
+        const val CHARACTER_DAILY_LIMIT = 3
+        const val DAY_MS = 24 * 60 * 60 * 1000L
         const val MY_CODE = "A7K3QX2M"
         const val JUNHO_CODE = "J8ZN4HQW"
         const val BLOCKED_CODE = "H6NE2PQD"

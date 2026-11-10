@@ -72,6 +72,12 @@ interface MainApi {
     // 친구·프로필·차단 (LOLog-docs spec/friends.md 2장)
     @GET("api/me/profile") suspend fun profile(): ProfileResponse
     @PATCH("api/me/profile") suspend fun updateProfile(@Body body: ProfileUpdateRequest): ProfileResponse
+    /** 사진을 올려 프로필 캐릭터 만들기·다시 만들기(characters.md 4장). multipart photo(JPEG·PNG, 10MB 이하). 202 PROCESSING */
+    @Multipart
+    @PUT("api/me/profile/character")
+    suspend fun uploadProfileCharacter(@Part photo: MultipartBody.Part): ProfileCharacterDto
+    /** 204. 없어도 204 */
+    @DELETE("api/me/profile/character") suspend fun deleteProfileCharacter()
     /** 201. 상대가 이미 나에게 요청했으면 바로 친구가 되고 status가 ACCEPTED */
     @POST("api/friend-requests") suspend fun sendFriendRequest(@Body body: FriendRequestCreate): FriendRequestResponse
     /** direction: received·sent (필수) */
@@ -90,6 +96,19 @@ interface MainApi {
 
     // 화자 그림 (LOLog-docs spec/characters.md 4장)
     @GET("api/characters/defaults") suspend fun defaultCharacters(): DefaultCharacterListDto
+
+    // 친구와 같이 쓰는 방 (LOLog-docs spec/rooms.md 2장). 멤버가 아니면 404 ROOM_NOT_FOUND
+    @GET("api/rooms") suspend fun rooms(): RoomListDto
+    @POST("api/rooms") suspend fun createRoom(@Body body: RoomCreateDto): RoomItemDto
+    @GET("api/rooms/{id}") suspend fun room(@Path("id") id: Long): RoomItemDto
+    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long)
+    @GET("api/rooms/{id}/posts") suspend fun roomPosts(@Path("id") id: Long): RoomPostListDto
+    @POST("api/rooms/{id}/posts") suspend fun postToRoom(@Path("id") id: Long, @Body body: RoomPostCreateDto): RoomPostDto
+    @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
+    @PUT("api/rooms/{id}/posts/{postId}/like") suspend fun likeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
+    @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
+    @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
+    @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
 
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)

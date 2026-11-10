@@ -32,6 +32,9 @@ class Notifier(private val context: Context) {
             PushType.CARDS_CREATED -> Triple(NotificationChannels.PUSH, "새 이야기 카드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
             PushType.COMIC_DONE -> Triple(NotificationChannels.PUSH, "4컷만화가 완성됐어요 🎉", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
             PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 만들지 못했어요", "다시 그리거나 카드를 고쳐 볼 수 있어요.")
+            // 실패 제목은 api-dto 푸시 표 그대로. 완성 문구는 명세에 없어서 정했어요
+            PushType.PROFILE_CHARACTER_READY -> Triple(NotificationChannels.PUSH, "내 캐릭터가 완성됐어요", "이제 친구가 내 캐릭터를 만화에 쓸 수 있어요.")
+            PushType.PROFILE_CHARACTER_FAILED -> Triple(NotificationChannels.PUSH, "캐릭터를 만들지 못했어요", "다른 사진으로 다시 만들어 볼 수 있어요.")
         }
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

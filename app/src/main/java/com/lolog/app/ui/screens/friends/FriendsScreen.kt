@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,9 +37,12 @@ import com.lolog.app.data.model.Friend
 import com.lolog.app.data.model.FriendRequestDirection
 import com.lolog.app.data.model.FriendRules
 import com.lolog.app.data.model.Profile
+import com.lolog.app.data.model.ProfileCharacterStatus
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
+import com.lolog.app.ui.screens.rooms.Features
+import com.lolog.app.ui.screens.rooms.RoomListScreen
 import com.lolog.app.ui.screens.start.LabeledField
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
@@ -129,12 +133,20 @@ fun FriendsScreen(
     onAddFriend: () -> Unit,
     onRequests: () -> Unit,
     onChangeNickname: () -> Unit,
+    /** 맨 위 상자의 "내 캐릭터" 줄 */
+    onMyCharacter: () -> Unit = {},
     /** 다른 화면에서 돌아올 때 띠에 보여 줄 글자(예: 친구 요청을 보냈어요) */
     message: String? = null,
     /** 친구 추가에서 바로 친구가 됐으면 목록 맨 위 줄을 잠깐 연노랑으로 */
     highlightTop: Boolean = false,
     onMessageShown: () -> Unit = {},
+    /** 친구 방(목업에서만). null이면 "방" / "친구" 알약 없이 지금 모양 그대로 */
+    onRoom: ((Long) -> Unit)? = null,
+    onCreateRoom: (() -> Unit)? = null,
 ) {
+    val roomsOn = Features.ROOMS && onRoom != null && onCreateRoom != null
+    // 맨 위 알약: 처음엔 "방"
+    var showRooms by rememberSaveable { mutableStateOf(roomsOn) }
     val repo = LocalContainer.current.repository
     val vm = viewModel { FriendsViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -165,9 +177,35 @@ fun FriendsScreen(
     Scaffold(
         containerColor = LologColors.Paper,
         snackbarHost = { LologSnackbarHost(snackbar) },
-        topBar = { LologTopBar("친구", onBack = onBack) },
-    ) { pad ->
+        topBar = {
+            LologTopBar("친구", onBack = onBack) {
+                if (roomsOn && showRooms) {
+                    TextButton(onClick = { onCreateRoom?.invoke() }) {
+                        Text("+ 방 만들기", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
+                    }
+                }
+            }
+        },
+    ) { scaffoldPad ->
+      Column(Modifier.padding(scaffoldPad)) {
+        if (roomsOn) {
+            Row(
+                Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterPill("방", showRooms) { showRooms = true }
+                FilterPill("친구", !showRooms) { showRooms = false }
+            }
+        }
+        // 위 여백은 바깥 Column이 줬어요
+        val pad = PaddingValues(0.dp)
         when {
+            roomsOn && showRooms -> RoomListScreen(
+                onRoom = { onRoom?.invoke(it) },
+                onCreate = { onCreateRoom?.invoke() },
+                onFriends = { showRooms = false },
+                modifier = Modifier.weight(1f),
+            )
             state.loading && state.profile == null -> LoadingBox(Modifier.padding(pad))
             state.error != null -> ErrorBox(state.error!!, onRetry = { vm.load() }, modifier = Modifier.padding(pad))
             else -> {
@@ -190,6 +228,7 @@ fun FriendsScreen(
                             saving = state.savingNickname,
                             onSave = { vm.setNickname(nickname) },
                             onChange = onChangeNickname,
+                            onMyCharacter = onMyCharacter,
                             onCopy = { code ->
                                 clipboard.setText(AnnotatedString(code))
                                 scope.launch { snackbar.showSnackbar("코드를 복사했어요") }
@@ -264,6 +303,7 @@ fun FriendsScreen(
                 }
             }
         }
+      }
     }
 
     menuFor?.let { f ->
@@ -314,6 +354,7 @@ private fun MyBox(
     onChange: () -> Unit,
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
+    onMyCharacter: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LologColors.Canvas).padding(18.dp),
@@ -364,6 +405,26 @@ private fun MyBox(
                     SmallPillButton("코드 공유", { onShare(code) })
                 }
             }
+        }
+        // 내 캐릭터(characters.md 3장). 닉네임이 없어도 만들 수 있어요
+        HorizontalDivider(Modifier.padding(vertical = 14.dp), thickness = 1.dp, color = LologColors.Line)
+        val character = profile.character
+        Row(Modifier.fillMaxWidth().clickable(onClick = onMyCharacter), verticalAlignment = Alignment.CenterVertically) {
+            SpeakerAvatar(profile.nickname ?: "나", 0, size = 40.dp, thumbnailUrl = character?.thumbnailUrl)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("내 캐릭터", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                Text(
+                    when (character?.status) {
+                        ProfileCharacterStatus.READY -> "친구가 내 캐릭터를 만화에 쓸 수 있어요"
+                        ProfileCharacterStatus.PROCESSING -> "그리는 중이에요"
+                        ProfileCharacterStatus.FAILED -> "만들지 못했어요. 다시 만들어 보세요"
+                        else -> "사진 한 장으로 만들어요"
+                    },
+                    fontSize = 12.sp, color = LologColors.Muted,
+                )
+            }
+            SmallPillButton(if (character == null) "만들기" else "보기", onMyCharacter)
         }
     }
 }

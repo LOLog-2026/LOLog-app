@@ -151,6 +151,8 @@ fun SpeakerCharacterSheet(
     onRemove: (() -> Unit)? = null,
     /** false면 그 화자의 대사가 남아 있어 버튼이 꺼져요 */
     removeEnabled: Boolean = true,
+    /** "내 캐릭터 만들기": 팝업을 닫고(적은 이름은 저장) 내 캐릭터 화면으로 가요 */
+    onMakeMine: () -> Unit = {},
 ) {
     val current = speaker.character
     var name by remember { mutableStateOf(speaker.name.orEmpty()) }
@@ -207,7 +209,7 @@ fun SpeakerCharacterSheet(
                         defaults = data.defaults, picked = picked, onPickDefault = { picked = it },
                         onChoose = { p -> person = p.key; name = p.nickname.take(TextLimits.SPEAKER_NAME); picked = null },
                         onAttach = ::attach, onKeep = ::keep, attachDefault = { pickedDefault()?.let(::attach) },
-                        onMakeMine = { scope.launch { snackbar.showSnackbar("곧 만들 수 있어요") } },
+                        onMakeMine = { keep(); onMakeMine() },
                         onGoDefault = { tab = SheetTab.DEFAULT },
                     )
                     SheetTab.DEFAULT -> DefaultTab(

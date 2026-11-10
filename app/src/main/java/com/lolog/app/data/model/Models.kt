@@ -50,6 +50,8 @@ object ErrorCodes {
     // 화자 더하기·빼기 (LOLog-docs api-dto.md CardUpdateRequest)
     const val SPEAKER_LIMIT = "SPEAKER_LIMIT"             // 409 더하고 뺀 뒤 화자가 4명을 넘음
     const val SPEAKER_HAS_LINES = "SPEAKER_HAS_LINES"     // 409 대사가 남은 화자를 빼려 함
+    const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
+    const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -335,7 +337,7 @@ data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 
 /** FCM data의 type (api-spec.md 푸시 표) */
-enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED }
+enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED }
 
 data class PushPayload(
     val type: PushType,
