@@ -163,6 +163,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             // 내 캐릭터 완성·실패 → 내 캐릭터 화면(api-dto 푸시 표: 프로필 새로고침)
             PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED ->
                 nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
+            // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
+            PushType.FRIEND_REQUEST -> nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
         }
         onPushHandled()
     }

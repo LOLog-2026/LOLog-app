@@ -360,7 +360,7 @@ data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 
 /** FCM data의 type (api-spec.md 푸시 표) */
-enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED }
+enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST }
 
 data class PushPayload(
     val type: PushType,
@@ -371,4 +371,7 @@ data class PushPayload(
     val cardIds: List<Long> = emptyList(),
     val comicId: Long? = null,
     val cardId: Long? = null,
+    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장) */
+    val requestId: Long? = null,
+    val nickname: String? = null,
 )
