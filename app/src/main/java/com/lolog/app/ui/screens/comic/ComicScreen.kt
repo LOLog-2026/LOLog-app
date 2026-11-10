@@ -468,6 +468,8 @@ private fun Viewer(
 private fun ZoomViewer(comic: ComicDetail, card: CardDetail?, onImageError: () -> Unit, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         var scale by remember { mutableFloatStateOf(1f) }
+        // 지금 화면 가운데에 있는 컷(1~4)
+        var cut by remember { mutableIntStateOf(1) }
         Box(Modifier.fillMaxSize().background(ZoomBg)) {
             BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding().padding(vertical = 56.dp).clipToBounds()) {
                 val boxW = constraints.maxWidth.toFloat()
@@ -481,6 +483,9 @@ private fun ZoomViewer(comic: ComicDetail, card: CardDetail?, onImageError: () -
                 }
                 // 처음엔 그림 맨 위부터
                 var offset by remember { mutableStateOf(clamp(Offset(0f, Float.MAX_VALUE), 1f)) }
+                // 화면 가운데가 그림 위에서 몇 px 아래인지 → 세로 4칸 중 몇 번째 컷인지
+                val centerInImage = imgH / 2 - offset.y / scale
+                SideEffect { cut = (centerInImage / (imgH / COMIC_PANELS)).toInt().coerceIn(0, COMIC_PANELS - 1) + 1 }
                 Box(
                     Modifier.fillMaxSize()
                         .pointerInput(Unit) {
@@ -509,7 +514,7 @@ private fun ZoomViewer(comic: ComicDetail, card: CardDetail?, onImageError: () -
                 IconButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterStart)) {
                     Icon(Icons.Default.Close, "닫기", tint = Color.White)
                 }
-                Text("${(scale * 100).roundToInt()}%", fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.Center))
+                Text("$cut/${COMIC_PANELS}컷 · ${(scale * 100).roundToInt()}%", fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.Center))
             }
             // 아래: 흐린 안내
             Text(
@@ -519,6 +524,9 @@ private fun ZoomViewer(comic: ComicDetail, card: CardDetail?, onImageError: () -
         }
     }
 }
+
+/** 만화는 세로 4칸 한 장(storyboard.md) */
+private const val COMIC_PANELS = 4
 
 /** 크게 보기 바탕(11/10 확정 #0E1013) */
 private val ZoomBg = Color(0xFF0E1013)
