@@ -195,7 +195,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     fun latest(p: RoomPost) = state.posts.firstOrNull { it.id == p.id }
 
     fun save(post: RoomPost) = scope.launch {
-        val bytes = post.imageUrl?.let { ComicExport.pngBytes(it, post.mockLines, container.network) { null } }
+        val bytes = post.imageUrl?.let { ComicExport.pngBytes(context, it, comicCacheKey(post.comicId), post.mockLines, container.network) { null } }
         vm.toast(
             when {
                 bytes == null -> "이미지를 받지 못했어요"
@@ -431,7 +431,7 @@ internal fun ComicCell(
             .then(if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick) else Modifier)
             .padding(8.dp),
     ) {
-        ComicImage(post.imageUrl, post.mockLines, Modifier.fillMaxWidth(), small = true)
+        ComicImage(post.imageUrl, post.mockLines, Modifier.fillMaxWidth(), small = true, cacheKey = comicCacheKey(post.comicId))
         Spacer(Modifier.height(8.dp))
         Text(post.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
