@@ -85,6 +85,16 @@ interface LologRepository {
     /** 기본 화자 24명. 썸네일 주소는 10분마다 바뀌니 캐시는 id 기준으로 해요 */
     suspend fun defaultCharacters(): List<DefaultCharacter>
 
+    // 알림함 (LOLog-docs PR #59 spec/inbox.md)
+    /** 최근 것이 위, 한 번에 20개. cursor는 받은 nextCursor 그대로 */
+    suspend fun inbox(tab: InboxTab, cursor: String? = null): InboxPage
+    /** 종 버튼의 점: 안 읽은 알림이나 공지사항이 하나라도 있는지 */
+    suspend fun inboxHasUnread(): Boolean
+    /** 한 줄 읽음. 없으면 404 NOTICE_NOT_FOUND·NOTIFICATION_NOT_FOUND */
+    suspend fun readInbox(kind: InboxKind, id: Long)
+    /** 지금까지 온 것을 모두 읽음 */
+    suspend fun readAllInbox()
+
     // 기기
     suspend fun registerFcmToken(token: String)
     suspend fun unregisterFcmToken(token: String)

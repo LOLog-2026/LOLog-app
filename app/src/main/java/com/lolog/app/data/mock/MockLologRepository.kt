@@ -523,6 +523,14 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     // ── 화자 그림 ──
     override suspend fun defaultCharacters(): List<DefaultCharacter> { net(); return MockCharacters.defaults }
 
+    // ── 알림함 ──
+    private val inboxBook = MockInbox()
+
+    override suspend fun inbox(tab: InboxTab, cursor: String?): InboxPage = lock.withLock { net(250); inboxBook.page(tab, cursor) }
+    override suspend fun inboxHasUnread(): Boolean = lock.withLock { net(150); inboxBook.hasUnread() }
+    override suspend fun readInbox(kind: InboxKind, id: Long) = lock.withLock { net(150); inboxBook.read(kind, id) }
+    override suspend fun readAllInbox() = lock.withLock { net(); inboxBook.readAll() }
+
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }
     override suspend fun unregisterFcmToken(token: String) { net(100) }

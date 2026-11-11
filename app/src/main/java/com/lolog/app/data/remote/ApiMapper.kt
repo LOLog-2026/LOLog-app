@@ -227,4 +227,18 @@ object ApiMapper {
     fun FriendItem.toModel() = Friend(userId, nickname, friendCode, friendsSince, character?.thumbnailUrl?.ifBlank { null })
 
     fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt)
+
+    // ── 알림함 ──
+
+    /** 모르는 kind는 빼요(앞으로 생길 알림 type은 kind가 NOTIFICATION이라 그대로 남아요) */
+    fun InboxPageDto.toModel() = InboxPage(items.mapNotNull { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
+
+    fun InboxItemDto.toModel(): InboxItem? = when (kind.uppercase()) {
+        "NOTICE" -> InboxItem.Notice(id, notice?.title.orEmpty(), notice?.body.orEmpty(), createdAt, read)
+        "NOTIFICATION" -> notification?.let {
+            // 서버는 data에서 type을 빼고 보내요. Notifier.payloadOf가 읽을 수 있게 다시 넣어요
+            InboxItem.Notification(id, it.type, it.data + ("type" to it.type), createdAt, read)
+        }
+        else -> null
+    }
 }

@@ -318,3 +318,31 @@ data class BlockListResponse(val blocks: List<BlockItem> = emptyList())
 /** FcmTokenRequest — PUT·DELETE /api/devices/fcm-token */
 @Serializable
 data class FcmTokenDto(val token: String)
+
+// ── 알림함 (LOLog-docs PR #59 spec/inbox.md 5장) ──
+
+/** GET /api/inbox. nextCursor는 서버가 정한 문자열(뜻을 해석하지 않아요) */
+@Serializable
+data class InboxPageDto(val items: List<InboxItemDto> = emptyList(), val nextCursor: String? = null)
+
+/** InboxItem. kind가 NOTICE면 notice, NOTIFICATION이면 notification이 차 있고 다른 쪽은 null */
+@Serializable
+data class InboxItemDto(
+    val kind: String,
+    val id: Long,
+    val createdAt: String,
+    val read: Boolean = false,
+    val notice: InboxNoticeDto? = null,
+    val notification: InboxNotificationDto? = null,
+)
+
+@Serializable
+data class InboxNoticeDto(val title: String = "", val body: String = "")
+
+/** data는 푸시에 넣은 값 그대로(서버가 type은 빼고 보내요). 값은 모두 문자열 */
+@Serializable
+data class InboxNotificationDto(val type: String, val data: Map<String, String> = emptyMap())
+
+/** GET /api/inbox/unread */
+@Serializable
+data class InboxUnreadDto(val hasUnread: Boolean = false)

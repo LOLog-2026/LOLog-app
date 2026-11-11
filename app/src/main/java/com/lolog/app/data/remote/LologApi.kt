@@ -112,6 +112,15 @@ interface MainApi {
     @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
     @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
 
+    // 알림함 (LOLog-docs PR #59 spec/inbox.md 5장). 최근 것이 위, 한 번에 20개
+    /** tab: ALL·NOTICE·NOTIFICATION. cursor는 받은 nextCursor 그대로 */
+    @GET("api/inbox") suspend fun inbox(@Query("tab") tab: String, @Query("cursor") cursor: String?): InboxPageDto
+    @GET("api/inbox/unread") suspend fun inboxUnread(): InboxUnreadDto
+    /** 204. kind는 notice·notification. 없으면 404 NOTICE_NOT_FOUND·NOTIFICATION_NOT_FOUND */
+    @POST("api/inbox/{kind}/{id}/read") suspend fun readInbox(@Path("kind") kind: String, @Path("id") id: Long)
+    /** 204. 지금까지 온 것을 모두 읽음 */
+    @POST("api/inbox/read") suspend fun readAllInbox()
+
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)
     suspend fun deleteFcmToken(@Body body: FcmTokenDto)

@@ -54,6 +54,9 @@ object ErrorCodes {
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND" // 404 프로필 캐릭터가 없는데 목소리를 고름(docs PR #59 초안)
+    // 알림함 (LOLog-docs PR #59 inbox.md 7장)
+    const val NOTICE_NOT_FOUND = "NOTICE_NOT_FOUND"             // 404 없는 공지사항을 읽음
+    const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"

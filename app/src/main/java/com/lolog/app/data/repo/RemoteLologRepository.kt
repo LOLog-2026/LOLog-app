@@ -106,6 +106,11 @@ class RemoteLologRepository(
 
     override suspend fun defaultCharacters() = call { api.defaultCharacters().characters.map { it.toModel() } }
 
+    override suspend fun inbox(tab: InboxTab, cursor: String?) = call { api.inbox(tab.query, cursor).toModel() }
+    override suspend fun inboxHasUnread() = call { api.inboxUnread().hasUnread }
+    override suspend fun readInbox(kind: InboxKind, id: Long) = call { api.readInbox(kind.path, id) }
+    override suspend fun readAllInbox() = call { api.readAllInbox() }
+
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
         tokens.fcmToken = token
