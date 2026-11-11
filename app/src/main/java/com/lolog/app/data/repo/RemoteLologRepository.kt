@@ -90,6 +90,8 @@ class RemoteLologRepository(
         api.uploadProfileCharacter(part).toModel()
     }
     override suspend fun deleteProfileCharacter() = call { api.deleteProfileCharacter() }
+    override suspend fun setProfileCharacterVoice(voice: String?) =
+        call { api.setProfileCharacterVoice(ApiMapper.voiceBody(voice)) }
     override suspend fun sendFriendRequest(code: String) =
         call { api.sendFriendRequest(FriendRequestCreate(code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =

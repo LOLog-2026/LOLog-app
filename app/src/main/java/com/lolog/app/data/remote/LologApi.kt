@@ -78,6 +78,8 @@ interface MainApi {
     suspend fun uploadProfileCharacter(@Part photo: MultipartBody.Part): ProfileCharacterDto
     /** 204. 없어도 204 */
     @DELETE("api/me/profile/character") suspend fun deleteProfileCharacter()
+    /** 프로필 캐릭터 목소리 고르기(characters.md FR-CHAR-04, 초안). 본문은 ApiMapper.voiceBody(). 204 */
+    @PATCH("api/me/profile/character/voice") suspend fun setProfileCharacterVoice(@Body body: JsonObject)
     /** 201. 상대가 이미 나에게 요청했으면 바로 친구가 되고 status가 ACCEPTED */
     @POST("api/friend-requests") suspend fun sendFriendRequest(@Body body: FriendRequestCreate): FriendRequestResponse
     /** direction: received·sent (필수) */

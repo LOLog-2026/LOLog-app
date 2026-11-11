@@ -29,6 +29,8 @@ import com.lolog.app.ui.screens.friends.AddFriendScreen
 import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
 import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
+import com.lolog.app.ui.screens.friends.VOICE_PICKED
+import com.lolog.app.ui.screens.friends.VoicePickScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
@@ -64,6 +66,8 @@ private const val SETTINGS_MESSAGE = "settingsMessage"
 private const val FRIENDS_MESSAGE = "friendsMessage"
 /** 친구 추가에서 바로 친구가 됐으면 true: 친구 목록 맨 위 줄을 잠깐 연노랑으로 */
 private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
+// 내 목소리 고르기에서 저장하고 내 캐릭터 화면으로 돌아올 때 띠 문구
+private const val VOICE_MESSAGE = "voiceMessage"
 
 object Routes {
     const val SPLASH = "splash"
@@ -79,6 +83,7 @@ object Routes {
     const val FRIEND_REQUESTS = "friends/requests"
     const val NICKNAME = "nickname"
     const val PROFILE_CHARACTER = "profile/character"
+    const val VOICE_PICK = "profile/character/voice"
     const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
@@ -383,8 +388,23 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
             }
-            composable(Routes.PROFILE_CHARACTER) {
-                ProfileCharacterScreen(onBack = { nav.popBackStack() })
+            composable(Routes.PROFILE_CHARACTER) { entry ->
+                val message by entry.savedStateHandle.getStateFlow<String?>(VOICE_MESSAGE, null).collectAsState()
+                ProfileCharacterScreen(
+                    onBack = { nav.popBackStack() },
+                    onPickVoice = { nav.navigate(Routes.VOICE_PICK) { launchSingleTop = true } },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[VOICE_MESSAGE] = null },
+                )
+            }
+            composable(Routes.VOICE_PICK) {
+                VoicePickScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = {
+                        nav.previousBackStackEntry?.savedStateHandle?.set(VOICE_MESSAGE, VOICE_PICKED)
+                        nav.popBackStack()
+                    },
+                )
             }
             composable(Routes.NICKNAME) {
                 NicknameScreen(

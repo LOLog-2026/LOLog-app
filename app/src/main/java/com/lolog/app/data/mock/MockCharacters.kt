@@ -12,6 +12,15 @@ internal object MockCharacters {
     /** 명세 레포의 공개 썸네일. 목업에서만 써요(실서버는 10분 서명 주소) */
     fun thumb(id: String) = "https://raw.githubusercontent.com/LOLog-2026/LOLog-docs/main/assets/default-characters/${id}_thumb.webp"
 
+    /**
+     * 가짜 목소리 주소(FR-CHAR-03). 명세 레포에 아직 목소리 파일이 없어 지금은 재생에 실패해요(실패 안내를 볼 수 있어요).
+     * 실서버는 MinIO defaults/characters/{id}_voice.wav의 10분 서명 주소예요
+     */
+    fun voice(id: String) = "https://raw.githubusercontent.com/LOLog-2026/LOLog-docs/main/assets/default-characters/${id}_voice.wav"
+
+    /** 목소리가 있는 기본 화자: 나이대·성별마다 앞의 두 명(-01·-02). 나머지는 voiceUrl null(버튼이 안 보여요) */
+    private fun hasVoice(id: String) = id.endsWith("-01") || id.endsWith("-02")
+
     /** label은 명세 레포 assets/default-characters/characters.json 값 그대로 */
     val defaults: List<DefaultCharacter> = listOf(
         DefaultCharacter("kid-f-01", "분홍 머리띠 긴 생머리 소녀", AgeGroup.CHILD, Gender.F, false, thumb("kid-f-01")),
@@ -38,7 +47,7 @@ internal object MockCharacters {
         DefaultCharacter("middle-m-02", "금테 안경 회색 머리 중년 남성", AgeGroup.MIDDLE, Gender.M, true, thumb("middle-m-02")),
         DefaultCharacter("middle-m-03", "민머리 등산복 중년 남성", AgeGroup.MIDDLE, Gender.M, false, thumb("middle-m-03")),
         DefaultCharacter("middle-m-04", "뿔테 안경 넥타이 중년 남성", AgeGroup.MIDDLE, Gender.M, true, thumb("middle-m-04")),
-    )
+    ).map { if (hasVoice(it.id)) it.copy(voiceUrl = voice(it.id)) else it }
 
     /** 기본 화자를 화자 그림으로 (처음부터 그림이 붙은 목업 카드용) */
     fun defaultRef(id: String): SpeakerCharacter {

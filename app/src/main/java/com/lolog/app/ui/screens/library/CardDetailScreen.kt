@@ -238,6 +238,7 @@ fun CardDetailScreen(
             onRetry = { charVm.open() },
             onClose = { pick -> speakerSheet = null; vm.saveSpeaker(key, pick) },
             onMakeMine = onMakeCharacter,
+            freshVoiceUrl = { charVm.freshVoiceUrl(it) },
         )
     }
     if (askDelete) {

@@ -320,6 +320,7 @@ fun CardEditScreen(
             onRemove = if (vm.speakers.size >= 2) ({ vm.removeSpeaker(sp.key); renaming = null }) else null,
             removeEnabled = vm.canRemove(sp.key),
             onMakeMine = onMakeCharacter,
+            freshVoiceUrl = { charVm.freshVoiceUrl(it) },
         )
     }
     pickingFor?.let { i ->
