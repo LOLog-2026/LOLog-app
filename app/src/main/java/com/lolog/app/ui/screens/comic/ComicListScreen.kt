@@ -16,6 +16,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -135,6 +136,8 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }
     // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
     BackHandler(onBack = onBack)
+    // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠). 처음엔 4컷
+    var tab by rememberSaveable { mutableIntStateOf(0) }
 
     // 정렬을 바꾸면 첫 편부터 보여 줘요
     val pager = key(state.sort) { rememberPagerState { state.comics.size } }
@@ -145,13 +148,17 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // 위 칸: 흰 바탕 제목 줄. 맨 위에 고정, 아래만 넘어가요
-            ListHeader {
-                LologTopBar("컨텐츠", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
+            // 위 칸: 흰 바탕 제목 줄 + "4컷 / 미디어" 탭(아래 1dp 선은 탭이 그려요). 맨 위에 고정, 아래만 넘어가요
+            Column(Modifier.fillMaxWidth().background(LologColors.Paper)) {
+                // 미디어 탭에는 아직 쇼츠가 없어서 정렬은 4컷 탭에서만
+                LologTopBar("컨텐츠", onBack = onBack, actions = { if (tab == 0) SortMenu(state.sort, vm::setSort) })
+                ContentTabs(listOf("4컷", "미디어"), tab, { tab = it })
             }
             // 아래 칸: 연한 회색, 노트 줄 없음
             Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
                 when {
+                    // 쇼츠 API는 명세 대기라 지금은 안내만 있는 임시 탭
+                    tab == 1 -> ShortsComingSoon("카드에서 컨텐츠 만들기 › 쇼츠를 고르면 여기에 모여요.")
                     state.loading -> SkeletonList(count = 4)
                     state.error != null && state.comics.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
                     state.comics.isEmpty() -> EmptyState(
