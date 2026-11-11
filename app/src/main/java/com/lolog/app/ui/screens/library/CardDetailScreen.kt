@@ -11,14 +11,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,8 +49,9 @@ import kotlinx.coroutines.launch
  *  - 제목 아래 "녹음 날짜·시간 · 장소". 이름 없는 화자는 화자1·2·3
  *  - 이 카드로 만든 만화: "1 / 3번 · 실패는 안 셈". 실패한 만화는 그 자리에서 다시 시도
  *  - 만화 그리는 중: 고치기·지우기·다시 그리기 모두 꺼짐 (서버도 409 CARD_LOCKED / COMIC_IN_PROGRESS)
- *  - 3번 다 씀: 회색 버튼 "3번 다 그렸어요"
- *  - 카드를 지워도 만화는 '내 만화'에 남아요
+ *  - 아래 버튼 "컨텐츠 만들기" → 4컷 만화 / 쇼츠(준비 중) 고르는 시트 (컨텐츠 시안 v3 ①②)
+ *  - 3번 다 씀: 회색 버튼 "4컷은 3번 다 만들었어요"
+ *  - 카드를 지워도 만화는 '컨텐츠'에 남아요
  */
 
 class CardDetailViewModel(private val repo: LologRepository, private val id: Long) : ViewModel() {
@@ -138,7 +137,7 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
     fun consumed() = _state.update { it.copy(requestedComicId = null, toast = null, deleteFailed = false) }
 }
 
-// ── 08 카드 상세 · 10 만화 요청 · 22 카드 지우기 · 24 3번 다 씀 ──
+// ── 08 카드 상세 · 10 컨텐츠 만들기 · 22 카드 지우기 · 24 3번 다 씀 ──
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -244,7 +243,7 @@ fun CardDetailScreen(
     if (askDelete) {
         LologDialog(
             title = "이 카드를 지울까요?",
-            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '내 만화'에 그대로 남아요.",
+            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '컨텐츠'에 그대로 남아요.",
             confirmText = "지우기",
             danger = true,
             loading = state.busy,
@@ -281,7 +280,7 @@ private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composab
     }
 }
 
-/** 아래: "이 카드로 만든 만화 n / 3번" + 전체 너비 알약. 남은 횟수·잠김 규칙은 그대로 */
+/** 아래: "이 카드로 만든 4컷 n / 3번" + 전체 너비 알약 "컨텐츠 만들기". 남은 횟수는 4컷 기준, 잠김 규칙은 그대로 */
 @Composable
 private fun BottomActions(card: CardDetail, busy: Boolean, onDraw: () -> Unit) {
     val full = card.remaining <= 0 && !card.locked
@@ -292,18 +291,18 @@ private fun BottomActions(card: CardDetail, busy: Boolean, onDraw: () -> Unit) {
             card.locked -> LockNote("만화 그리는 중엔 고치거나 지울 수 없어요")
             full -> LockNote("한 카드로는 ${COMIC_LIMIT_PER_CARD}번까지 그릴 수 있어요")
             else -> Text(
-                "이 카드로 만든 만화 ${card.used} / ${COMIC_LIMIT_PER_CARD}번", fontSize = 11.sp, color = LologColors.Muted,
-                modifier = Modifier.padding(bottom = 8.dp),
+                "이 카드로 만든 4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번", fontSize = 11.sp, color = LologColors.Muted,
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp),
             )
         }
         if (full) {
-            PrimaryButton("${COMIC_LIMIT_PER_CARD}번 다 그렸어요", {}, enabled = false)
+            PrimaryButton("4컷은 ${COMIC_LIMIT_PER_CARD}번 다 만들었어요", {}, enabled = false)
         } else {
             PrimaryButton(
                 text = when {
                     card.locked -> "그리는 중…"
-                    card.used == 0 && card.comics.isEmpty() -> "4컷만화로 그리기"
-                    else -> "다시 그리기 · ${card.remaining}번 남음"
+                    card.used == 0 && card.comics.isEmpty() -> "컨텐츠 만들기"
+                    else -> "컨텐츠 또 만들기 · 4컷 ${card.remaining}번 남음"
                 },
                 onClick = onDraw, enabled = !card.locked, loading = busy,
             )
@@ -432,29 +431,90 @@ fun LineBubble(
     )
 }
 
-/** 10 만화 요청 바텀시트. 옵션 없이 확인만 받고, 남은 횟수를 보여 줘요 */
+/**
+ * 10 컨텐츠 만들기 시트(컨텐츠 시안 v3 ②): 4컷 만화 / 쇼츠 중 고르기.
+ * 쇼츠는 서버 명세·API가 아직 없어서 회색 "준비 중"으로 못 골라요. 그래서 4컷이 늘 골라져 있어요
+ */
 @Composable
 private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     LologSheet(onDismiss = onDismiss) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("이 카드를 4컷만화로 그릴까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-            Text(
-                "세로 4칸으로 그려요. 보통 몇 분 걸리고, 다 되면 알림으로 알려 드려요.",
-                fontSize = 13.5.sp, color = LologColors.Muted, lineHeight = 20.sp,
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("이 카드로 무엇을 만들까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 4.dp))
+            ContentOption(
+                title = "4컷 만화",
+                body = "세로 4칸 그림. 보통 몇 분 걸려요.",
+                note = "이 카드로 ${COMIC_LIMIT_PER_CARD}번 중 ${card.remaining}번 남음",
+                selected = true,
+                thumb = { FourCutThumb() },
             )
-            Text(
-                buildAnnotatedString {
-                    append("이 카드로 ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold)) { append("${card.remaining}번") }
-                    append(" 그릴 수 있어요 (실패는 안 세요)")
-                },
-                fontSize = 13.sp,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LologColors.AccentSoft).padding(horizontal = 14.dp, vertical = 12.dp),
+            ContentOption(
+                title = "쇼츠",
+                body = "짧은 세로 영상. 곧 만들 수 있어요.",
+                selected = false,
+                enabled = false,
+                thumb = { Icon(Icons.Outlined.SmartDisplay, null, tint = LologColors.Muted, modifier = Modifier.size(20.dp)) },
             )
-            Spacer(Modifier.height(2.dp))
-            PrimaryButton("그려 주세요", onConfirm, loading = busy)
+            Text("다 되면 알림으로 알려 드려요. 실패는 횟수에 안 세요.", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(vertical = 2.dp))
+            PrimaryButton("4컷 만화로 만들기", onConfirm, loading = busy)
             GhostButton("취소", onDismiss)
         }
     }
 }
 
+/** 고르기 한 줄: 왼쪽 작은 그림 · 제목(+ 꺼졌으면 "준비 중" 칩) · 설명 · 오른쪽 라디오. 고른 줄은 코랄 테두리 */
+@Composable
+private fun ContentOption(
+    title: String,
+    body: String,
+    selected: Boolean,
+    thumb: @Composable () -> Unit,
+    note: String? = null,
+    enabled: Boolean = true,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(if (selected) LologColors.Accent.copy(alpha = 0.05f) else if (enabled) LologColors.Paper else OptionOff)
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) LologColors.Accent else LologColors.Line, shape)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(48.dp).clip(LologShape.sm).background(LologColors.Paper).border(1.dp, LologColors.Line, LologShape.sm),
+            contentAlignment = Alignment.Center,
+        ) { thumb() }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = if (enabled) LologColors.Ink else LologColors.Muted)
+                if (!enabled) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "준비 중", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted,
+                        modifier = Modifier.clip(LologShape.pill).background(LologColors.Canvas).padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(body, fontSize = 12.sp, color = LologColors.Muted)
+            note?.let { Text(it, fontSize = 12.sp, color = LologColors.Muted) }
+        }
+        RadioButton(
+            selected = selected, onClick = null, enabled = enabled,
+            colors = RadioButtonDefaults.colors(selectedColor = LologColors.Accent, unselectedColor = LologColors.Line, disabledUnselectedColor = LologColors.Line),
+        )
+    }
+}
+
+/** 4컷 만화 작은 그림: 세로 4칸(노랑·분홍·민트·노랑) */
+@Composable
+private fun FourCutThumb() {
+    Column(Modifier.width(30.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        listOf(LologColors.AccentSoft, LologColors.RecSoft, LologColors.MemorySoft, LologColors.AccentSoft).forEach {
+            Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(1.5.dp)).background(it))
+        }
+    }
+}
+
+/** 꺼진 고르기 줄 바탕(시안의 아주 옅은 회색) */
+private val OptionOff = Color(0xFFF7F8FA)

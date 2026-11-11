@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -173,7 +172,8 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
-    var chatTab by rememberSaveable { mutableStateOf(false) }
+    // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠), 2 = 대화
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     var zoom by remember { mutableStateOf<RoomPost?>(null) }
     var pressed by remember { mutableStateOf<Pressed?>(null) }
     var replyTo by remember { mutableStateOf<RoomPost?>(null) }
@@ -188,7 +188,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
 
     LaunchedEffect(state.left) { if (state.left) onLeft() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
-    LaunchedEffect(chatTab) { if (chatTab) vm.chatSeen() }
+    LaunchedEffect(tab) { if (tab == 2) vm.chatSeen() }
     BackHandler(enabled = pressed != null) { pressed = null }
 
     // 최신 좋아요·댓글 수로 보여 주려고 id로 다시 찾아요
@@ -209,7 +209,8 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     Box(Modifier.fillMaxSize().onGloballyPositioned { rootOffset = it.positionInWindow() }) {
         Scaffold(
             containerColor = LologColors.Paper,
-            snackbarHost = { LologSnackbarHost(snackbar, Modifier.padding(bottom = if (chatTab) 0.dp else 72.dp)) },
+            // "+ 내 만화 올리기" 버튼이 있는 4컷 탭에서만 띠를 버튼 위로 올려요
+            snackbarHost = { LologSnackbarHost(snackbar, Modifier.padding(bottom = if (tab == 0) 72.dp else 0.dp)) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -236,25 +237,28 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
                 room == null && state.error != null -> ErrorBox(state.error!!, onRetry = { vm.load() }, modifier = Modifier.padding(pad))
                 room == null -> LoadingBox(Modifier.padding(pad))
                 else -> Column(Modifier.padding(pad).fillMaxSize()) {
-                    RoomTabs(chatTab, state.chatDot) { chatTab = it }
+                    ContentTabs(listOf("4컷", "미디어", "대화"), tab, { tab = it }, dotAt = if (state.chatDot) 2 else null)
                     Box(Modifier.weight(1f)) {
-                        if (!chatTab) {
-                            ComicGrid(
-                                room, state.posts,
-                                onOpen = { zoom = it },
-                                onLongPress = { p ->
-                                    cellBounds[p.id]?.let { b -> pressed = Pressed(p, b.translate(-rootOffset)) }
-                                },
-                                onPlaced = { id, b -> cellBounds[id] = b },
-                            )
-                            PrimaryButton(
-                                "내 만화 올리기", { picking = true; vm.loadMyComics() },
-                                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp).width(200.dp)
-                                    .shadow(6.dp, LologShape.pill, ambientColor = LologColors.Accent, spotColor = LologColors.Accent),
-                                leading = { Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp)) },
-                            )
-                        } else {
-                            RoomChat(
+                        when (tab) {
+                            0 -> {
+                                ComicGrid(
+                                    room, state.posts,
+                                    onOpen = { zoom = it },
+                                    onLongPress = { p ->
+                                        cellBounds[p.id]?.let { b -> pressed = Pressed(p, b.translate(-rootOffset)) }
+                                    },
+                                    onPlaced = { id, b -> cellBounds[id] = b },
+                                )
+                                PrimaryButton(
+                                    "내 만화 올리기", { picking = true; vm.loadMyComics() },
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp).width(200.dp)
+                                        .shadow(6.dp, LologShape.pill, ambientColor = LologColors.Accent, spotColor = LologColors.Accent),
+                                    leading = { Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp)) },
+                                )
+                            }
+                            // 쇼츠 API는 명세 대기라 지금은 안내만 있는 임시 탭
+                            1 -> ShortsComingSoon("쇼츠가 생기면 이 방에도 올릴 수 있어요.")
+                            else -> RoomChat(
                                 room = room,
                                 messages = state.messages,
                                 replyTo = replyTo?.let { latest(it) ?: it },
@@ -277,7 +281,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
                     room = r, post = post, bounds = pr.bounds,
                     onDismiss = { pressed = null },
                     onLike = { pressed = null; vm.toggleLike(post) },
-                    onComment = { pressed = null; replyTo = post; chatTab = true },
+                    onComment = { pressed = null; replyTo = post; tab = 2 },
                     onSave = { pressed = null; save(post) },
                     onZoom = { pressed = null; zoom = post },
                     onRemove = { pressed = null; askRemove = post },
@@ -344,7 +348,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     askRemove?.let { p ->
         LologDialog(
             title = "이 만화를 방에서 내릴까요?",
-            body = "이 만화에 달린 좋아요와 댓글도 같이 사라져요. 내 만화 화면의 만화는 그대로 있어요.",
+            body = "이 만화에 달린 좋아요와 댓글도 같이 사라져요. 컨텐츠 화면의 만화는 그대로 있어요.",
             confirmText = "내리기",
             danger = true,
             loading = state.busy,
@@ -354,34 +358,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     }
 }
 
-/** "만화" / "대화" 탭. 대화에 새 글이 있으면 코랄 점 */
-@Composable
-private fun RoomTabs(chatTab: Boolean, chatDot: Boolean, onSelect: (Boolean) -> Unit) {
-    Column {
-        Row(Modifier.padding(horizontal = 12.dp)) {
-            listOf(false to "만화", true to "대화").forEach { (chat, label) ->
-                val on = chatTab == chat
-                Column(
-                    Modifier.clip(LologShape.sm).clickable { onSelect(chat) }.padding(horizontal = 10.dp).padding(top = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium, color = if (on) LologColors.Ink else LologColors.Muted)
-                        if (chat && chatDot && !on) {
-                            Spacer(Modifier.width(4.dp))
-                            Box(Modifier.size(5.dp).clip(CircleShape).background(LologColors.Accent))
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Box(Modifier.width(28.dp).height(2.5.dp).background(if (on) LologColors.Accent else Color.Transparent))
-                }
-            }
-        }
-        HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
-    }
-}
-
-/** 21 만화 탭: 2열 격자 */
+/** 21 4컷 탭: 2열 격자 */
 @Composable
 private fun ComicGrid(
     room: Room,

@@ -100,11 +100,11 @@ object Routes {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-// 아래 탭 4개: 보관함 · 홈 · 내 만화 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
+// 아래 탭 4개: 보관함 · 홈 · 컨텐츠 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
 private val tabs = listOf(
     Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
-    Tab(Routes.COMICS, "내 만화", Icons.Outlined.GridView),
+    Tab(Routes.COMICS, "컨텐츠", Icons.Outlined.GridView),
     Tab(Routes.FRIENDS, "친구", Icons.Outlined.People),
 )
 
