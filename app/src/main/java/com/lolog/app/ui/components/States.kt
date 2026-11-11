@@ -59,6 +59,7 @@ fun errorText(e: Throwable): String {
         ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 계정에 연결된 소셜 계정이에요"
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
+        ErrorCodes.ACCOUNT_SUSPENDED -> "정지된 계정이에요."
         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> "입력한 내용을 확인해 주세요"
         ErrorCodes.UNKNOWN_SPEAKER -> "화자를 다시 골라 주세요"
         ErrorCodes.RECORDING_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
