@@ -18,6 +18,7 @@ object ErrorCodes {
     const val TOKEN_EXPIRED = "TOKEN_EXPIRED"           // 401 토큰 만료 (앱은 이때만 갱신)
     const val INVALID_TOKEN = "INVALID_TOKEN"           // 401 토큰이 틀림
     const val UNAUTHORIZED = "UNAUTHORIZED"             // 401 토큰이 없거나 틀림
+    const val ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"   // 403 정지된 계정으로 로그인·소셜 로그인(docs PR #59 admin.md 초안)
     const val CARD_NOT_FOUND = "CARD_NOT_FOUND"
     const val COMIC_NOT_FOUND = "COMIC_NOT_FOUND"
     const val RECORDING_NOT_FOUND = "RECORDING_NOT_FOUND"
@@ -82,8 +83,13 @@ fun isValidPassword(pw: String): Boolean =
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
-/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요 */
-data class Account(val email: String, val linkedProviders: Set<SocialProvider>, val hasPassword: Boolean = false)
+/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요. isAdmin이면 설정에 관리자 화면 입구를 보여 줘요 */
+data class Account(
+    val email: String,
+    val linkedProviders: Set<SocialProvider>,
+    val hasPassword: Boolean = false,
+    val isAdmin: Boolean = false,
+)
 
 // ── 녹음 ──────────────────────────────────────────────
 

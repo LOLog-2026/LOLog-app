@@ -63,6 +63,19 @@ internal class MockCodes {
     fun used(email: String) { sentAt.remove(email.lowercase()); fails.remove(email.lowercase()) }
 }
 
+/** 목업 이메일 로그인 검사. offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호, 그다음 suspended@lolog.app은 정지된 계정 */
+internal fun mockCheckLogin(email: String, password: String) {
+    if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
+    if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+    if (email.equals(MOCK_SUSPENDED_EMAIL, true)) throw LologException(ErrorCodes.ACCOUNT_SUSPENDED, "정지된 계정이에요")
+}
+
+/** 이 이메일로 로그인하면 me()가 관리자(isAdmin = true) */
+internal fun mockIsAdmin(email: String) = email.equals(MOCK_ADMIN_EMAIL, true)
+
+internal const val MOCK_ADMIN_EMAIL = "admin@lolog.app"
+internal const val MOCK_SUSPENDED_EMAIL = "suspended@lolog.app"
+
 /** 목업 비밀번호 바꾸기 검사. 지금 비밀번호는 로그인 목업과 같은 규칙(4자 미만이면 틀림) */
 internal fun mockCheckPasswordChange(currentPassword: String, newPassword: String) {
     if (currentPassword.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "지금 비밀번호가 맞지 않아요")
@@ -145,6 +158,8 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 내 정보(me)의 hasPassword: 이메일로 로그인했으면 true, 소셜로 로그인했으면 false
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
+ *  - 관리자(admin.md): admin@lolog.app으로 로그인하면 me()의 isAdmin = true, 그 밖(소셜 포함)은 false
+ *  - suspended@lolog.app으로 로그인(비밀번호 4자 이상) → 403 ACCOUNT_SUSPENDED
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
  *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번), 네이버 연결 → 연결됨
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
@@ -224,6 +239,8 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private val resetCodes = MockCodes()
     /** 마지막 로그인 방법. me()의 hasPassword를 정해요(앱을 새로 켜서 모르면 이메일로 봐요) */
     private var loggedInWithEmail = true
+    /** admin@lolog.app으로 로그인했으면 true. 앱을 새로 켜서 모르면 일반 회원으로 봐요 */
+    private var loggedInAsAdmin = false
 
     override suspend fun requestEmailCode(email: String) {
         net()
@@ -236,15 +253,15 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         if (email.equals("taken@lolog.app", true)) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         if (!isValidPassword(password)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "password")
         loggedInWithEmail = true
+        loggedInAsAdmin = false
         tokens.save("mock-access", "mock-refresh")
     }
 
     override suspend fun login(email: String, password: String) {
         net()
-        // 시험용: offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호
-        if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
-        if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+        mockCheckLogin(email, password)
         loggedInWithEmail = true
+        loggedInAsAdmin = mockIsAdmin(email)
         tokens.save("mock-access", "mock-refresh")
     }
 
@@ -252,6 +269,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         net()
         if (provider == SocialProvider.NAVER) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         loggedInWithEmail = false
+        loggedInAsAdmin = false
         tokens.save("mock-access", "mock-refresh")
         return false
     }
@@ -259,7 +277,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun logout() { net(150); tokens.clear() }
     override suspend fun withdraw() { net(); lock.withLock { cardStore.clear(); comicStore.clear() }; tokens.clear() }
 
-    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail) }
+    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail, isAdmin = loggedInAsAdmin) }
 
     override suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider> {
         net()
