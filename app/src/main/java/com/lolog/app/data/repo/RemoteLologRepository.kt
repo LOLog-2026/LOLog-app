@@ -111,6 +111,11 @@ class RemoteLologRepository(
     override suspend fun readInbox(kind: InboxKind, id: Long) = call { api.readInbox(kind.path, id) }
     override suspend fun readAllInbox() = call { api.readAllInbox() }
 
+    override suspend fun createNotice(title: String, body: String) = call { api.createNotice(NoticeCreateDto(title, body)).toModel() }
+    override suspend fun updateNotice(id: Long, title: String?, body: String?) =
+        call { api.updateNotice(id, NoticeUpdateDto(title, body)).toModel() }
+    override suspend fun deleteNotice(id: Long) = call { api.deleteNotice(id) }
+
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
         tokens.fcmToken = token

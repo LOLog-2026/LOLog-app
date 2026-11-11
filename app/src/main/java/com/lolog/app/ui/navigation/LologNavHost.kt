@@ -16,6 +16,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lolog.app.AppContainer
+import com.lolog.app.data.model.InboxItem
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.FriendRequestDirection
 import com.lolog.app.ui.components.LIBRARY_NAME
@@ -23,6 +24,8 @@ import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
 import com.lolog.app.ui.screens.admin.AdminHomeScreen
+import com.lolog.app.ui.screens.admin.AdminNoticeEditScreen
+import com.lolog.app.ui.screens.admin.AdminNoticeListScreen
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
@@ -75,6 +78,8 @@ private const val NOTICE_ID = "noticeId"
 private const val NOTICE_TITLE = "noticeTitle"
 private const val NOTICE_BODY = "noticeBody"
 private const val NOTICE_DATE = "noticeDate"
+/** 공지 쓰기·고치기 화면 → 관리자 공지 목록 스낵바 문구 */
+private const val ADMIN_NOTICE_MESSAGE = "adminNoticeMessage"
 
 object Routes {
     const val SPLASH = "splash"
@@ -95,6 +100,10 @@ object Routes {
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val ADMIN = "admin"
+    /** 관리자 공지 목록 */
+    const val ADMIN_NOTICES = "admin/notices"
+    /** 공지 쓰기·고치기. 고칠 공지는 목록 화면의 savedStateHandle로 넘겨요 */
+    const val ADMIN_NOTICE_EDIT = "admin/notices/edit"
     /** 알림함(공지사항·알림) */
     const val INBOX = "inbox"
     const val NOTICE = "notice/{id}"
@@ -390,7 +399,51 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
             }
-            composable(Routes.ADMIN) { AdminHomeScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.ADMIN) {
+                AdminHomeScreen(
+                    onBack = { nav.popBackStack() },
+                    onNotices = { nav.navigate(Routes.ADMIN_NOTICES) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.ADMIN_NOTICES) { entry ->
+                val message by entry.savedStateHandle.getStateFlow<String?>(ADMIN_NOTICE_MESSAGE, null).collectAsState()
+                AdminNoticeListScreen(
+                    onBack = { nav.popBackStack() },
+                    onNew = {
+                        entry.savedStateHandle[NOTICE_ID] = null
+                        nav.navigate(Routes.ADMIN_NOTICE_EDIT) { launchSingleTop = true }
+                    },
+                    onEdit = { n ->
+                        entry.savedStateHandle[NOTICE_ID] = n.id
+                        entry.savedStateHandle[NOTICE_TITLE] = n.title
+                        entry.savedStateHandle[NOTICE_BODY] = n.body
+                        entry.savedStateHandle[NOTICE_DATE] = n.createdAt
+                        nav.navigate(Routes.ADMIN_NOTICE_EDIT) { launchSingleTop = true }
+                    },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[ADMIN_NOTICE_MESSAGE] = null },
+                )
+            }
+            composable(Routes.ADMIN_NOTICE_EDIT) {
+                val list = nav.previousBackStackEntry?.savedStateHandle
+                // 목록에서 넘긴 id가 있으면 고치기, 없으면 새로 쓰기
+                val original = remember {
+                    list?.get<Long>(NOTICE_ID)?.let { id ->
+                        InboxItem.Notice(
+                            id, list.get<String>(NOTICE_TITLE).orEmpty(), list.get<String>(NOTICE_BODY).orEmpty(),
+                            list.get<String>(NOTICE_DATE).orEmpty(), read = true,
+                        )
+                    }
+                }
+                AdminNoticeEditScreen(
+                    original = original,
+                    onBack = { nav.popBackStack() },
+                    onDone = { message ->
+                        list?.set(ADMIN_NOTICE_MESSAGE, message)
+                        nav.popBackStack()
+                    },
+                )
+            }
             composable(Routes.INBOX) { entry ->
                 InboxScreen(
                     onBack = { nav.popBackStack() },

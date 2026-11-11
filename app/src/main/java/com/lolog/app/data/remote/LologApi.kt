@@ -121,6 +121,14 @@ interface MainApi {
     /** 204. 지금까지 온 것을 모두 읽음 */
     @POST("api/inbox/read") suspend fun readAllInbox()
 
+    // 관리자 공지 (LOLog-docs spec/admin.md 7장). 관리자가 아니면 403 FORBIDDEN, 없는 공지는 404 NOTICE_NOT_FOUND
+    /** 201 Notice */
+    @POST("api/admin/notices") suspend fun createNotice(@Body body: NoticeCreateDto): NoticeDto
+    /** 바꾼 것만 보내요. 200 Notice */
+    @PATCH("api/admin/notices/{id}") suspend fun updateNotice(@Path("id") id: Long, @Body body: NoticeUpdateDto): NoticeDto
+    /** 204 */
+    @DELETE("api/admin/notices/{id}") suspend fun deleteNotice(@Path("id") id: Long)
+
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)
     suspend fun deleteFcmToken(@Body body: FcmTokenDto)

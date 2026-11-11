@@ -241,4 +241,8 @@ object ApiMapper {
         }
         else -> null
     }
+
+    // ── 관리자 공지 ──
+
+    fun NoticeDto.toModel() = AdminNotice(id, title, body, createdAt, updatedAt)
 }
