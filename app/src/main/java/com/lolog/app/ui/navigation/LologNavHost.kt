@@ -18,7 +18,6 @@ import androidx.navigation.navArgument
 import com.lolog.app.AppContainer
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.FriendRequestDirection
-import com.lolog.app.data.model.PushType
 import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
@@ -35,6 +34,8 @@ import com.lolog.app.ui.screens.friends.VoicePickScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
+import com.lolog.app.ui.screens.inbox.InboxScreen
+import com.lolog.app.ui.screens.inbox.NoticeScreen
 import com.lolog.app.ui.screens.rooms.Features
 import com.lolog.app.ui.screens.rooms.RoomCreateScreen
 import com.lolog.app.ui.screens.rooms.RoomScreen
@@ -69,6 +70,11 @@ private const val FRIENDS_MESSAGE = "friendsMessage"
 private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
 // 내 목소리 고르기에서 저장하고 내 캐릭터 화면으로 돌아올 때 띠 문구
 private const val VOICE_MESSAGE = "voiceMessage"
+/** 알림함 → 공지사항 자세히로 넘기는 값. 목록에서 받은 그대로 그려요(따로 조회 없음) */
+private const val NOTICE_ID = "noticeId"
+private const val NOTICE_TITLE = "noticeTitle"
+private const val NOTICE_BODY = "noticeBody"
+private const val NOTICE_DATE = "noticeDate"
 
 object Routes {
     const val SPLASH = "splash"
@@ -89,6 +95,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val ADMIN = "admin"
+    /** 알림함(공지사항·알림) */
+    const val INBOX = "inbox"
+    const val NOTICE = "notice/{id}"
     const val RECORDING = "recording"
     const val ANALYZING = "analyzing/{recordingId}"
     const val CARD = "card/{cardId}"
@@ -103,6 +112,7 @@ object Routes {
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
     fun room(id: Long) = "room/$id"
+    fun notice(id: Long) = "notice/$id"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -156,23 +166,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
         }
     }
 
-    // 알림을 눌렀을 때 갈 화면 (협의 2-2 기본안)
+    // 알림을 눌렀을 때 갈 화면. 알림함의 알림 줄도 같은 함수(openPush)를 써요
     LaunchedEffect(pendingPush, loggedIn, current) {
         val p = pendingPush ?: return@LaunchedEffect
         if (!loggedIn || current == null || current == Routes.SPLASH) return@LaunchedEffect
-        when (p.type) {
-            // 명세: 새 카드 → 보관함 새로고침. (제안한 cardIds가 오고 1개면 그 카드로)
-            PushType.CARDS_CREATED ->
-                if (p.cardIds.size == 1) nav.navigate(Routes.card(p.cardIds.first())) else nav.goTab(Routes.LIBRARY)
-            PushType.COMIC_DONE -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
-            // 실패 → 그 만화 화면. "만들지 못했어요" 안내와 "다시 시도" 버튼이 거기 있어요
-            PushType.COMIC_FAILED -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
-            // 내 캐릭터 완성·실패 → 내 캐릭터 화면(api-dto 푸시 표: 프로필 새로고침)
-            PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED ->
-                nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
-            // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
-            PushType.FRIEND_REQUEST -> nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
-        }
+        nav.openPush(p)
         onPushHandled()
     }
 
@@ -249,6 +247,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
                     onComics = { nav.goTab(Routes.COMICS) },
                     onSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onInbox = { nav.navigate(Routes.INBOX) { launchSingleTop = true } },
                     finishedRecordingId = finished,
                     onFinishedShown = { entry.savedStateHandle[FINISHED_RECORDING] = null },
                 )
@@ -392,6 +391,31 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 )
             }
             composable(Routes.ADMIN) { AdminHomeScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.INBOX) { entry ->
+                InboxScreen(
+                    onBack = { nav.popBackStack() },
+                    onNotice = { n ->
+                        entry.savedStateHandle[NOTICE_ID] = n.id
+                        entry.savedStateHandle[NOTICE_TITLE] = n.title
+                        entry.savedStateHandle[NOTICE_BODY] = n.body
+                        entry.savedStateHandle[NOTICE_DATE] = n.createdAt
+                        nav.navigate(Routes.notice(n.id)) { launchSingleTop = true }
+                    },
+                    onPush = { nav.openPush(it) },
+                )
+            }
+            composable(Routes.NOTICE, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                val id = entry.arguments!!.getLong("id")
+                val inbox = nav.previousBackStackEntry?.savedStateHandle
+                // 알림함에서 넘긴 값이 이 공지 것일 때만 그려요
+                val ok = remember { inbox?.get<Long>(NOTICE_ID) == id }
+                NoticeScreen(
+                    title = remember { if (ok) inbox?.get<String>(NOTICE_TITLE) else null },
+                    body = remember { if (ok) inbox?.get<String>(NOTICE_BODY).orEmpty() else "" },
+                    createdAt = remember { if (ok) inbox?.get<String>(NOTICE_DATE) else null },
+                    onBack = { nav.popBackStack() },
+                )
+            }
             composable(Routes.PROFILE_CHARACTER) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(VOICE_MESSAGE, null).collectAsState()
                 ProfileCharacterScreen(
