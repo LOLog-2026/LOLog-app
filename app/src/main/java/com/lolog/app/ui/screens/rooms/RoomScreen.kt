@@ -42,6 +42,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.*
+import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.data.repo.RoomRepository
 import com.lolog.app.ui.components.*
@@ -140,6 +141,29 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         }
     }
 
+    /** 방(멤버·기다리는 초대)만 다시 받아요. 친구 초대 화면에서 돌아왔을 때 */
+    fun reloadRoom() = viewModelScope.launch {
+        runCatching { rooms.room(roomId) }.onSuccess { room -> _state.update { it.copy(room = room) } }
+    }
+
+    /** 방장: 답을 기다리는 초대 취소(확인 창 없이 바로) */
+    fun cancelInvite(invite: RoomInvite) {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            try {
+                rooms.cancelInvite(roomId, invite.id)
+                val room = rooms.room(roomId)
+                _state.update { it.copy(busy = false, room = room, snackbar = "초대를 취소했어요") }
+            } catch (e: Throwable) {
+                _state.update { it.copy(busy = false, snackbar = errorText(e)) }
+                // 이미 답했거나 취소된 초대, 방장이 바뀐 경우는 방을 다시 받아 맞춰요
+                val code = (e as? LologException)?.code
+                if (code == RoomErrorCodes.ROOM_INVITE_NOT_FOUND || code == RoomErrorCodes.ROOM_OWNER_ONLY) reloadRoom()
+            }
+        }
+    }
+
     fun leave() {
         if (_state.value.busy) return
         viewModelScope.launch {
@@ -163,7 +187,16 @@ internal data class Pressed(val post: RoomPost, val bounds: Rect)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
+fun RoomScreen(
+    roomId: Long,
+    onBack: () -> Unit,
+    onLeft: () -> Unit,
+    /** 방장: "+ 친구 초대" */
+    onInvite: () -> Unit,
+    /** 방 만들기·친구 초대 화면에서 넘어온 스낵바 문구 */
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
+) {
     val container = LocalContainer.current
     val roomRepo = container.rooms ?: return
     val vm = viewModel { RoomViewModel(roomRepo, container.repository, roomId) }
@@ -187,6 +220,8 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(state.left) { if (state.left) onLeft() }
+    // 초대를 보내고 돌아오면 기다리는 초대가 바뀌어서 방을 다시 받아요
+    LaunchedEffect(message) { message?.let { onMessageShown(); vm.reloadRoom(); snackbar.showSnackbar(it) } }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
     LaunchedEffect(tab) { if (tab == 2) vm.chatSeen() }
     BackHandler(enabled = pressed != null) { pressed = null }
@@ -316,20 +351,12 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
 
     if (members && room != null) {
         LologSheet(onDismiss = { members = false }) {
-            Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
-                Text("멤버 ${room.members.size}명", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, modifier = Modifier.padding(bottom = 8.dp))
-                room.members.forEachIndexed { i, m ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        MemberAvatar(m, i, 36.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
-                        if (m.isMe) {
-                            Spacer(Modifier.width(6.dp))
-                            Text("나", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
-                        }
-                    }
-                }
-            }
+            MemberSheet(
+                room,
+                busy = state.busy,
+                onCancelInvite = { vm.cancelInvite(it) },
+                onInvite = { members = false; onInvite() },
+            )
         }
     }
 
@@ -356,6 +383,61 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { if (!state.busy) askRemove = null },
         )
     }
+}
+
+/**
+ * 멤버 시트: "멤버 4명 · 초대 1명", 방장은 노란 "방장" 알약, 나는 "나".
+ * 내가 방장이면 아래에 답을 기다리는 초대(흐린 얼굴 + "초대 취소")와 "+ 친구 초대"
+ */
+@Composable
+private fun MemberSheet(room: Room, busy: Boolean, onCancelInvite: (RoomInvite) -> Unit, onInvite: () -> Unit) {
+    val owner = room.isMineOwner
+    Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
+        Text(
+            "멤버 ${room.members.size}명" + if (room.invites.isNotEmpty()) " · 초대 ${room.invites.size}명" else "",
+            fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, modifier = Modifier.padding(bottom = 8.dp),
+        )
+        room.members.forEachIndexed { i, m ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                MemberAvatar(m, i, 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
+                if (m.isOwner || m.userId == room.ownerId) {
+                    Spacer(Modifier.width(6.dp))
+                    OwnerPill()
+                }
+                if (m.isMe) {
+                    Spacer(Modifier.width(6.dp))
+                    Text("나", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
+                }
+            }
+        }
+        if (owner) {
+            if (room.invites.isNotEmpty()) {
+                Text("답을 기다리는 초대", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                room.invites.forEach { inv ->
+                    val who = inv.invitedUser ?: return@forEach
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.alpha(0.45f)) { MemberAvatar(who, room.members.size, 36.dp) }
+                        Spacer(Modifier.width(12.dp))
+                        Text(who.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink, modifier = Modifier.weight(1f))
+                        SmallPillButton("초대 취소", { if (!busy) onCancelInvite(inv) })
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            PrimaryButton("+ 친구 초대", onInvite)
+        }
+    }
+}
+
+/** 노란 작은 알약 "방장" */
+@Composable
+private fun OwnerPill() {
+    Text(
+        "방장", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.lerp(LologColors.Laugh, LologColors.Ink, 0.35f),
+        modifier = Modifier.clip(LologShape.pill).background(LologColors.LaughSoft).padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
 /** 21 4컷 탭: 2열 격자 */
