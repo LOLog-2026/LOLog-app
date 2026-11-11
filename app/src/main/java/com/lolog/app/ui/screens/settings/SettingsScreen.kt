@@ -130,6 +130,7 @@ fun SettingsScreen(
     onChangePassword: () -> Unit,
     onNickname: () -> Unit,
     onBlocked: () -> Unit,
+    onAdmin: () -> Unit = {},
     message: String? = null,
     onMessageShown: () -> Unit = {},
 ) {
@@ -179,7 +180,24 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.width(14.dp))
                 // 가입 방법은 /auth/me에 없어서 이메일만 보여 줘요
-                Text(email.ifBlank { "불러오는 중…" }, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(email.ifBlank { "불러오는 중…" }, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                // 관리자 계정이면 이메일 옆에 파란 알약(시안 1). 일반 회원은 그리지 않아요
+                if (state.me?.isAdmin == true) {
+                    Spacer(Modifier.width(6.dp))
+                    AdminBadge()
+                }
+            }
+
+            // 관리자 계정에만 관리자 화면 입구(docs PR #59 admin.md "1. 관리자 구분")
+            if (state.me?.isAdmin == true) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onAdmin).padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("관리자 화면", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("›", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted)
+                }
             }
 
             Spacer(Modifier.height(22.dp))
@@ -254,6 +272,15 @@ fun SettingsScreen(
             onDismiss = { askWithdraw = false },
         )
     }
+}
+
+/** 이메일 옆 "관리자" 작은 알약. 볼펜 파랑을 옅게 깔고 글자는 진하게 */
+@Composable
+private fun AdminBadge() {
+    Text(
+        "관리자", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LologColors.Pen,
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(LologColors.Pen.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
 /** 28dp 둥근 네모 아이콘 */

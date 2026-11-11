@@ -59,9 +59,15 @@ data class TokenDto(
  * MeResponse. linkedProviders는 대문자 GOOGLE·NAVER.
  * hasPassword는 LOLog-docs #45 댓글에서 새로 생긴 필드예요. 서버가 아직 안 보내면 false라서
  * 설정의 "비밀번호 바꾸기" 줄이 숨어요(일부러 이렇게 둬요)
+ * role은 "USER" 또는 "ADMIN"(docs PR #59 admin.md "1. 관리자 구분" 초안). 서버가 아직 안 보내면 USER로 봐요
  */
 @Serializable
-data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList(), val hasPassword: Boolean = false)
+data class MeDto(
+    val email: String = "",
+    val linkedProviders: List<String> = emptyList(),
+    val hasPassword: Boolean = false,
+    val role: String = "USER",
+)
 
 /** PasswordResetCodeRequest. 응답은 늘 204(본문 없음) */
 @Serializable

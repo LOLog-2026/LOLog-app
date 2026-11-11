@@ -79,7 +79,8 @@ object ApiMapper {
 
     // ── 인증 ──
 
-    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet(), hasPassword)
+    /** role이 "ADMIN"일 때만 관리자로 봐요. 안 오거나 모르는 값이면 일반 회원 */
+    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet(), hasPassword, isAdmin = role == "ADMIN")
     fun providers(raw: List<String>) = raw.mapNotNull(::provider).toSet()
 
     // ── 녹음 ──
