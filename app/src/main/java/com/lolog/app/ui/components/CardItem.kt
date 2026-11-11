@@ -4,6 +4,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Person
@@ -44,7 +45,15 @@ fun CardItem(card: CardSummary, isNew: Boolean, onClick: () -> Unit, modifier: M
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Mic, null, tint = LologColors.Muted, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(3.dp))
-                Text(cardMeta(card), fontSize = 12.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    cardMeta(card), fontSize = 12.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // 들을 수 있는 음성이 있는 카드(READY)에만 작은 헤드폰 표시(replay.md 2장)
+                if (card.hasAudio) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Outlined.Headphones, contentDescription = "음성 있음", tint = LologColors.Accent, modifier = Modifier.size(13.dp))
+                }
             }
         }
         if (isNew) PenMemo("새로!", Modifier.align(Alignment.TopEnd).offset(x = (-12).dp, y = (-10).dp), angle = 3f)

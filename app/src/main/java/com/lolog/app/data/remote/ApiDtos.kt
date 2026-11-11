@@ -55,9 +55,25 @@ data class TokenDto(
     val isNewUser: Boolean? = null,
 )
 
-/** MeResponse. linkedProviders는 대문자 GOOGLE·NAVER */
+/**
+ * MeResponse. linkedProviders는 대문자 GOOGLE·NAVER.
+ * hasPassword는 LOLog-docs #45 댓글에서 새로 생긴 필드예요. 서버가 아직 안 보내면 false라서
+ * 설정의 "비밀번호 바꾸기" 줄이 숨어요(일부러 이렇게 둬요)
+ */
 @Serializable
-data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList())
+data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList(), val hasPassword: Boolean = false)
+
+/** PasswordResetCodeRequest. 응답은 늘 204(본문 없음) */
+@Serializable
+data class PasswordResetCodeDto(val email: String)
+
+/** PasswordResetRequest. 응답은 204(본문 없음). code는 6자리 문자열(앞 0 유지) */
+@Serializable
+data class PasswordResetDto(val email: String, val code: String, val newPassword: String)
+
+/** PasswordChangeRequest. 응답은 TokenResponse(새 토큰 한 벌) */
+@Serializable
+data class PasswordChangeDto(val currentPassword: String, val newPassword: String)
 
 /** POST /auth/me/social/{provider} 200 */
 @Serializable
@@ -79,6 +95,8 @@ data class UploadRecordingRequest(
     /** 명세는 Int(0~86,400). 녹음 서비스가 Long으로 계산해서 Long으로 둠(JSON은 같음) */
     val durationSec: Long,
     val sentences: List<Sentence>,
+    /** 이 녹음에서 음성 저장을 켰는지. 서버는 첫 묶음 값만 저장해요. 묶음마다 같은 값을 보내요(명세 audio.md 6장) */
+    val audioSaved: Boolean = false,
 )
 
 /** 명세 이름 RecordingUploadResponse (202). 녹음 서비스(지원)가 쓰는 이름에 맞춤 */
@@ -104,8 +122,13 @@ data class RecordingPageDto(val recordings: List<RecordingListItemDto> = emptyLi
 
 // ── 카드 (/api/cards) ──
 
+/** Speaker. character는 늘 오고 값은 null이거나 { type, id, label, thumbnailUrl } (명세 characters.md 4장) */
 @Serializable
-data class SpeakerDto(val key: String, val name: String? = null)
+data class SpeakerDto(val key: String, val name: String? = null, val character: SpeakerCharacterDto? = null)
+
+/** 화자에 붙은 그림. type DEFAULT·PROFILE, id는 기본 화자 id 또는 회원 ID 문자열. label은 닉네임이 없으면 null */
+@Serializable
+data class SpeakerCharacterDto(val type: String, val id: String, val label: String? = null, val thumbnailUrl: String? = null)
 
 @Serializable
 data class LineDto(val id: Long, val speaker: String, val text: String)
@@ -127,6 +150,8 @@ data class CardSummaryDto(
     // 목록에 "장소 · 대사 N개"를 보여 줘요. lineCount는 명세상 필수지만 서버가 빼도 화면이 깨지지 않게 null을 받아요
     val place: String? = null,
     val lineCount: Int? = null,
+    /** 들을 수 있는 카드 구간 음성이 있으면 true(audio.status가 READY). 서버가 안 보내면 false(replay.md 4장) */
+    val hasAudio: Boolean = false,
 )
 
 @Serializable
@@ -148,10 +173,36 @@ data class CardDetailDto(
     val comics: List<ComicRefDto> = emptyList(), // 최신순
     val createdAt: String = "",
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
+    val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
+)
+
+/** CardAudio — CardDetail.audio. url·durationMs는 READY일 때만 와요 */
+@Serializable
+data class CardAudioDto(
+    val status: String? = null, // READY · PENDING · NONE
+    val url: String? = null, // 10분 서명 주소
+    val durationMs: Long? = null, // 카드 구간 + 앞뒤 0.5초. 파일에 길이가 없어서 재생 바는 이 값으로 그려요
 )
 
 // PATCH /api/cards/{id} 본문(CardUpdateRequest)은 "null을 보내면 지움" 규칙이 있어서
 // DTO 대신 ApiMapper.patchBody()가 JsonObject로 직접 만들어요.
+
+// ── 기본 화자 (LOLog-docs spec/characters.md 4장) ──
+
+/** DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소 */
+@Serializable
+data class DefaultCharacterItem(
+    val id: String,
+    val label: String = "",
+    val ageGroup: String? = null,
+    val gender: String? = null,
+    val glasses: Boolean = false,
+    val thumbnailUrl: String? = null,
+)
+
+/** GET /api/characters/defaults */
+@Serializable
+data class DefaultCharacterListDto(val characters: List<DefaultCharacterItem> = emptyList())
 
 // ── 만화 (/api/comics) ──
 
@@ -176,6 +227,75 @@ data class ComicDto(
 
 @Serializable
 data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor: String? = null)
+
+// ── 친구·프로필 (LOLog-docs spec/friends.md 2장) ──
+
+/** ProfileResponse — GET·PATCH /api/me/profile. character는 내 프로필 캐릭터(만든 적이 없으면 null) */
+@Serializable
+data class ProfileResponse(
+    val userId: Long? = null, // 내 회원 ID. 화자에 내 프로필 캐릭터를 붙일 때 CharacterRef.id로 써요
+    val nickname: String? = null,
+    val friendCode: String? = null, // 닉네임을 정하기 전에는 null
+    val character: ProfileCharacterDto? = null,
+)
+
+/** ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소) */
+@Serializable
+data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "")
+
+/** ProfileUpdateRequest — PATCH /api/me/profile. 1~10자(앞뒤 공백 뺀 길이) */
+@Serializable
+data class ProfileUpdateRequest(val nickname: String)
+
+/** FriendRequestCreate — POST /api/friend-requests */
+@Serializable
+data class FriendRequestCreate(val friendCode: String)
+
+/** 요청의 상대 */
+@Serializable
+data class FriendUser(val userId: Long, val nickname: String = "", val friendCode: String = "")
+
+/** FriendRequestResponse. direction RECEIVED·SENT, status PENDING·ACCEPTED */
+@Serializable
+data class FriendRequestResponse(
+    val id: Long,
+    val direction: String = "",
+    val user: FriendUser,
+    val status: String = "",
+    val createdAt: String = "",
+)
+
+/** GET /api/friend-requests?direction= */
+@Serializable
+data class FriendRequestListResponse(val requests: List<FriendRequestResponse> = emptyList())
+
+/** FriendItem.character: 친구에게 쓸 수 있는 그림(256, 10분 서명 주소) */
+@Serializable
+data class FriendCharacter(val thumbnailUrl: String? = null)
+
+/** FriendItem — GET /api/friends 한 항목, POST /api/friend-requests/{id}/accept 응답 */
+@Serializable
+data class FriendItem(
+    val userId: Long,
+    val nickname: String = "",
+    val friendCode: String = "",
+    val friendsSince: String = "",
+    val character: FriendCharacter? = null,
+)
+
+@Serializable
+data class FriendListResponse(val friends: List<FriendItem> = emptyList())
+
+/** POST /api/blocks 본문 { userId } */
+@Serializable
+data class BlockCreate(val userId: Long)
+
+/** BlockItem. nickname은 null 가능 */
+@Serializable
+data class BlockItem(val userId: Long, val nickname: String? = null, val friendCode: String = "", val blockedAt: String = "")
+
+@Serializable
+data class BlockListResponse(val blocks: List<BlockItem> = emptyList())
 
 // ── 기기 ──
 

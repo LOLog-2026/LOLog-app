@@ -33,6 +33,25 @@ object ErrorCodes {
     const val INVALID_CODE = "INVALID_CODE"             // 400 가입 인증번호가 틀림
     const val CODE_EXPIRED = "CODE_EXPIRED"             // 400 인증번호가 없거나 10분 지남·5번 틀림
     const val TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS"   // 429 같은 이메일로 60초 안에 인증번호를 또 요청
+    // 친구 (LOLog-docs spec/friends.md 오류 코드)
+    const val CANNOT_FRIEND_SELF = "CANNOT_FRIEND_SELF"             // 400 내 코드를 넣음, 나를 차단하려 함
+    const val FRIEND_CODE_NOT_FOUND = "FRIEND_CODE_NOT_FOUND"       // 404 없는 친구 코드(상대가 나를 차단했어도 이 코드)
+    const val FRIEND_REQUEST_NOT_FOUND = "FRIEND_REQUEST_NOT_FOUND" // 404 없는 요청, 내 요청이 아님
+    const val USER_NOT_FOUND = "USER_NOT_FOUND"                     // 404 차단: 친구도 아니고 요청도 오간 적 없음
+    const val PROFILE_REQUIRED = "PROFILE_REQUIRED"                 // 409 닉네임 없이 요청 보내기·수락
+    const val ALREADY_FRIENDS = "ALREADY_FRIENDS"                   // 409 이미 친구
+    const val FRIEND_REQUEST_EXISTS = "FRIEND_REQUEST_EXISTS"       // 409 이미 보낸 요청이 있음
+    const val FRIEND_LIMIT = "FRIEND_LIMIT"                         // 409 나나 상대의 친구가 이미 100명
+    const val USER_BLOCKED = "USER_BLOCKED"                         // 409 내가 차단한 사람에게 요청
+    // 화자 그림 (LOLog-docs spec/characters.md 4장)
+    const val UNKNOWN_CHARACTER = "UNKNOWN_CHARACTER"     // 400 없는 기본 화자 id, 나도 친구도 아닌 회원 ID
+    const val DUPLICATE_CHARACTER = "DUPLICATE_CHARACTER" // 400 한 카드에서 같은 그림을 두 화자에 붙임
+    const val CHARACTER_NOT_READY = "CHARACTER_NOT_READY" // 409 쓸 수 있는 그림이 없는 사람의 캐릭터를 붙임
+    // 화자 더하기·빼기 (LOLog-docs api-dto.md CardUpdateRequest)
+    const val SPEAKER_LIMIT = "SPEAKER_LIMIT"             // 409 더하고 뺀 뒤 화자가 4명을 넘음
+    const val SPEAKER_HAS_LINES = "SPEAKER_HAS_LINES"     // 409 대사가 남은 화자를 빼려 함
+    const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
+    const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -62,8 +81,8 @@ fun isValidPassword(pw: String): Boolean =
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
-/** GET /auth/me */
-data class Account(val email: String, val linkedProviders: Set<SocialProvider>)
+/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요 */
+data class Account(val email: String, val linkedProviders: Set<SocialProvider>, val hasPassword: Boolean = false)
 
 // ── 녹음 ──────────────────────────────────────────────
 
@@ -88,7 +107,42 @@ data class RecordingProgress(val status: RecordingStatus, val cardCount: Int)
 
 // ── 카드 ──────────────────────────────────────────────
 
-data class Speaker(val key: String, val name: String? = null)
+/** 한 카드의 화자 수 한도(FR-EDIT-01). 더하고 뺀 뒤 1~4명이어야 해요(넘으면 409 SPEAKER_LIMIT) */
+const val SPEAKER_MAX = 4
+
+/** character는 이 화자에 붙인 그림. null이면 그림 없이 AI가 외모를 정해요 */
+data class Speaker(val key: String, val name: String? = null, val character: SpeakerCharacter? = null)
+
+/** 화자 그림 종류: 기본 화자, 회원의 프로필 캐릭터 */
+enum class CharacterType { DEFAULT, PROFILE }
+
+/**
+ * 화자에 붙인 그림(명세 CharacterRef + 응답의 label·thumbnailUrl).
+ * id는 기본 화자 id(kid-f-01) 또는 회원 ID 문자열("42"). label은 기본 화자 설명 또는 그 사람의 닉네임
+ */
+data class SpeakerCharacter(val type: CharacterType, val id: String, val label: String? = null, val thumbnailUrl: String? = null) {
+    /** 같은 그림인지(type+id). label·주소는 보지 않아요 */
+    fun sameAs(other: SpeakerCharacter?): Boolean = other != null && type == other.type && id == other.id
+
+    /** 그림 캐시 키. 서명 주소가 10분마다 바뀌어서 주소 대신 이 키로 캐시해요 */
+    val cacheKey: String get() = if (type == CharacterType.DEFAULT) defaultCharacterCacheKey(id) else profileCacheKey(id)
+}
+
+fun defaultCharacterCacheKey(id: String) = "default-$id"
+fun profileCacheKey(userId: String) = "profile-$userId"
+
+enum class AgeGroup(val label: String) { CHILD("어린이"), YOUNG("청년"), MIDDLE("중장년") }
+enum class Gender(val label: String) { F("여"), M("남") }
+
+/** GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소 */
+data class DefaultCharacter(
+    val id: String,
+    val label: String,
+    val ageGroup: AgeGroup?,
+    val gender: Gender?,
+    val glasses: Boolean,
+    val thumbnailUrl: String?,
+)
 
 data class Line(val id: Long, val speaker: String, val text: String)
 
@@ -106,6 +160,27 @@ data class CardSummary(
     val preview: String? = null,
     /** 목록에 "대사 4개"로 보여요 */
     val lineCount: Int? = null,
+    /** 들을 수 있는 음성이 있으면 목록에 작은 표시(replay.md 2장) */
+    val hasAudio: Boolean = false,
+)
+
+/** 카드 구간 음성의 상태(replay.md 1장) */
+enum class AudioStatus {
+    /** 들을 수 있음. 재생 버튼을 보여 줘요 */
+    READY,
+
+    /** 음성 저장을 켠 녹음인데 음성이 아직 안 올라옴(녹음이 끝난 지 7일 안). 안내 문구를 보여 줘요 */
+    PENDING,
+
+    /** 음성 저장을 끈 녹음이거나 7일이 지나도록 안 올라옴. 음성에 대한 것을 아무것도 안 보여 줘요 */
+    NONE,
+}
+
+/** CardDetail.audio. url은 10분짜리 서명 주소, durationMs는 음성 길이(재생 바 전체 길이) */
+data class CardAudio(
+    val status: AudioStatus = AudioStatus.NONE,
+    val url: String? = null,
+    val durationMs: Long? = null,
 )
 
 data class CardPage(val cards: List<CardSummary>, val nextCursor: String?)
@@ -126,6 +201,8 @@ data class CardDetail(
     val comicRemaining: Int? = null,
     /** 녹음 기록이 지워졌으면 null */
     val recordingId: Long? = null,
+    /** 카드 구간 음성(순간 다시 듣기) */
+    val audio: CardAudio = CardAudio(),
 ) {
     /** 서버 값이 없으면 실패를 뺀 개수로 앱이 계산 */
     val remaining: Int
@@ -139,21 +216,31 @@ data class CardDetail(
 }
 
 /**
- * 카드 고치기(PATCH): 바꾼 것만 채워요(null = 안 바꿈).
- *  speakers = 이름을 바꾼 화자만(name null = 이름 지움), lines = 고친 대사만, place = 장소를 지우면 ""
- */
-/**
  * 고친 대사 하나(api-dto LineUpdate). speaker·text는 바꾼 것만 넣어요.
  * 화자만 바꾼 대사에 원래 text를 같이 보내면, LLM이 만든 200자 넘는 대사는 서버가 400으로 거절해요.
  */
 data class LineEdit(val id: Long, val speaker: String? = null, val text: String? = null)
 
+/**
+ * 카드 고치기(PATCH): 바꾼 것만 채워요(null = 안 바꿈).
+ *  speakers = 이름을 바꾼 화자만(name null = 이름 지움, character는 보지 않아요)
+ *  characters = 그림을 바꾼 화자만. 화자 key → 새 그림(null = 그림 떼기)
+ *  lines = 고친 대사만, place = 장소를 지우면 ""
+ *  newSpeakers = 새로 만드는 화자 key(다음 번호, 화자가 2명이면 "화자3"). 이름·그림을 정했으면 speakers·characters에도 들어가요
+ *  removeSpeakers = 뺄 화자 key. 대사가 하나도 없는 화자만 뺄 수 있어요
+ * key는 모두 빼기 전 기준이에요. 서버가 뺀 뒤 "화자1"부터 다시 매겨서 돌려줘요(api-dto CardUpdateRequest)
+ */
 data class CardEdit(
     val speakers: List<Speaker>? = null,
     val lines: List<LineEdit>? = null,
     val place: String? = null,
+    val characters: Map<String, SpeakerCharacter?>? = null,
+    val newSpeakers: List<String>? = null,
+    val removeSpeakers: List<String>? = null,
 ) {
-    val isEmpty: Boolean get() = speakers == null && lines == null && place == null
+    val isEmpty: Boolean
+        get() = speakers == null && lines == null && place == null && characters == null &&
+            newSpeakers == null && removeSpeakers == null
 }
 
 // ── 만화 ──────────────────────────────────────────────
@@ -216,10 +303,64 @@ data class ComicDetail(
     val ratio: Float get() = (width ?: COMIC_WIDTH).toFloat() / (height ?: COMIC_HEIGHT).toFloat()
 }
 
+// ── 친구 (LOLog-docs spec/friends.md) ─────────────────
+
+/** 닉네임 1~10자(앞뒤 공백 뺀 길이), 친구 코드 대문자·숫자 8자리, 친구는 100명까지 */
+object FriendRules {
+    const val NICKNAME_MAX = 10
+    const val CODE_LENGTH = 8
+    const val FRIEND_MAX = 100
+}
+
+/**
+ * GET·PATCH /api/me/profile. 닉네임을 정하기 전에는 friendCode가 null.
+ * character는 내 프로필 캐릭터(만든 적이 없으면 null).
+ * userId는 화자에 내 캐릭터(PROFILE)를 붙일 때 쓰는 내 회원 ID(문자열, docs #56)
+ */
+data class Profile(
+    val nickname: String? = null,
+    val friendCode: String? = null,
+    val character: ProfileCharacter? = null,
+    val userId: String? = null,
+)
+
+enum class ProfileCharacterStatus { PROCESSING, READY, FAILED, UNKNOWN }
+
+/** 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만 */
+data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String)
+
+/** 친구 한 명. thumbnailUrl은 친구의 프로필 캐릭터 그림(없으면 기본 사람 아이콘) */
+data class Friend(
+    val userId: Long,
+    val nickname: String,
+    val friendCode: String,
+    val friendsSince: String,
+    val thumbnailUrl: String? = null,
+)
+
+enum class FriendRequestDirection(val query: String) { RECEIVED("received"), SENT("sent") }
+
+/** POST에서 상대가 이미 나에게 요청해 둔 경우는 바로 친구가 돼서 ACCEPTED */
+enum class FriendRequestStatus { PENDING, ACCEPTED, UNKNOWN }
+
+/** 요청의 상대. 닉네임을 정한 사람만 요청을 주고받아서 nickname은 늘 있어요 */
+data class FriendUser(val userId: Long, val nickname: String, val friendCode: String)
+
+data class FriendRequest(
+    val id: Long,
+    val direction: FriendRequestDirection,
+    val user: FriendUser,
+    val status: FriendRequestStatus,
+    val createdAt: String,
+)
+
+/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null */
+data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: String, val blockedAt: String)
+
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 
 /** FCM data의 type (api-spec.md 푸시 표) */
-enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED }
+enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST }
 
 data class PushPayload(
     val type: PushType,
@@ -230,4 +371,7 @@ data class PushPayload(
     val cardIds: List<Long> = emptyList(),
     val comicId: Long? = null,
     val cardId: Long? = null,
+    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장) */
+    val requestId: Long? = null,
+    val nickname: String? = null,
 )

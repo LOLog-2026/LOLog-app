@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lolog.app.data.model.CardKind
+import com.lolog.app.data.model.SpeakerCharacter
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 
@@ -85,6 +87,7 @@ private val bubbleShape = RoundedCornerShape(16.dp)
 /**
  * 말풍선. [left]면 Canvas 바탕 + 왼쪽 26dp 이름 동그라미 + 위에 작은 이름,
  * 오른쪽이면 AccentSoft 바탕 + 오른쪽 이름 동그라미. 최대 너비는 화면의 60%.
+ * [character]가 있으면 이름 동그라미 대신 화자 그림. [onAvatarClick]이 있으면 동그라미·이름을 누를 수 있어요
  */
 @Composable
 fun ChatBubble(
@@ -94,20 +97,30 @@ fun ChatBubble(
     left: Boolean,
     modifier: Modifier = Modifier,
     content: (@Composable () -> Unit)? = null,
+    character: SpeakerCharacter? = null,
+    onAvatarClick: (() -> Unit)? = null,
 ) {
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.6f).dp
+    val tap = if (onAvatarClick != null) Modifier.clip(CircleShape).clickable(onClick = onAvatarClick) else Modifier
+    val avatar = @Composable {
+        Box(tap) { SpeakerAvatar(name, speakerIndex, size = 26.dp, thumbnailUrl = character?.thumbnailUrl, cacheKey = character?.cacheKey) }
+    }
     Row(
         modifier.fillMaxWidth(),
         horizontalArrangement = if (left) Arrangement.Start else Arrangement.End,
         verticalAlignment = Alignment.Bottom,
     ) {
         if (left) {
-            SpeakerAvatar(name, speakerIndex, size = 26.dp)
+            avatar()
             Spacer(Modifier.width(8.dp))
         }
         Column(horizontalAlignment = if (left) Alignment.Start else Alignment.End) {
             if (left) {
-                Text(name, fontSize = 10.5.sp, color = LologColors.Muted, modifier = Modifier.padding(start = 4.dp, bottom = 3.dp))
+                Text(
+                    name, fontSize = 10.5.sp, color = LologColors.Muted,
+                    modifier = Modifier.then(if (onAvatarClick != null) Modifier.clickable(onClick = onAvatarClick) else Modifier)
+                        .padding(start = 4.dp, bottom = 3.dp),
+                )
             }
             Box(
                 Modifier
@@ -121,7 +134,7 @@ fun ChatBubble(
         }
         if (!left) {
             Spacer(Modifier.width(8.dp))
-            SpeakerAvatar(name, speakerIndex, size = 26.dp)
+            avatar()
         }
     }
 }

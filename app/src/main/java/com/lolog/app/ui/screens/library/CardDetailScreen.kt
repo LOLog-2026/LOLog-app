@@ -112,6 +112,29 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         }
     }
 
+    /** 화자 고치기 팝업에서 고른 것을 바로 PATCH해요(바뀐 것만). 성공·실패는 아래 띠로 알려요 */
+    fun saveSpeaker(key: String, pick: SpeakerPick) {
+        val edit = _state.value.card?.speakers?.firstOrNull { it.key == key }?.editFor(pick) ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            try {
+                val card = repo.updateCard(id, edit)
+                _state.update { it.copy(busy = false, card = card, toast = speakerSavedText(edit)) }
+            } catch (e: LologException) {
+                _state.update { it.copy(busy = false, toast = errorText(e)) }
+            }
+        }
+    }
+
+    /**
+     * 음성 서명 주소(10분)가 만료됐을 때 카드 자세히를 다시 불러 새 주소를 받아요(replay.md 3장).
+     * 그사이 음성 상태가 바뀌었으면 화면도 같이 바뀌어요
+     */
+    suspend fun freshAudioUrl(): String? = runCatching { repo.card(id) }.getOrNull()?.let { card ->
+        _state.update { it.copy(card = card) }
+        card.audio.url
+    }
+
     fun consumed() = _state.update { it.copy(requestedComicId = null, toast = null, deleteFailed = false) }
 }
 
@@ -126,6 +149,8 @@ fun CardDetailScreen(
     onComic: (Long) -> Unit,
     onDeleted: () -> Unit,
     onNotFound: () -> Unit,
+    /** 화자 팝업의 "내 캐릭터 만들기" */
+    onMakeCharacter: () -> Unit = {},
     savedJustNow: Boolean = false,
     onSavedShown: () -> Unit = {},
 ) {
@@ -135,6 +160,9 @@ fun CardDetailScreen(
     var menu by remember { mutableStateOf(false) }
     var askDelete by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(false) }
+    var speakerSheet by remember { mutableStateOf<String?>(null) } // 화자 고치기 팝업을 연 화자 key
+    val charVm = viewModel { SpeakerCharacterViewModel(repo) }
+    val charState by charVm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { vm.load() }
@@ -145,8 +173,9 @@ fun CardDetailScreen(
         val msg = state.toast ?: return@LaunchedEffect
         val retry = state.deleteFailed
         askDelete = false
-        vm.consumed()
+        // 띠를 다 보여 준 뒤에 비워요. 먼저 비우면 이 효과가 다시 시작되면서 띠가 바로 사라져요
         val r = snackbar.showSnackbar(msg, actionLabel = if (retry) "다시 시도" else null)
+        vm.consumed()
         if (r == SnackbarResult.ActionPerformed && retry) vm.delete()
     }
     // 카드 고치기에서 저장하고 돌아오면
@@ -189,12 +218,28 @@ fun CardDetailScreen(
         when {
             state.loading -> SkeletonList(Modifier.padding(pad), count = 3)
             card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
-            else -> CardBody(card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad))
+            else -> CardBody(
+                card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
+                freshAudioUrl = vm::freshAudioUrl,
+                // 만화 그리는 중에는 고칠 수 없어서(409 CARD_LOCKED) 화자를 눌러도 팝업을 열지 않아요
+                onSpeakerClick = if (card.locked) null else { key -> speakerSheet = key; charVm.open() },
+            )
         }
     }
 
     if (sheet && card != null) {
         ComicRequestSheet(card, busy = state.busy, onConfirm = vm::requestComic, onDismiss = { sheet = false })
+    }
+    speakerSheet?.let { key ->
+        val sp = card?.speakers?.firstOrNull { it.key == key } ?: return@let
+        SpeakerCharacterSheet(
+            speaker = sp,
+            placeholder = "화자${card.speakers.indexOf(sp) + 1}",
+            data = charState,
+            onRetry = { charVm.open() },
+            onClose = { pick -> speakerSheet = null; vm.saveSpeaker(key, pick) },
+            onMakeMine = onMakeCharacter,
+        )
     }
     if (askDelete) {
         LologDialog(
@@ -283,6 +328,8 @@ private fun CardBody(
     onComic: (Long) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier,
+    onSpeakerClick: ((String) -> Unit)? = null,
+    freshAudioUrl: suspend () -> String? = { null },
 ) {
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -290,8 +337,10 @@ private fun CardBody(
     ) {
         // 가운데 위 "● 웃김 · 대화 n줄"
         KindChip(card.kind, Modifier.align(Alignment.CenterHorizontally), suffix = "대화 ${card.lines.size}줄")
+        // 순간 다시 듣기: 대사 위에 재생 줄(READY) 또는 안내 한 줄(PENDING). NONE이면 아무것도 없어요
+        CardAudioSection(card, freshAudioUrl)
         // 대사는 처음부터 전부 말풍선으로(재생 없음)
-        CardLines(card)
+        CardLines(card, onSpeakerClick = onSpeakerClick)
 
         if (card.comics.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
@@ -355,16 +404,32 @@ private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDet
  * 카드 보기와 만화 그리는 중 화면이 같이 써요.
  */
 @Composable
-fun CardLines(card: CardDetail, modifier: Modifier = Modifier, lines: List<Line> = card.lines) {
+fun CardLines(
+    card: CardDetail,
+    modifier: Modifier = Modifier,
+    lines: List<Line> = card.lines,
+    onSpeakerClick: ((String) -> Unit)? = null,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        lines.forEach { line -> LineBubble(card, line) }
+        lines.forEach { line -> LineBubble(card, line, onSpeakerClick = onSpeakerClick) }
     }
 }
 
+/** 화자에 그림이 붙어 있으면 이름 동그라미 대신 그 그림. [onSpeakerClick]이 있으면 화자 그림·이름을 눌러 화자 고치기 */
 @Composable
-fun LineBubble(card: CardDetail, line: Line, modifier: Modifier = Modifier, content: (@Composable () -> Unit)? = null) {
+fun LineBubble(
+    card: CardDetail,
+    line: Line,
+    modifier: Modifier = Modifier,
+    onSpeakerClick: ((String) -> Unit)? = null,
+    content: (@Composable () -> Unit)? = null,
+) {
     val idx = card.speakers.indexOfFirst { it.key == line.speaker }.coerceAtLeast(0)
-    ChatBubble(card.speakers.displayName(line.speaker), idx, line.text, left = idx % 2 == 0, modifier = modifier, content = content)
+    ChatBubble(
+        card.speakers.displayName(line.speaker), idx, line.text, left = idx % 2 == 0, modifier = modifier, content = content,
+        character = card.speakers.getOrNull(idx)?.character,
+        onAvatarClick = onSpeakerClick?.let { { it(line.speaker) } },
+    )
 }
 
 /** 10 만화 요청 바텀시트. 옵션 없이 확인만 받고, 남은 횟수를 보여 줘요 */

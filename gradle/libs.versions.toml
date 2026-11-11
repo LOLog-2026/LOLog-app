@@ -11,6 +11,7 @@ coroutines = "1.9.0"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
 coil = "2.7.0"
+mlkitFace = "16.1.7"
 junit = "4.13.2"
 # Firebase 콘솔 안내 버전(2026-11)
 googleServices = "4.5.0"
@@ -43,6 +44,8 @@ retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "con
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+# 프로필 캐릭터 사진의 얼굴 수 확인(characters.md 3장). 모델 내장형이라 APK로 나눠 줘도 바로 돼요
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFace" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
