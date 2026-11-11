@@ -239,8 +239,14 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
     }
 }
 
-/** 0.1초에 막대 하나, 최근 약 5초. 이만큼 쌓이면 가장 오래된 막대부터 빠져요 */
-private const val MAX_BARS = 50
+/** 0.1초에 막대 하나, 최근 약 20초. 큰 폰에서도 판 너비를 다 채울 만큼이고, 넘치면 가장 오래된 막대부터 빠져요 */
+private const val MAX_BARS = 200
+
+/** 막대 최대 높이 상한. 판이 커도 막대가 이보다 길어지지 않아요 */
+private val MAX_BAR_HEIGHT = 140.dp
+
+/** 빨간 지금 선이 막대 최대 높이보다 위아래로 더 나오는 길이 */
+private val NOW_LINE_EXTRA = 12.dp
 
 /**
  * 소리 크기 막대(아이폰 음성 메모처럼). 새 막대는 빨간 선에서 생기고 왼쪽으로 흘러가요.
@@ -255,6 +261,10 @@ private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
     LaunchedEffect(running) {
         val rnd = kotlin.random.Random(System.nanoTime())
         var phase = 0f
+        // 막 시작할 때 왼쪽이 비지 않게 조용한 낮은 막대로 판 너비만큼 미리 채워요
+        if (running && levels.isEmpty()) {
+            repeat(MAX_BARS) { levels.add(mockLevel(false, 0f, rnd)) }
+        }
         while (running) {
             phase += 0.33f
             levels.add(mockLevel(talkingNow, phase, rnd))
@@ -268,6 +278,7 @@ private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
         val gap = 2.dp.toPx()
         val nowX = size.width - 10.dp.toPx() // 11/10 확정: 코랄 세로선은 판 오른쪽 끝
         val midY = size.height / 2
+        val maxBarH = minOf(size.height * 0.85f, MAX_BAR_HEIGHT.toPx())
         // 가운데 기준선
         drawLine(LologColors.Line, Offset(0f, midY), Offset(size.width, midY), 1.dp.toPx())
         // 앞으로 올 자리
@@ -282,14 +293,20 @@ private fun Waveform(running: Boolean, talking: Boolean, modifier: Modifier) {
             val fromNow = n - 1 - i
             val x = nowX - barW - gap - fromNow * (barW + gap)
             if (x < 0) continue
-            val h = (levels[i] * size.height * 0.85f).coerceAtLeast(3.dp.toPx())
+            val h = (levels[i] * maxBarH).coerceAtLeast(3.dp.toPx())
             drawRoundRect(
                 if (fromNow < 8) LologColors.Rec else grey,
                 Offset(x, midY - h / 2), Size(barW, h), CornerRadius(barW / 2),
             )
         }
-        // 빨간 지금 선
-        drawLine(LologColors.Rec, Offset(nowX, 0f), Offset(nowX, size.height), 2.dp.toPx())
+        // 빨간 지금 선: 막대 최대 높이 + 위아래 12dp만큼만
+        val lineHalf = maxBarH / 2 + NOW_LINE_EXTRA.toPx()
+        drawLine(
+            LologColors.Rec,
+            Offset(nowX, (midY - lineHalf).coerceAtLeast(0f)),
+            Offset(nowX, (midY + lineHalf).coerceAtMost(size.height)),
+            2.dp.toPx(),
+        )
     }
 }
 
