@@ -344,7 +344,7 @@ fun RoomScreen(roomId: Long, onBack: () -> Unit, onLeft: () -> Unit) {
     askRemove?.let { p ->
         LologDialog(
             title = "이 만화를 방에서 내릴까요?",
-            body = "이 만화에 달린 좋아요와 댓글도 같이 사라져요. 내 만화 화면의 만화는 그대로 있어요.",
+            body = "이 만화에 달린 좋아요와 댓글도 같이 사라져요. 컨텐츠 화면의 만화는 그대로 있어요.",
             confirmText = "내리기",
             danger = true,
             loading = state.busy,

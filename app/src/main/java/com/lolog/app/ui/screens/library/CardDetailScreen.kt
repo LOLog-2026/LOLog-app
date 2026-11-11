@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
  *  - 이 카드로 만든 만화: "1 / 3번 · 실패는 안 셈". 실패한 만화는 그 자리에서 다시 시도
  *  - 만화 그리는 중: 고치기·지우기·다시 그리기 모두 꺼짐 (서버도 409 CARD_LOCKED / COMIC_IN_PROGRESS)
  *  - 3번 다 씀: 회색 버튼 "3번 다 그렸어요"
- *  - 카드를 지워도 만화는 '내 만화'에 남아요
+ *  - 카드를 지워도 만화는 '컨텐츠'에 남아요
  */
 
 class CardDetailViewModel(private val repo: LologRepository, private val id: Long) : ViewModel() {
@@ -244,7 +244,7 @@ fun CardDetailScreen(
     if (askDelete) {
         LologDialog(
             title = "이 카드를 지울까요?",
-            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '내 만화'에 그대로 남아요.",
+            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '컨텐츠'에 그대로 남아요.",
             confirmText = "지우기",
             danger = true,
             loading = state.busy,

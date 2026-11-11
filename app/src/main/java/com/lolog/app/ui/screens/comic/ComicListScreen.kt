@@ -113,7 +113,7 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
     }
 }
 
-// ── 15 내 만화 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
+// ── 15 컨텐츠(내 만화) 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
 
 @Composable
 fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -> Unit = {}) {
@@ -147,7 +147,7 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
         Column(Modifier.fillMaxSize()) {
             // 위 칸: 흰 바탕 제목 줄. 맨 위에 고정, 아래만 넘어가요
             ListHeader {
-                LologTopBar("내 만화", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
+                LologTopBar("컨텐츠", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
             }
             // 아래 칸: 연한 회색, 노트 줄 없음
             Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
