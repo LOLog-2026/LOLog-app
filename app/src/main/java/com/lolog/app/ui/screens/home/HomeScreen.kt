@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -88,6 +89,10 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
+    /** 종 버튼의 코랄 점: 안 읽은 알림이나 공지사항이 있음 */
+    private val _hasUnread = MutableStateFlow(false)
+    val hasUnread: StateFlow<Boolean> = _hasUnread
+
     private val _analysis = MutableStateFlow<Analysis?>(null)
     val analysis: StateFlow<Analysis?> = _analysis
     private var watchJob: Job? = null
@@ -105,6 +110,11 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
                 recent = c.cards.take(RECENT_MAX),
             )
         } }.onSuccess { _state.value = it }
+    }
+
+    /** GET /api/inbox/unread. 실패하면(서버가 아직 지원하지 않을 때 포함) 점을 안 보여요 */
+    fun loadUnread() = viewModelScope.launch {
+        _hasUnread.value = runCatching { repo.inboxHasUnread() }.getOrDefault(false)
     }
 
     /**
@@ -151,6 +161,8 @@ fun HomeScreen(
     /** "4컷만화" 숫자 칸을 누르면 내 만화 탭으로 */
     onComics: () -> Unit,
     onSettings: () -> Unit,
+    /** 종 버튼 → 알림함 */
+    onInbox: () -> Unit = {},
     /** 방금 끝낸 녹음 ID (녹음 화면에서 끝내고 돌아오면 들어와요) */
     finishedRecordingId: Long? = null,
     onFinishedShown: () -> Unit = {},
@@ -160,10 +172,13 @@ fun HomeScreen(
     val vm = viewModel { HomeViewModel(repo) }
     val state by vm.state.collectAsState()
     val analysis by vm.analysis.collectAsState()
+    val hasUnread by vm.hasUnread.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         vm.load()
+        // 알림함 등 다른 화면에서 돌아올 때마다 점을 새로 받아요
+        vm.loadUnread()
         if (finishedRecordingId == null) vm.resumeAnalysis()
     }
     // 녹음 끝내고 돌아왔을 때: 정리 상태 보기 시작 + 아래 검은 띠 한 번
@@ -186,12 +201,23 @@ fun HomeScreen(
         Modifier.fillMaxSize().noteLines().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 설정 톱니
+        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 종 · 설정 톱니
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(32.dp))
             Spacer(Modifier.width(8.dp))
             Image(painterResource(R.drawable.logo_word), contentDescription = "LOLog", modifier = Modifier.height(20.dp))
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = onInbox) {
+                Box {
+                    Icon(Icons.Outlined.Notifications, contentDescription = if (hasUnread) "알림함, 새 소식 있음" else "알림함", tint = LologColors.Ink)
+                    if (hasUnread) {
+                        Box(
+                            Modifier.align(Alignment.TopEnd).offset(x = 1.dp, y = (-1).dp)
+                                .size(7.dp).clip(CircleShape).background(LologColors.Accent),
+                        )
+                    }
+                }
+            }
             IconButton(onClick = onSettings) {
                 Icon(Icons.Outlined.Settings, contentDescription = "설정", tint = LologColors.Ink)
             }
