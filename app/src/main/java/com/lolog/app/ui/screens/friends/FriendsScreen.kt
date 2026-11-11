@@ -204,6 +204,7 @@ fun FriendsScreen(
                 onRoom = { onRoom?.invoke(it) },
                 onCreate = { onCreateRoom?.invoke() },
                 onFriends = { showRooms = false },
+                onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
                 modifier = Modifier.weight(1f),
             )
             state.loading && state.profile == null -> LoadingBox(Modifier.padding(pad))

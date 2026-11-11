@@ -310,11 +310,11 @@ class MockRooms(
         rooms += listOf(team, school, family, club)
 
         // 받은 초대: 준님의 "주말 카레팟"(멤버 3명), 민지님의 "동아리"(내가 차단한 태오님이 있어요)
-        val curry = RoomData(5, "주말 카레팟", mutableListOf(jun, seoyeon, doyun), "준님이 방을 만들었어요", ago(1), 0, ownerId = jun.userId)
-        curry.messages += RoomMessage.System(231, ago(1), "준님이 방을 만들었어요")
+        val curry = RoomData(5, "주말 카레팟", mutableListOf(jun, seoyeon, doyun), "준님이 방을 만들었어요", ago(10), 0, ownerId = jun.userId)
+        curry.messages += RoomMessage.System(231, ago(10), "준님이 방을 만들었어요")
         val clubRoom = RoomData(6, "동아리", mutableListOf(minji, taeo, haeun), "민지님이 방을 만들었어요", ago(60 * 5), 0, ownerId = minji.userId)
         clubRoom.messages += RoomMessage.System(241, ago(60 * 5), "민지님이 방을 만들었어요")
-        received += Received(RoomInvite(501, 5, curry.name, invitedUser = null, invitedBy = jun.copy(isOwner = true), hasBlockedMember = false, createdAt = ago(1), memberCount = 3), curry)
+        received += Received(RoomInvite(501, 5, curry.name, invitedUser = null, invitedBy = jun.copy(isOwner = true), hasBlockedMember = false, createdAt = ago(0), memberCount = 3), curry)
         received += Received(RoomInvite(502, 6, clubRoom.name, invitedUser = null, invitedBy = minji.copy(isOwner = true), hasBlockedMember = true, createdAt = ago(60 * 5), memberCount = 3), clubRoom)
     }
 
