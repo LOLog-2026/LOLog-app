@@ -61,8 +61,10 @@ class RecordingUploader(
                 val partNo = part.request.partNo
                 onSending(partNo)
                 try {
-                    ids[clientId] = send(part.request).recordingId
-                    store.markUploaded(part)
+                    val recordingId = send(part.request).recordingId
+                    ids[clientId] = recordingId
+                    // 음성은 이 서버 녹음 ID로 올리므로 적어 둔다.
+                    store.markUploaded(part, recordingId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: IOException) {

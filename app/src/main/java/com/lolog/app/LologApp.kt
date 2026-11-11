@@ -19,6 +19,8 @@ class LologApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.notifier.createChannels()
+        // 지난번에 카드 화면을 나가기 전에 앱이 꺼져 남은 다시 듣기 임시 파일을 지워요
+        com.lolog.app.util.ReplayFiles.clear(this)
 
         // 로그인하면(앱을 켰을 때 이미 로그인돼 있어도) 푸시 토큰을 서버에 등록해요(FR-NOTI)
         appScope.launch {

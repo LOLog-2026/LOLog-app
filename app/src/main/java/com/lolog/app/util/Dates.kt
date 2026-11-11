@@ -49,3 +49,24 @@ fun durationLabel(totalSec: Long): String {
 
 /** "11월 4일" */
 fun dayLabel(iso: String?): String = parse(iso)?.atZoneSameInstant(zone)?.format(dayFmt) ?: ""
+
+private val dayWeekFmt = DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN)
+
+/** 날짜별 묶음용: 이 폰 시간대의 날짜 */
+fun localDay(iso: String?): LocalDate? = parse(iso)?.atZoneSameInstant(zone)?.toLocalDate()
+
+/** "11월 4일 화요일" */
+fun dayWithWeek(day: LocalDate): String = day.format(dayWeekFmt)
+
+/** 요청 목록용: "방금" · "3분 전" · "5시간 전" · "2일 전", 7일이 넘으면 "11월 3일" */
+fun relativeTime(iso: String?): String {
+    val t = parse(iso) ?: return ""
+    val sec = java.time.Duration.between(t, OffsetDateTime.now()).seconds.coerceAtLeast(0)
+    return when {
+        sec < 60 -> "방금"
+        sec < 3600 -> "${sec / 60}분 전"
+        sec < 86_400 -> "${sec / 3600}시간 전"
+        sec < 7 * 86_400 -> "${sec / 86_400}일 전"
+        else -> dayLabel(iso)
+    }
+}

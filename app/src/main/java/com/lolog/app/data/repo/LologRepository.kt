@@ -26,6 +26,12 @@ interface LologRepository {
     suspend fun withdraw()
     suspend fun me(): Account
     suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider>
+    /** 비밀번호 찾기 인증번호를 메일로 보내 달라고 해요. 가입 여부와 관계없이 성공해요(60초 안에 또 부르면 TOO_MANY_REQUESTS) */
+    suspend fun requestPasswordResetCode(email: String)
+    /** 인증번호로 새 비밀번호를 정해요. 성공해도 토큰은 받지 않아서 다시 로그인해야 해요 */
+    suspend fun resetPassword(email: String, code: String, newPassword: String)
+    /** 로그인한 채로 비밀번호를 바꿔요. 받은 새 토큰으로 저장한 토큰을 바꿔요 */
+    suspend fun changePassword(currentPassword: String, newPassword: String)
 
     // 녹음
     suspend fun uploadRecording(part: RecordingPart): RecordingAccepted
@@ -45,6 +51,34 @@ interface LologRepository {
     suspend fun comics(cursor: String? = null, size: Int = 20, sort: SortOrder = SortOrder.NEWEST): ComicPage
     suspend fun comic(id: Long): ComicDetail
     suspend fun deleteComic(id: Long)
+
+    // 친구·프로필·차단 (LOLog-docs spec/friends.md)
+    /** 처음 부르면 서버가 프로필을 만들어요. 닉네임을 정하기 전에는 friendCode가 null */
+    suspend fun profile(): Profile
+    /** 앞뒤 공백을 잘라 보내요(1~10자) */
+    suspend fun updateNickname(nickname: String): Profile
+    /** 프로필 캐릭터 만들기·다시 만들기. photo는 JPEG 바이트. 202면 PROCESSING (characters.md 3장) */
+    suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter
+    /** 프로필 캐릭터 지우기. 붙여 둔 카드 화자에서도 빠져요 */
+    suspend fun deleteProfileCharacter()
+    /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
+    suspend fun sendFriendRequest(code: String): FriendRequest
+    /** 최신순 */
+    suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest>
+    suspend fun acceptFriendRequest(id: Long): Friend
+    /** 받은 요청 거절, 보낸 요청 취소 */
+    suspend fun deleteFriendRequest(id: Long)
+    /** 최근에 친구가 된 사람이 위 */
+    suspend fun friends(): List<Friend>
+    suspend fun removeFriend(userId: Long)
+    suspend fun block(userId: Long)
+    /** 최신순 */
+    suspend fun blocks(): List<BlockedUser>
+    suspend fun unblock(userId: Long)
+
+    // 화자 그림 (LOLog-docs spec/characters.md)
+    /** 기본 화자 24명. 썸네일 주소는 10분마다 바뀌니 캐시는 id 기준으로 해요 */
+    suspend fun defaultCharacters(): List<DefaultCharacter>
 
     // 기기
     suspend fun registerFcmToken(token: String)

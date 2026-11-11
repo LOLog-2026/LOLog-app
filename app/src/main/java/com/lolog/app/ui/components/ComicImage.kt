@@ -8,17 +8,32 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.lolog.app.ui.theme.LologColors
+
+/**
+ * 만화 그림 캐시 이름. imageUrl은 조회할 때마다 바뀌는 10분짜리 서명 주소라 주소 대신 만화 id로 고정해요(#35).
+ * 저장·공유(ComicExport)도 이 이름으로 Coil 디스크 캐시를 먼저 찾아요
+ */
+fun comicCacheKey(id: Long) = "comic-$id"
+
+/** 목록 작은 칸이 thumbnailUrl(원본과 다른 그림)을 쓸 때의 캐시 이름 */
+fun comicThumbCacheKey(id: Long) = "comic-$id-thumb"
+
+/** 메모리 캐시 이름. 큰 그림과 작은 칸은 크기가 달라서 나눠요(같이 쓰면 큰 그림이 흐리게 보일 수 있어요) */
+internal fun comicMemoryCacheKey(cacheKey: String, small: Boolean) = if (small) "$cacheKey-small" else cacheKey
 
 private val panelColors = listOf(Color(0xFFFFF4DB), Color(0xFFE7ECFF), Color(0xFFE1F5F1), Color(0xFFFFE9E6))
 
@@ -37,14 +52,27 @@ fun ComicImage(
     ratio: Float = COMIC_RATIO,
     /** 그림을 못 받았을 때(서명 주소 10분 만료 → 403). 화면이 만화를 다시 조회해 새 주소를 받아요 */
     onLoadError: () -> Unit = {},
+    /** comicCacheKey(id). null이면 예전처럼 주소를 캐시 이름으로 써요 */
+    cacheKey: String? = null,
 ) {
     val shape = RoundedCornerShape(if (small) 8.dp else 16.dp)
     val boxRatio = if (small) 1f else ratio
     if (imageUrl != null && !imageUrl.startsWith("mock://")) {
         Box(modifier.aspectRatio(boxRatio).clip(shape).background(LologColors.Line), contentAlignment = Alignment.Center) {
             if (!small) Text("불러오는 중…", fontSize = 13.sp, color = LologColors.Muted)
+            val context = LocalContext.current
+            // 디스크는 큰 그림·작은 칸이 같은 원본이라 같은 이름, 메모리는 크기가 달라 나눠요.
+            // 캐시에 있으면 서버에 안 가서 주소가 만료돼도 403이 나지 않아요
+            val request = remember(imageUrl, cacheKey, small) {
+                ImageRequest.Builder(context).data(imageUrl).apply {
+                    if (cacheKey != null) {
+                        diskCacheKey(cacheKey)
+                        memoryCacheKey(comicMemoryCacheKey(cacheKey, small))
+                    }
+                }.build()
+            }
             AsyncImage(
-                model = imageUrl,
+                model = request,
                 contentDescription = "4컷만화",
                 contentScale = if (small) ContentScale.Crop else ContentScale.FillWidth,
                 alignment = Alignment.TopCenter,

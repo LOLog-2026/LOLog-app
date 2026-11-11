@@ -25,8 +25,113 @@ internal fun <T> mockPage(newestFirst: List<T>, cursor: String?, size: Int, sort
     return list.drop(start).take(size) to (start + size).takeIf { it < list.size }?.toString()
 }
 
-/** 목업에서 늘 맞는 가입 인증번호 */
+/** 목업에서 늘 맞는 인증번호(가입·비밀번호 찾기) */
 private const val MOCK_EMAIL_CODE = "123456"
+
+/** 인증번호 한 종류(가입·비밀번호 찾기)의 보낸 시각과 틀린 횟수. 목업 인증번호는 늘 MOCK_EMAIL_CODE */
+internal class MockCodes {
+    private val sentAt = mutableMapOf<String, Long>() // 이메일 → 보낸 시각(ms)
+    private val fails = mutableMapOf<String, Int>()
+
+    fun send(email: String) {
+        val key = email.lowercase()
+        val sent = sentAt[key]
+        val nowMs = System.currentTimeMillis()
+        if (sent != null && nowMs - sent < EMAIL_CODE_RESEND_SECONDS * 1000L) {
+            throw LologException(ErrorCodes.TOO_MANY_REQUESTS, "잠시 뒤에 다시 받아 주세요")
+        }
+        sentAt[key] = nowMs
+        fails.remove(key)
+    }
+
+    fun check(email: String, code: String) {
+        val key = email.lowercase()
+        val sent = sentAt[key]
+        // 번호를 안 받았거나 10분 지났거나 5번 틀리면 만료. 시험용으로 000000도 만료
+        if (sent == null || System.currentTimeMillis() - sent > 10 * 60 * 1000L || code == "000000") {
+            throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요")
+        }
+        if (code != MOCK_EMAIL_CODE) {
+            val n = (fails[key] ?: 0) + 1
+            fails[key] = n
+            if (n >= 5) { sentAt.remove(key); throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요") }
+            throw LologException(ErrorCodes.INVALID_CODE, "인증번호가 맞지 않아요")
+        }
+    }
+
+    /** 맞게 쓴 번호는 한 번만 써요 */
+    fun used(email: String) { sentAt.remove(email.lowercase()); fails.remove(email.lowercase()) }
+}
+
+/** 목업 비밀번호 바꾸기 검사. 지금 비밀번호는 로그인 목업과 같은 규칙(4자 미만이면 틀림) */
+internal fun mockCheckPasswordChange(currentPassword: String, newPassword: String) {
+    if (currentPassword.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "지금 비밀번호가 맞지 않아요")
+    if (!isValidPassword(newPassword)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "newPassword")
+}
+
+/**
+ * 목업 카드 고치기(PATCH /api/cards/{id})를 서버처럼 검사하고 덮어써요. 만화 잠금(CARD_LOCKED)은 부르는 쪽이 먼저 봐요.
+ *  - 비었거나 너무 길면 400 INVALID_REQUEST (field는 제안이라 목업만 채워요), 없는 화자면 400 UNKNOWN_SPEAKER
+ *  - 화자 더하기·빼기(api-dto CardUpdateRequest): 더하기·대사 변경을 먼저 하고, 그다음 빼기·key 다시 매기기
+ */
+internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Friend>, me: Profile): CardDetail {
+    fun bad(field: String, msg: String): Nothing = throw LologException(ErrorCodes.INVALID_REQUEST, msg, field)
+    fun unknownSpeaker(): Nothing = throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
+    if (patch.isEmpty) throw LologException(ErrorCodes.INVALID_REQUEST, "바꾼 것이 없어요")
+    val keys = card.speakers.map { it.key }
+    val remove = patch.removeSpeakers.orEmpty()
+    if (remove.size != remove.toSet().size) bad("removeSpeakers", "같은 화자를 두 번 뺄 수 없어요")
+
+    // 화자 더하기: 카드에 없는 key는 다음 번호(화자 2명이면 화자3, 둘을 더하면 화자3·화자4)일 때만 새 화자
+    val sentKeys = (patch.speakers.orEmpty().map { it.key } + patch.characters.orEmpty().keys + patch.newSpeakers.orEmpty()).distinct()
+    val newKeys = sentKeys.filter { it !in keys }
+    val nextKeys = (1..newKeys.size).map { "화자${keys.size + it}" }
+    if (newKeys.toSet() != nextKeys.toSet()) unknownSpeaker()
+    val allKeys = keys + nextKeys
+
+    patch.speakers?.forEach { sp ->
+        val n = sp.name ?: return@forEach
+        val i = allKeys.indexOf(sp.key)
+        if (n.isBlank() || n.length > TextLimits.SPEAKER_NAME) bad("speakers[$i].name", "이름은 ${TextLimits.SPEAKER_NAME}자까지 쓸 수 있어요")
+    }
+    patch.lines?.forEach { l ->
+        val i = card.lines.indexOfFirst { it.id == l.id }
+        if (i < 0) bad("lines", "이 카드의 대사가 아니에요")
+        if (l.speaker != null && l.speaker !in allKeys) unknownSpeaker()
+        // 고쳐 보낸 대사에만 글자 수를 검사해요(명세)
+        l.text?.let { t ->
+            if (t.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
+            if (t.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
+        }
+    }
+    patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
+    // 새 화자에게는 같은 요청의 lines에 그 화자로 바꾼 대사가 하나 이상 있어야 해요
+    nextKeys.forEach { k -> if (patch.lines.orEmpty().none { it.speaker == k }) bad("speakers", "새 화자에게 대사를 하나 이상 넣어 주세요") }
+    // 화자 빼기: 카드에 없는 key → UNKNOWN_SPEAKER, speakers에도 있는 key → INVALID_REQUEST
+    remove.forEach { k ->
+        if (k !in keys) unknownSpeaker()
+        if (k in sentKeys) bad("removeSpeakers", "고치는 화자는 뺄 수 없어요")
+    }
+
+    // ① 더하기·대사 변경. 이름과 그림은 따로 덮어써요
+    val speakers = MockCharacters.applySpeakers(card.speakers + nextKeys.map { Speaker(it) }, patch, friends, me)
+    val ln = patch.lines?.associateBy { it.id }.orEmpty()
+    val lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old }
+
+    // ② 빼기: 대사가 남은 화자는 못 빼요. 다 적용한 뒤 1~4명
+    remove.forEach { k -> if (lines.any { it.speaker == k }) throw LologException(ErrorCodes.SPEAKER_HAS_LINES, "대사가 남은 화자예요") }
+    val left = speakers.filter { it.key !in remove }
+    if (left.size > SPEAKER_MAX) throw LologException(ErrorCodes.SPEAKER_LIMIT, "화자는 ${SPEAKER_MAX}명까지예요")
+    if (left.isEmpty()) bad("removeSpeakers", "화자가 한 명은 있어야 해요")
+
+    // ③ 뺐으면 남은 화자 key를 화자1부터 다시 매겨요. 이름·그림·대사는 따라가요
+    val rename = if (remove.isEmpty()) emptyMap() else left.mapIndexed { i, sp -> sp.key to "화자${i + 1}" }.toMap()
+    return card.copy(
+        speakers = left.map { it.copy(key = rename[it.key] ?: it.key) },
+        lines = lines.map { it.copy(speaker = rename[it.speaker] ?: it.speaker) },
+        place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
+    )
+}
 
 /**
  * 백엔드 없이 화면 흐름을 다 돌려 볼 수 있는 메모리 목업이에요.
@@ -35,6 +140,9 @@ private const val MOCK_EMAIL_CODE = "123456"
  * 오류 화면 확인용 규칙
  *  - 이메일 가입 인증번호는 123456. 다른 번호 → 400 INVALID_CODE, 000000·5번 틀림 → 400 CODE_EXPIRED
  *  - 인증번호를 60초 안에 또 받기 → 429 TOO_MANY_REQUESTS
+ *  - 비밀번호 찾기 인증번호도 123456이고 위 두 규칙이 같아요(번호와 틀린 횟수는 가입과 따로 저장)
+ *  - 비밀번호 바꾸기에서 지금 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
+ *  - 내 정보(me)의 hasPassword: 이메일로 로그인했으면 true, 소셜로 로그인했으면 false
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
@@ -42,6 +150,43 @@ private const val MOCK_EMAIL_CODE = "123456"
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
  *  - 대사 중 40자 넘는 게 있으면 만화 FAILED (21번). 카드 고치기에서 줄이면 성공
  *  - 실패한 만화는 3번에 안 세요(11/5 확정). 카드를 지워도 만화는 남고 cardDeleted = true
+ *
+ * 친구 규칙(MockFriends.kt, LOLog-docs spec/friends.md)
+ *  - 처음 내 프로필: 닉네임 없음, 코드 null. 닉네임을 정하면 코드 A7K3QX2M이 생겨요
+ *  - 친구 5명: 민수(K2PH7RTA), 서연, 민수(QW8ZN3EM), 도윤, 하은
+ *  - 받은 요청 2(민수, 하은 Z9CX4WVB), 보낸 요청 1(지아 M4TR8KXH), 차단 1(태오 H6NE2PQD)
+ *  - 코드 넣기
+ *    J8ZN4HQW → 준호와 바로 친구(ACCEPTED) / 받은 요청을 보낸 사람의 코드 → 바로 친구(ACCEPTED)
+ *    내 코드 → 400 CANNOT_FRIEND_SELF / 친구 코드 → 409 ALREADY_FRIENDS / 보낸 요청 코드 → 409 FRIEND_REQUEST_EXISTS
+ *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
+ *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
+ *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
+ *
+ * 화자 그림 규칙(MockCharacters.kt, LOLog-docs spec/characters.md)
+ *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,
+ *    썸네일은 명세 레포의 공개 그림 주소(raw.githubusercontent.com/…/<id>_thumb.webp)
+ *  - 친구 중 서연·민수(K2PH7RTA)는 프로필 캐릭터 있음, 도윤·하은·민수(QW8ZN3EM)는 없음
+ *  - 내 프로필: 처음엔 캐릭터 없음(시안 15), 내 회원 ID는 "1"
+ *  - 프로필 캐릭터 만들기: 사진을 올리면 PROCESSING, 4초 뒤 READY(그림은 기본 화자 young-f-02를 빌려 씀) + 푸시 PROFILE_CHARACTER_READY.
+ *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
+ *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
+ *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
+ *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
+ *  - 카드 고치기(PATCH)에서 그림 붙이기
+ *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
+ *    그림 없는 친구·나의 PROFILE → 409 CHARACTER_NOT_READY
+ *    목록에 없는 기본 id, 친구가 아닌 회원 ID → 400 UNKNOWN_CHARACTER
+ *    성공하면 화자 character에 label(기본은 label, 친구는 닉네임)과 thumbnailUrl을 채워 돌려줘요
+ *
+ * 화자 더하기·빼기 규칙(mockEditCard, LOLog-docs api-dto.md CardUpdateRequest·FR-EDIT-01)
+ *  - 요청 key는 모두 빼기 전 기준. 더하기·대사 변경을 먼저 하고, 그다음 빼기·다시 매기기
+ *  - 카드에 없는 key(다음 번호 빼고) → 400 UNKNOWN_SPEAKER
+ *  - 새 key인데 그 화자로 바꾼 대사가 같은 요청의 lines에 없음 → 400 INVALID_REQUEST
+ *  - speakers와 removeSpeakers에 같은 key → 400 INVALID_REQUEST
+ *  - 뺄 화자에 (이번 lines를 적용한 뒤에도) 대사가 남음 → 409 SPEAKER_HAS_LINES
+ *  - 다 적용한 뒤 4명 넘음 → 409 SPEAKER_LIMIT, 0명 → 400 INVALID_REQUEST
+ *  - 뺐으면 남은 화자 key를 화자1부터 다시 매기고, 대사의 speaker도 새 key로 바꿔 돌려줘요
+ *    (목업 카드의 처음 key는 A·B·C라, 빼기 전에는 더한 화자만 화자N으로 섞여 있을 수 있어요)
  */
 class MockLologRepository(private val tokens: TokenStore) : LologRepository {
 
@@ -72,38 +217,22 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private fun now(): String = OffsetDateTime.now().toString()
 
     // ── 인증 ──
-    /** 이메일 → 인증번호를 보낸 시각(ms). 목업 인증번호는 늘 MOCK_EMAIL_CODE */
-    private val codeSentAt = mutableMapOf<String, Long>()
-    private val codeFails = mutableMapOf<String, Int>()
+    private val signupCodes = MockCodes()
+    private val resetCodes = MockCodes()
+    /** 마지막 로그인 방법. me()의 hasPassword를 정해요(앱을 새로 켜서 모르면 이메일로 봐요) */
+    private var loggedInWithEmail = true
 
     override suspend fun requestEmailCode(email: String) {
         net()
-        val key = email.lowercase()
-        val sent = codeSentAt[key]
-        val nowMs = System.currentTimeMillis()
-        if (sent != null && nowMs - sent < EMAIL_CODE_RESEND_SECONDS * 1000L) {
-            throw LologException(ErrorCodes.TOO_MANY_REQUESTS, "잠시 뒤에 다시 받아 주세요")
-        }
-        codeSentAt[key] = nowMs
-        codeFails.remove(key)
+        signupCodes.send(email)
     }
 
     override suspend fun signup(email: String, password: String, code: String) {
         net()
-        val key = email.lowercase()
-        val sent = codeSentAt[key]
-        // 번호를 안 받았거나 10분 지났거나 5번 틀리면 만료. 시험용으로 000000도 만료
-        if (sent == null || System.currentTimeMillis() - sent > 10 * 60 * 1000L || code == "000000") {
-            throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요")
-        }
-        if (code != MOCK_EMAIL_CODE) {
-            val fails = (codeFails[key] ?: 0) + 1
-            codeFails[key] = fails
-            if (fails >= 5) { codeSentAt.remove(key); throw LologException(ErrorCodes.CODE_EXPIRED, "인증번호를 다시 받아 주세요") }
-            throw LologException(ErrorCodes.INVALID_CODE, "인증번호가 맞지 않아요")
-        }
+        signupCodes.check(email, code)
         if (email.equals("taken@lolog.app", true)) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         if (!isValidPassword(password)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "password")
+        loggedInWithEmail = true
         tokens.save("mock-access", "mock-refresh")
     }
 
@@ -112,12 +241,14 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         // 시험용: offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호
         if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
         if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+        loggedInWithEmail = true
         tokens.save("mock-access", "mock-refresh")
     }
 
     override suspend fun socialLogin(provider: SocialProvider, providerToken: String): Boolean {
         net()
         if (provider == SocialProvider.NAVER) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
+        loggedInWithEmail = false
         tokens.save("mock-access", "mock-refresh")
         return false
     }
@@ -125,7 +256,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun logout() { net(150); tokens.clear() }
     override suspend fun withdraw() { net(); lock.withLock { cardStore.clear(); comicStore.clear() }; tokens.clear() }
 
-    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet()) }
+    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail) }
 
     override suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider> {
         net()
@@ -134,6 +265,24 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         }
         linked += provider
         return linked.toSet()
+    }
+
+    override suspend fun requestPasswordResetCode(email: String) {
+        net()
+        resetCodes.send(email)
+    }
+
+    override suspend fun resetPassword(email: String, code: String, newPassword: String) {
+        net()
+        resetCodes.check(email, code)
+        if (!isValidPassword(newPassword)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "newPassword")
+        resetCodes.used(email)
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String) {
+        net()
+        mockCheckPasswordChange(currentPassword, newPassword)
+        tokens.save("mock-access", "mock-refresh")
     }
 
     // ── 녹음 ──
@@ -199,45 +348,13 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         findCard(id).withLiveComics()
     }
 
-    /** 고친 값 검사: 비었거나 너무 길면 400 INVALID_REQUEST, 없는 화자면 UNKNOWN_SPEAKER (field는 제안이라 목업만 채워요) */
-    private fun validate(card: CardDetail, patch: CardEdit) {
-        fun bad(field: String, msg: String): Nothing = throw LologException(ErrorCodes.INVALID_REQUEST, msg, field)
-        if (patch.isEmpty) throw LologException(ErrorCodes.INVALID_REQUEST, "바꾼 것이 없어요")
-        val keys = card.speakers.map { it.key }.toSet()
-        patch.speakers?.forEach { sp ->
-            if (sp.key !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
-            val n = sp.name ?: return@forEach
-            val i = card.speakers.indexOfFirst { it.key == sp.key }
-            if (n.isBlank() || n.length > TextLimits.SPEAKER_NAME) bad("speakers[$i].name", "이름은 ${TextLimits.SPEAKER_NAME}자까지 쓸 수 있어요")
-        }
-        patch.lines?.forEach { l ->
-            val i = card.lines.indexOfFirst { it.id == l.id }
-            if (i < 0) bad("lines", "이 카드의 대사가 아니에요")
-            if (l.speaker != null && l.speaker !in keys) throw LologException(ErrorCodes.UNKNOWN_SPEAKER, "없는 화자예요")
-            // 고쳐 보낸 대사에만 글자 수를 검사해요(명세)
-            l.text?.let { t ->
-                if (t.isBlank()) bad("lines[$i].text", "대사를 입력해 주세요")
-                if (t.length > TextLimits.LINE) bad("lines[$i].text", "대사는 ${TextLimits.LINE}자까지 쓸 수 있어요")
-            }
-        }
-        patch.place?.let { if (it.length > TextLimits.PLACE) bad("place", "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요") }
-    }
-
     override suspend fun updateCard(id: Long, patch: CardEdit): CardDetail = lock.withLock {
         net()
         val card = findCard(id)
         if (card.withLiveComics().locked) {
             throw LologException(ErrorCodes.CARD_LOCKED, "만화를 만드는 중이에요")
         }
-        validate(card, patch)
-        // 바꾼 것만 왔으니 원래 카드에 덮어써요 (명세 PATCH)
-        val sp = patch.speakers?.associateBy { it.key }.orEmpty()
-        val ln = patch.lines?.associateBy { it.id }.orEmpty()
-        val updated = card.copy(
-            speakers = card.speakers.map { sp[it.key] ?: it },
-            lines = card.lines.map { old -> ln[old.id]?.let { e -> old.copy(speaker = e.speaker ?: old.speaker, text = e.text ?: old.text) } ?: old },
-            place = when (val p = patch.place) { null -> card.place; "" -> null; else -> p },
-        )
+        val updated = mockEditCard(card, patch, friendBook.friends(), friendBook.profile())
         cardStore[cardStore.indexOf(card)] = updated
         updated.withLiveComics()
     }
@@ -268,6 +385,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         place = place, speakers = speakers,
         preview = lines.getOrNull(1)?.text ?: lines.firstOrNull()?.text,
         lineCount = lines.size,
+        hasAudio = audio.status == AudioStatus.READY,
     )
 
     // ── 만화 ──
@@ -339,6 +457,49 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         net()
         if (!comicStore.removeAll { it.id == id }) throw LologException(ErrorCodes.COMIC_NOT_FOUND, "만화를 찾지 못했어요")
     }
+
+    // ── 친구 ──
+    private val friendBook = MockFriends()
+
+    override suspend fun profile(): Profile = lock.withLock { net(150); friendBook.profile() }
+    override suspend fun updateNickname(nickname: String): Profile = lock.withLock { net(); friendBook.updateNickname(nickname) }
+
+    override suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter = lock.withLock {
+        net(800)
+        friendBook.uploadCharacter(photo.size).also {
+            val failed = photo.size < 1024 * 1024
+            scope.launch {
+                delay(4_000)
+                val done = lock.withLock { friendBook.finishCharacter(failed, MockCharacters.thumb("young-f-02")) }
+                if (done) _push.emit(PushPayload(if (failed) PushType.PROFILE_CHARACTER_FAILED else PushType.PROFILE_CHARACTER_READY))
+            }
+        }
+    }
+
+    override suspend fun deleteProfileCharacter() = lock.withLock {
+        net()
+        friendBook.deleteCharacter()
+        // 서버처럼 내 카드 화자에서 내 캐릭터를 빼요
+        val me = MockFriends.MY_USER_ID.toString()
+        cardStore.replaceAll { card ->
+            card.copy(speakers = card.speakers.map { sp ->
+                if (sp.character?.type == CharacterType.PROFILE && sp.character.id == me) sp.copy(character = null) else sp
+            })
+        }
+    }
+    override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
+    override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
+        lock.withLock { net(150); friendBook.requests(direction) }
+    override suspend fun acceptFriendRequest(id: Long): Friend = lock.withLock { net(); friendBook.accept(id) }
+    override suspend fun deleteFriendRequest(id: Long) = lock.withLock { net(); friendBook.deleteRequest(id) }
+    override suspend fun friends(): List<Friend> = lock.withLock { net(); friendBook.friends() }
+    override suspend fun removeFriend(userId: Long) = lock.withLock { net(); friendBook.removeFriend(userId) }
+    override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
+    override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
+    override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
+
+    // ── 화자 그림 ──
+    override suspend fun defaultCharacters(): List<DefaultCharacter> { net(); return MockCharacters.defaults }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }

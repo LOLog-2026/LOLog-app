@@ -5,11 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material3.SnackbarHostState
@@ -136,14 +136,16 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
     // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
     BackHandler(onBack = onBack)
 
-    // 정렬을 바꾸면 맨 위부터 보여 줘요
-    val grid = key(state.sort) { rememberLazyGridState() }
-    val last by remember { derivedStateOf { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 } }
-    LaunchedEffect(last, state.comics.size) { if (last >= state.comics.size - 4) vm.loadMore() }
+    // 정렬을 바꾸면 첫 편부터 보여 줘요
+    val pager = key(state.sort) { rememberPagerState { state.comics.size } }
+    // 끝 쪽에 닿으면 다음 20개 (정렬·cursor 그대로)
+    LaunchedEffect(pager.currentPage, state.comics.size) {
+        if (state.comics.isNotEmpty() && pager.currentPage >= state.comics.size - 1) vm.loadMore()
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // 위 칸: 흰 바탕 제목 줄
+            // 위 칸: 흰 바탕 제목 줄. 맨 위에 고정, 아래만 넘어가요
             ListHeader {
                 LologTopBar("내 만화", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
             }
@@ -161,19 +163,20 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
                         onButton = onLibrary,
                         primary = false,
                     )
-                    // 고른 정렬로 20개씩 (cursor)
-                    else -> LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        state = grid,
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(state.comics, key = { it.id }) { c -> ComicTile(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed) }
-                        when {
-                            state.loadingMore -> item(span = { GridItemSpan(2) }) { LoadMoreDots() }
-                            state.nextCursor == null -> item(span = { GridItemSpan(2) }) { ListEnd() }
+                    // 한 편씩 옆으로 넘기기(11/10 확정)
+                    else -> Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
+                        HorizontalPager(
+                            pager,
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            pageSpacing = 12.dp,
+                            verticalAlignment = Alignment.Top,
+                        ) { page ->
+                            val c = state.comics[page]
+                            ComicPage(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed)
                         }
+                        Spacer(Modifier.height(14.dp))
+                        PageDots(state.comics.size, pager.currentPage)
+                        if (state.loadingMore) LoadMoreDots()
                     }
                 }
             }
@@ -182,34 +185,74 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
     }
 }
 
-/** 썸네일 칸: 위에 1컷 썸네일 + 상태 배지, 아래 카드 제목과 만든 날짜. 실패는 이유 없이 "다시 시도"만 */
+/** 한 장: 흰 카드(둥근 18dp, 그림자), 위에 그림 위쪽 부분(아래로 갈수록 흰색으로 흐려짐), 아래 제목·날짜·상태 칩 */
 @Composable
-private fun ComicTile(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit, onImageError: () -> Unit) {
+private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit, onImageError: () -> Unit) {
     val stage = c.status.stage
-    Column(Modifier.softCard(LologShape.sm).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(LologColors.Canvas)) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(Modifier.fillMaxWidth().softCard(shape).clickable(onClick = onClick)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
             when (stage) {
-                ComicStage.DONE -> ComicImage(c.thumbnailUrl ?: c.imageUrl, emptyList(), Modifier.fillMaxSize(), small = true, onLoadError = onImageError)
+                ComicStage.DONE -> ComicImage(
+                    c.thumbnailUrl ?: c.imageUrl, emptyList(), Modifier.fillMaxSize(), small = true, onLoadError = onImageError,
+                    // thumbnailUrl은 원본과 다른 그림이라 캐시 이름을 따로 둬요
+                    cacheKey = if (c.thumbnailUrl != null) comicThumbCacheKey(c.id) else comicCacheKey(c.id),
+                )
                 ComicStage.FAILED -> if (!c.cardDeleted) Box(
                     Modifier.align(Alignment.Center).clip(LologShape.pill).border(1.dp, LologColors.Rec, LologShape.pill)
                         .clickable(onClick = onRetry).padding(horizontal = 14.dp, vertical = 7.dp),
                 ) { Text("다시 시도", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Rec) }
                 else -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 6.dp) }
             }
-            StageBadge(stage, Modifier.align(Alignment.TopStart).padding(8.dp))
-        }
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(
-                c.cardSummary ?: "4컷만화", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            // 아래쪽 흰색으로 흐려짐
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.35f)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, LologColors.Paper))),
             )
-            Text(
-                when {
-                    stage == ComicStage.WAITING || stage == ComicStage.MAKING -> "방금"
-                    stage == ComicStage.FAILED -> listOf(shortDate(c.createdAt), "다시 시도해 주세요").filter { it.isNotBlank() }.joinToString(" · ")
-                    else -> shortDate(c.createdAt) + if (c.cardDeleted) " · 원래 카드 지워짐" else ""
-                },
-                fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(c.cardSummary ?: "4컷만화", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    when {
+                        stage == ComicStage.WAITING || stage == ComicStage.MAKING -> "방금"
+                        else -> shortDate(c.createdAt) + if (c.cardDeleted) " · 원래 카드 지워짐" else ""
+                    },
+                    fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            StateChip(stage)
+        }
+    }
+}
+
+/** 상태 칩: 완성 / 그리는 중 / 실패 */
+@Composable
+private fun StateChip(stage: ComicStage) {
+    val (label, bg, fg) = when (stage) {
+        ComicStage.DONE -> Triple("완성", LologColors.MemorySoft, LologColors.MemoryText)
+        ComicStage.FAILED -> Triple("실패", LologColors.RecSoft, LologColors.Rec)
+        else -> Triple("그리는 중", LologColors.AccentSoft, LologColors.Accent)
+    }
+    Text(
+        label, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = fg,
+        modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+/** 쪽 표시 점: 지금 쪽은 코랄 긴 막대. 많으면 지금 쪽 주변 7개만 */
+@Composable
+private fun PageDots(count: Int, current: Int) {
+    val window = 7
+    val start = (current - window / 2).coerceIn(0, (count - window).coerceAtLeast(0))
+    val end = (start + window).coerceAtMost(count)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        for (i in start until end) {
+            val on = i == current
+            Box(
+                Modifier.padding(horizontal = 3.dp).height(6.dp).width(if (on) 20.dp else 6.dp)
+                    .clip(LologShape.pill).background(if (on) LologColors.Accent else LologColors.Line),
             )
         }
     }

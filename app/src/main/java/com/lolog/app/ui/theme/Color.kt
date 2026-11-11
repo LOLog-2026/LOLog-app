@@ -29,4 +29,12 @@ object LologColors {
     val Ok = Color(0xFF2FA36B)
 
     val Naver = Color(0xFF03C75A)
+
+    /** 화자 색(11/10 확정 디자인): 화자 순서대로 노랑 · 민트 · 분홍 · 하늘. 넘으면 처음부터 */
+    val Speakers = listOf(
+        Highlight,            // 노랑 #FFD95A
+        Color(0xFF9FE0D2),    // 민트
+        Color(0xFFFFC4D6),    // 분홍
+        Color(0xFFB5DCFF),    // 하늘
+    )
 }

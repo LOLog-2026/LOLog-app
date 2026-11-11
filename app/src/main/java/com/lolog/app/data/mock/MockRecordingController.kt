@@ -3,6 +3,8 @@ package com.lolog.app.data.mock
 import com.lolog.app.data.model.RecordingPart
 import com.lolog.app.data.model.Sentence
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.recording.AudioSave
+import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.RecordingController
 import com.lolog.app.recording.RecordingState
 import kotlinx.coroutines.CancellationException
@@ -28,6 +30,8 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     override val state: StateFlow<RecordingState> = _state.asStateFlow()
+    private val _audioUpload = MutableStateFlow<AudioUpload>(AudioUpload.None)
+    override val audioUpload: StateFlow<AudioUpload> = _audioUpload.asStateFlow()
 
     private var ticker: Job? = null
     private var uploadJob: Job? = null
@@ -35,13 +39,14 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
     private var elapsedSec = 0L
 
     @Synchronized
-    override fun start() {
+    override fun start(audio: AudioSave) {
         val now = _state.value
         if (now is RecordingState.Recording || now is RecordingState.Uploading) return
         // API 명세 예처럼 늘 초까지 적어요(OffsetDateTime.toString은 0초면 초를 빼요)
         startedAt = OffsetDateTime.now().format(STARTED_AT)
         elapsedSec = 0
-        _state.value = RecordingState.Recording(0)
+        // 가짜 녹음은 음성 파일을 만들지 않아요. 화면 문구만 볼 수 있게 상태에 담아요
+        _state.value = RecordingState.Recording(0, audioSaved = audio != AudioSave.OFF)
         ticker = scope.launch {
             while (isActive) {
                 delay(1_000)
@@ -55,7 +60,7 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
 
     @Synchronized
     override fun stop() {
-        if (_state.value !is RecordingState.Recording) return
+        val recording = _state.value as? RecordingState.Recording ?: return
         ticker?.cancel()
         _state.value = RecordingState.Uploading
         uploadJob = scope.launch {
@@ -76,6 +81,18 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
             } catch (e: Exception) {
                 RecordingState.UploadFailed("대화 텍스트를 올리지 못했어요. 인터넷 연결을 확인해 주세요")
             }
+            // 음성 저장을 켰으면 글 다음에 음성 파일을 올리는 척해요(10분마다 한 파일, 한 파일에 3초). 화면 표시 시험용
+            if (recording.audioSaved && _state.value is RecordingState.Uploaded) {
+                val files = (elapsedSec / 600 + 1).toInt()
+                try {
+                    for (seq in 1..files) {
+                        _audioUpload.value = AudioUpload.Sending(seq)
+                        delay(3_000)
+                    }
+                } finally {
+                    _audioUpload.value = AudioUpload.None
+                }
+            }
         }
     }
 
@@ -87,6 +104,15 @@ class MockRecordingController(private val repository: LologRepository) : Recordi
             _state.value = RecordingState.Idle
         }
     }
+
+    // 가짜 녹음은 폰에 남기는 글·음성이 없어요. 녹음 중이면 마감해 올린 뒤 끝나요
+    override suspend fun prepareLogout() {
+        stop()
+        uploadJob?.join()
+        discardAll()
+    }
+
+    override suspend fun hasUnsent(): Boolean = false
 
     private companion object {
         const val MAX_SEC = 3L * 60 * 60 // 최대 3시간

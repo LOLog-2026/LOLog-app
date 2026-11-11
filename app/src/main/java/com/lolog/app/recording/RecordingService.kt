@@ -14,6 +14,7 @@ import com.lolog.app.notification.NotificationChannels
 /** 화면이 꺼지거나 다른 앱을 써도 녹음이 이어지게 한다. 실제 일은 RealRecordingController가 한다. */
 class RecordingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var audioSaved = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -23,6 +24,7 @@ class RecordingService : Service() {
             RealRecordingController.active?.stop() ?: stopSelf()
             return START_NOT_STICKY
         }
+        audioSaved = intent?.getBooleanExtra(EXTRA_AUDIO_SAVED, audioSaved) ?: audioSaved
         val notification = notification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -53,7 +55,10 @@ class RecordingService : Service() {
         )
         return Notification.Builder(this, NotificationChannels.RECORDING)
             .setContentTitle("녹음 중이에요")
-            .setContentText("대화를 글자로 바꾸고 있어요. 음성은 폰 밖으로 나가지 않아요.")
+            // 문구는 명세 audio.md 1장 "안내 문구" 표 그대로
+            .setContentText(
+                if (audioSaved) "대화를 글자로 바꾸고, 음성도 저장하고 있어요." else "대화를 글자로 바꾸고 있어요. 음성은 폰 밖으로 나가지 않아요.",
+            )
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .addAction(Notification.Action.Builder(null, "끝내기", stop).build())
@@ -62,11 +67,14 @@ class RecordingService : Service() {
 
     companion object {
         private const val ACTION_STOP = "com.lolog.app.recording.STOP"
+        private const val EXTRA_AUDIO_SAVED = "audioSaved"
         private const val NOTIFICATION_ID = 1001
         private const val WAKE_LOCK_TIMEOUT_MS = 3 * 60 * 60 * 1000L + 10 * 60 * 1000L
 
-        fun start(context: Context) {
-            context.startForegroundService(Intent(context, RecordingService::class.java))
+        fun start(context: Context, audioSaved: Boolean) {
+            context.startForegroundService(
+                Intent(context, RecordingService::class.java).putExtra(EXTRA_AUDIO_SAVED, audioSaved),
+            )
         }
 
         fun stop(context: Context) {

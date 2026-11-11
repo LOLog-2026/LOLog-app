@@ -12,6 +12,10 @@ object LologShape {
     val md = RoundedCornerShape(16.dp)
     val lg = RoundedCornerShape(24.dp)
     val pill = RoundedCornerShape(999.dp)
+    /** 아래 시트 위쪽 모서리(11/10 확정 디자인) */
+    val sheet = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    /** 확인 창 모서리 */
+    val dialog = RoundedCornerShape(20.dp)
 }
 
 private val colors = lightColorScheme(
