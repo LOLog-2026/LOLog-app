@@ -23,6 +23,7 @@ import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
+import com.lolog.app.ui.screens.admin.AdminHomeScreen
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
@@ -87,6 +88,7 @@ object Routes {
     const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
+    const val ADMIN = "admin"
     const val RECORDING = "recording"
     const val ANALYZING = "analyzing/{recordingId}"
     const val CARD = "card/{cardId}"
@@ -384,10 +386,12 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
+                    onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
             }
+            composable(Routes.ADMIN) { AdminHomeScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PROFILE_CHARACTER) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(VOICE_MESSAGE, null).collectAsState()
                 ProfileCharacterScreen(
