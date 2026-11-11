@@ -57,6 +57,8 @@ object ErrorCodes {
     // 알림함 (LOLog-docs PR #59 inbox.md 7장)
     const val NOTICE_NOT_FOUND = "NOTICE_NOT_FOUND"             // 404 없는 공지사항을 읽음
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
+    // 관리자 (LOLog-docs spec/admin.md 7장)
+    const val FORBIDDEN = "FORBIDDEN" // 403 관리자가 아닌데 관리자 주소를 부름
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"

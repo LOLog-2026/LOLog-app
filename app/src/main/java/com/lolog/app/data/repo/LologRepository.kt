@@ -95,6 +95,15 @@ interface LologRepository {
     /** 지금까지 온 것을 모두 읽음 */
     suspend fun readAllInbox()
 
+    // 관리자 공지 (LOLog-docs spec/admin.md 4·7장). 목록은 inbox(InboxTab.NOTICE)를 같이 써요
+    // 관리자가 아니면 403 FORBIDDEN, 제목·본문이 틀리면 400 INVALID_REQUEST(field title·body)
+    /** 새 공지. 제목 1~100자, 본문은 비면 안 돼요. 모든 사람의 알림함 공지사항에 올라가요(푸시는 없음) */
+    suspend fun createNotice(title: String, body: String): AdminNotice
+    /** 바꾼 것만 넘겨요(null은 보내지 않아요). 없으면 404 NOTICE_NOT_FOUND */
+    suspend fun updateNotice(id: Long, title: String? = null, body: String? = null): AdminNotice
+    /** 모두의 알림함에서 사라져요. 없으면 404 NOTICE_NOT_FOUND */
+    suspend fun deleteNotice(id: Long)
+
     // 기기
     suspend fun registerFcmToken(token: String)
     suspend fun unregisterFcmToken(token: String)

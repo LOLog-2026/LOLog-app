@@ -8,6 +8,8 @@ import java.time.OffsetDateTime
  * 알림함 목업(LOLog-docs PR #59 spec/inbox.md). 공지사항 2개(하나 안 읽음), 알림 4개(새 카드만 안 읽음).
  * 읽음·모두 읽음이 그대로 남고, hasUnread도 그에 맞게 바뀌어요. 안드로이드 없이 테스트하려고 따로 떼었어요.
  * cursor는 시작 위치(문자열)예요. 화면은 실서버처럼 뜻을 모르고 그대로 돌려보내요.
+ * 관리자 공지 쓰기·고치기·지우기(admin.md 4장)도 여기 공지에 그대로 반영해요. 쓴 공지는 맨 위, 안 읽음이에요.
+ * 확인 순서는 서버와 같이 관리자(403) → 요청 값(400) → 공지가 있는지(404)예요.
  */
 internal class MockInbox(now: OffsetDateTime = OffsetDateTime.now(), private val pageSize: Int = PAGE_SIZE) {
 
@@ -65,6 +67,63 @@ internal class MockInbox(now: OffsetDateTime = OffsetDateTime.now(), private val
     }
 
     fun readAll() = items.replaceAll { it.asRead() }
+
+    // ── 관리자 공지 ──
+
+    private var nextNoticeId = items.filterIsInstance<InboxItem.Notice>().maxOf { it.id } + 1
+    /** 고친 때. 알림함 줄에는 updatedAt이 없어서 따로 들고 있어요 */
+    private val noticeUpdatedAt = mutableMapOf<Long, String>()
+
+    fun createNotice(isAdmin: Boolean, title: String, body: String, now: String = OffsetDateTime.now().toString()): AdminNotice {
+        checkAdmin(isAdmin)
+        checkTitle(title)
+        checkBody(body)
+        val n = InboxItem.Notice(nextNoticeId++, title, body, now, read = false)
+        items.add(0, n)
+        return n.toAdmin()
+    }
+
+    /** null인 필드는 그대로 둬요. 읽음과 목록 자리도 그대로예요 */
+    fun updateNotice(isAdmin: Boolean, id: Long, title: String?, body: String?, now: String = OffsetDateTime.now().toString()): AdminNotice {
+        checkAdmin(isAdmin)
+        title?.let(::checkTitle)
+        body?.let(::checkBody)
+        val i = noticeIndex(id)
+        val old = items[i] as InboxItem.Notice
+        val n = old.copy(title = title ?: old.title, body = body ?: old.body)
+        items[i] = n
+        if (n != old) noticeUpdatedAt[id] = now
+        return n.toAdmin()
+    }
+
+    fun deleteNotice(isAdmin: Boolean, id: Long) {
+        checkAdmin(isAdmin)
+        items.removeAt(noticeIndex(id))
+        noticeUpdatedAt.remove(id)
+    }
+
+    private fun checkAdmin(isAdmin: Boolean) {
+        if (!isAdmin) throw LologException(ErrorCodes.FORBIDDEN, "관리자만 할 수 있어요.")
+    }
+
+    private fun checkTitle(title: String) {
+        val t = title.trim()
+        if (t.isEmpty() || t.length > NOTICE_TITLE_MAX) {
+            throw LologException(ErrorCodes.INVALID_REQUEST, "제목은 1~${NOTICE_TITLE_MAX}자예요.", "title")
+        }
+    }
+
+    private fun checkBody(body: String) {
+        if (body.isBlank()) throw LologException(ErrorCodes.INVALID_REQUEST, "본문을 적어 주세요.", "body")
+    }
+
+    private fun noticeIndex(id: Long): Int {
+        val i = items.indexOfFirst { it.kind == InboxKind.NOTICE && it.id == id }
+        if (i < 0) throw LologException(ErrorCodes.NOTICE_NOT_FOUND, "공지사항을 찾을 수 없어요.")
+        return i
+    }
+
+    private fun InboxItem.Notice.toAdmin() = AdminNotice(id, title, body, createdAt, noticeUpdatedAt[id] ?: createdAt)
 
     companion object {
         const val PAGE_SIZE = 20

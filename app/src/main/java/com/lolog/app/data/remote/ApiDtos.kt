@@ -346,3 +346,23 @@ data class InboxNotificationDto(val type: String, val data: Map<String, String> 
 /** GET /api/inbox/unread */
 @Serializable
 data class InboxUnreadDto(val hasUnread: Boolean = false)
+
+// ── 관리자 공지 (LOLog-docs spec/admin.md 7장) ──
+
+/** POST /api/admin/notices */
+@Serializable
+data class NoticeCreateDto(val title: String, val body: String)
+
+/** PATCH /api/admin/notices/{id}. 바꾼 것만 채워요. null 필드는 보내지 않아요(LologJson explicitNulls = false) */
+@Serializable
+data class NoticeUpdateDto(val title: String? = null, val body: String? = null)
+
+/** Notice. 쓰기·고치기의 응답 */
+@Serializable
+data class NoticeDto(
+    val id: Long,
+    val title: String = "",
+    val body: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)

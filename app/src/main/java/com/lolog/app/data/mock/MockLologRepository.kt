@@ -160,6 +160,7 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
  *  - 관리자(admin.md): admin@lolog.app으로 로그인하면 me()의 isAdmin = true, 그 밖(소셜 포함)은 false
  *  - suspended@lolog.app으로 로그인(비밀번호 4자 이상) → 403 ACCOUNT_SUSPENDED
+ *  - 공지 쓰기·고치기·지우기(MockInbox): 관리자가 아니면 403 FORBIDDEN, 제목이 비거나 100자 넘으면·본문이 비면 400 INVALID_REQUEST
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
  *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번), 네이버 연결 → 연결됨
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
@@ -530,6 +531,13 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun inboxHasUnread(): Boolean = lock.withLock { net(150); inboxBook.hasUnread() }
     override suspend fun readInbox(kind: InboxKind, id: Long) = lock.withLock { net(150); inboxBook.read(kind, id) }
     override suspend fun readAllInbox() = lock.withLock { net(); inboxBook.readAll() }
+
+    // 관리자 공지: 알림함 공지에 그대로 반영돼요. admin@lolog.app으로 로그인하지 않았으면 403 FORBIDDEN
+    override suspend fun createNotice(title: String, body: String) =
+        lock.withLock { net(); inboxBook.createNotice(loggedInAsAdmin, title, body) }
+    override suspend fun updateNotice(id: Long, title: String?, body: String?) =
+        lock.withLock { net(); inboxBook.updateNotice(loggedInAsAdmin, id, title, body) }
+    override suspend fun deleteNotice(id: Long) = lock.withLock { net(); inboxBook.deleteNotice(loggedInAsAdmin, id) }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }
