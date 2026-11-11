@@ -8,6 +8,7 @@ import com.lolog.app.data.remote.RoomMapper.toModel
 import com.lolog.app.data.remote.RoomMessageListDto
 import com.lolog.app.data.remote.RoomPostDto
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +37,42 @@ class RoomMapperTest {
         assertEquals("내가 만화를 좋아해요", text("LIKED", true))
         assertEquals("나 \"민트초코 최고\"", text("COMMENTED", true, "민트초코 최고"))
         assertEquals("준 \"안녕\"", text("COMMENTED", false, "안녕"))
+    }
+
+    @Test
+    fun `ownerId·invites·isOwner가 없는 예전 RoomItem도 읽힌다`() {
+        val room = LologJson.decodeFromString(RoomItemDto.serializer(), """
+            {"id":1,"name":"방","members":[{"userId":1,"nickname":"나","thumbnailUrl":null,"isMe":true}],
+             "lastActivity":null,"unread":0,"createdAt":"2026-11-11T02:00:00Z"}
+        """.trimIndent()).toModel()
+        assertNull(room.ownerId)
+        assertTrue(room.invites.isEmpty())
+        assertFalse(room.members[0].isOwner)
+        assertFalse(room.members[0].suspended)
+        assertNull(room.members[0].friendState)
+        assertFalse(room.isMineOwner)
+    }
+
+    @Test
+    fun `방장과 기다리는 초대를 읽는다`() {
+        val room = LologJson.decodeFromString(RoomItemDto.serializer(), """
+            {"id":7,"name":"주말 카레팟","ownerId":1,
+             "members":[{"userId":1,"nickname":"나","thumbnailUrl":null,"isMe":true,"isOwner":true}],
+             "invites":[{"id":3,"room":{"id":7,"name":"주말 카레팟"},
+               "invitedUser":{"userId":2,"nickname":"준","thumbnailUrl":null,"isMe":false,"isOwner":false},
+               "invitedBy":null,"createdAt":"2026-11-11T03:00:00Z"}],
+             "lastActivity":{"type":"CREATED","nickname":"나","isMe":true,"at":"2026-11-11T02:00:00Z","text":null},
+             "unread":0,"createdAt":"2026-11-11T02:00:00Z"}
+        """.trimIndent()).toModel()
+        assertEquals(1L, room.ownerId)
+        assertTrue(room.isMineOwner)
+        val invite = room.invites.single()
+        assertEquals(7L, invite.roomId)
+        assertEquals("주말 카레팟", invite.roomName)
+        assertEquals("준", invite.invitedUser?.nickname)
+        assertNull(invite.invitedBy)
+        assertFalse(invite.hasBlockedMember) // 서버가 안 보내면 false
+        assertEquals(2, room.headcount)
     }
 
     @Test

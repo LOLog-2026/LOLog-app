@@ -16,23 +16,59 @@ data class RoomPostCreateDto(val comicId: Long)
 @Serializable
 data class RoomCommentDto(val text: String, val postId: Long? = null)
 
-/** RoomMember. thumbnailUrl은 그 사람의 프로필 캐릭터 256 그림(없으면 null) */
+/** RoomMember. thumbnailUrl은 그 사람의 프로필 캐릭터 256 그림(없으면 null). isOwner·suspended·friendState는 초안이라 없으면 기본값 */
 @Serializable
-data class RoomMemberDto(val userId: Long, val nickname: String = "", val thumbnailUrl: String? = null, val isMe: Boolean = false)
+data class RoomMemberDto(
+    val userId: Long,
+    val nickname: String = "",
+    val thumbnailUrl: String? = null,
+    val isMe: Boolean = false,
+    val isOwner: Boolean = false,
+    val suspended: Boolean = false,
+    val friendState: String? = null,
+)
 
 /** 마지막 소식. type CREATED·POSTED·LIKED·COMMENTED, text는 COMMENTED일 때 댓글 내용. 문장은 앱이 만들어요 */
 @Serializable
 data class RoomActivityDto(val type: String = "", val nickname: String = "", val isMe: Boolean = false, val at: String = "", val text: String? = null)
 
+/** RoomItem. ownerId·invites는 초안이라 없으면 null·빈 배열. invites는 방장이 아니면 빈 배열 */
 @Serializable
 data class RoomItemDto(
     val id: Long,
     val name: String = "",
+    val ownerId: Long? = null,
     val members: List<RoomMemberDto> = emptyList(),
+    val invites: List<RoomInviteDto> = emptyList(),
     val lastActivity: RoomActivityDto? = null,
     val unread: Int = 0,
     val createdAt: String = "",
 )
+
+// ── 방장과 초대 (rooms.md "방장과 초대", 초안 · 서버 lolog-api #59) ──
+
+/** POST /api/rooms/{id}/invites. 초대할 친구 회원 ID(나를 뺌) */
+@Serializable
+data class RoomInviteCreateDto(val userIds: List<Long>)
+
+/** RoomInvite의 room */
+@Serializable
+data class RoomRefDto(val id: Long, val name: String = "")
+
+/** RoomInvite. 방장이 보는 초대는 invitedUser, 내가 받은 초대는 invitedBy가 있어요 */
+@Serializable
+data class RoomInviteDto(
+    val id: Long,
+    val room: RoomRefDto,
+    val invitedUser: RoomMemberDto? = null,
+    val invitedBy: RoomMemberDto? = null,
+    val hasBlockedMember: Boolean = false,
+    val createdAt: String = "",
+)
+
+/** 201 POST /api/rooms/{id}/invites, 200 GET /api/room-invites */
+@Serializable
+data class RoomInviteListDto(val invites: List<RoomInviteDto> = emptyList())
 
 @Serializable
 data class RoomListDto(val rooms: List<RoomItemDto> = emptyList())

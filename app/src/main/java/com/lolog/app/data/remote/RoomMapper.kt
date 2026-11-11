@@ -1,6 +1,7 @@
 package com.lolog.app.data.remote
 
 import com.lolog.app.data.model.Room
+import com.lolog.app.data.model.RoomInvite
 import com.lolog.app.data.model.RoomMember
 import com.lolog.app.data.model.RoomMessage
 import com.lolog.app.data.model.RoomPost
@@ -12,7 +13,17 @@ import com.lolog.app.data.model.subject
  */
 object RoomMapper {
 
-    fun RoomMemberDto.toModel() = RoomMember(userId, nickname, thumbnailUrl?.ifBlank { null }, isMe)
+    fun RoomMemberDto.toModel() = RoomMember(userId, nickname, thumbnailUrl?.ifBlank { null }, isMe, isOwner, suspended, friendState?.ifBlank { null })
+
+    fun RoomInviteDto.toModel() = RoomInvite(
+        id = id,
+        roomId = room.id,
+        roomName = room.name,
+        invitedUser = invitedUser?.toModel(),
+        invitedBy = invitedBy?.toModel(),
+        hasBlockedMember = hasBlockedMember,
+        createdAt = createdAt,
+    )
 
     /** 방 목록의 마지막 소식 문장. 예: "준님이 만화를 올렸어요", 내 댓글이면 나 "민트초코 최고" */
     fun activityText(a: RoomActivityDto?): String {
@@ -36,6 +47,8 @@ object RoomMapper {
         lastActivity = activityText(lastActivity),
         lastActivityAt = lastActivity?.at?.ifBlank { null } ?: createdAt,
         unread = unread,
+        ownerId = ownerId,
+        invites = invites.map { it.toModel() },
     )
 
     fun RoomPostDto.toModel() = RoomPost(

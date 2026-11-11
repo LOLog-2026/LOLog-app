@@ -5,12 +5,15 @@ package com.lolog.app.data.model
  * 실서버는 RemoteRoomRepository, 목업은 MockRooms예요. 규칙(RoomRules)은 서버와 같아요.
  */
 
-/** 규칙(서버와 같음): 방 인원은 나 포함 2~6명, 방 이름 1~20자, 댓글 1~200자 */
+/** 규칙(서버와 같음): 방 인원은 나 포함 2~6명, 방 이름 1~20자, 댓글 1~200자, 한 사람의 방은 20개까지 */
 object RoomRules {
     const val NAME_MAX = 20
     const val MEMBER_MIN = 2
+    /** 멤버와 답을 기다리는 초대를 합쳐서 세요 */
     const val MEMBER_MAX = 6
     const val COMMENT_MAX = 200
+    /** 한 사람이 들어갈 수 있는 방 수 */
+    const val ROOM_MAX = 20
 }
 
 /** 방 오류 코드(rooms.md 오류 코드). ROOM_POST_NOT_MINE는 403, ROOM_POST_EXISTS·ROOM_MEMBER_LIMIT는 409 */
@@ -19,7 +22,10 @@ object RoomErrorCodes {
     const val ROOM_POST_NOT_FOUND = "ROOM_POST_NOT_FOUND"
     const val ROOM_POST_EXISTS = "ROOM_POST_EXISTS"       // 같은 만화를 같은 방에 또 올림
     const val ROOM_POST_NOT_MINE = "ROOM_POST_NOT_MINE"   // 남이 올린 만화를 내리려 함
-    const val ROOM_MEMBER_LIMIT = "ROOM_MEMBER_LIMIT"     // 나 포함 6명을 넘음
+    const val ROOM_MEMBER_LIMIT = "ROOM_MEMBER_LIMIT"     // 멤버 + 답을 기다리는 초대가 나 포함 6명을 넘음
+    const val ROOM_LIMIT = "ROOM_LIMIT"                   // 409 방 만들기·초대 수락: 이미 방 20개에 들어가 있음
+    const val ROOM_OWNER_ONLY = "ROOM_OWNER_ONLY"         // 403 방장만 할 수 있는 일(초대·초대 취소)
+    const val ROOM_INVITE_NOT_FOUND = "ROOM_INVITE_NOT_FOUND" // 404 없거나 이미 답한 초대, 내 초대가 아님
 }
 
 /** 방 멤버. thumbnailUrl은 그 사람의 프로필 캐릭터 그림(없으면 이름 첫 글자 동그라미) */
@@ -29,9 +35,18 @@ data class RoomMember(
     val thumbnailUrl: String? = null,
     /** 나인지. 내 만화면 "내 만화", 내 댓글이면 오른쪽 말풍선 */
     val isMe: Boolean = false,
+    /** 방장인지. 멤버 시트에 "방장" 알약 */
+    val isOwner: Boolean = false,
+    /** 정지된 계정인지(초안). 아직 화면에 쓰지 않아요 */
+    val suspended: Boolean = false,
+    /** 나와의 친구 관계(초안. FRIEND·REQUESTED·RECEIVED·NONE·BLOCKED·ME). 아직 화면에 쓰지 않아요 */
+    val friendState: String? = null,
 )
 
-/** 방 목록 한 줄. lastActivity는 "준님이 만화를 올렸어요" 같은 마지막 소식, unread는 받지 않은(안 읽은) 글 수 */
+/**
+ * 방 목록 한 줄. lastActivity는 "준님이 만화를 올렸어요" 같은 마지막 소식, unread는 받지 않은(안 읽은) 글 수.
+ * ownerId는 방장(서버가 안 보내면 null), invites는 답을 기다리는 초대(방장이 아니면 비어 있어요).
+ */
 data class Room(
     val id: Long,
     val name: String,
@@ -39,6 +54,34 @@ data class Room(
     val lastActivity: String,
     val lastActivityAt: String,
     val unread: Int,
+    val ownerId: Long? = null,
+    val invites: List<RoomInvite> = emptyList(),
+) {
+    /** 내가 방장인지. ownerId가 없으면 멤버의 isOwner로 봐요 */
+    val isMineOwner: Boolean
+        get() = members.any { it.isMe && (it.isOwner || it.userId == ownerId) }
+
+    /** 멤버와 답을 기다리는 초대를 합친 인원(나 포함) */
+    val headcount: Int get() = members.size + invites.size
+
+    /** 더 초대할 수 있는 사람 수 */
+    val seatsLeft: Int get() = (RoomRules.MEMBER_MAX - headcount).coerceAtLeast(0)
+}
+
+/**
+ * 방 초대 하나(rooms.md RoomInvite, 초안). 방장이 보는 초대는 invitedUser, 내가 받은 초대는 invitedBy가 있어요.
+ * hasBlockedMember는 내가 차단한 사람이 그 방에 있으면 true(수락 전에 알려 줘요).
+ * memberCount는 받은 초대 카드의 "멤버 n명"이에요. 명세에 없는 값이라 실서버에서는 null이에요(목업만 채움).
+ */
+data class RoomInvite(
+    val id: Long,
+    val roomId: Long,
+    val roomName: String,
+    val invitedUser: RoomMember?,
+    val invitedBy: RoomMember?,
+    val hasBlockedMember: Boolean,
+    val createdAt: String,
+    val memberCount: Int? = null,
 )
 
 /** 방에 올린 만화 하나. mockLines는 목업 그림(mock://)을 그릴 대사라 실서버에서는 비어 있어요 */

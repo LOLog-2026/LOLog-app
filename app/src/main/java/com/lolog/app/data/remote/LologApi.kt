@@ -111,6 +111,12 @@ interface MainApi {
     @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
     @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
     @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
+    // 방장과 초대(rooms.md "방장과 초대", 초안). 초대·취소는 방장만(403 ROOM_OWNER_ONLY)
+    @POST("api/rooms/{id}/invites") suspend fun inviteToRoom(@Path("id") id: Long, @Body body: RoomInviteCreateDto): RoomInviteListDto
+    @DELETE("api/rooms/{id}/invites/{inviteId}") suspend fun cancelRoomInvite(@Path("id") id: Long, @Path("inviteId") inviteId: Long)
+    @GET("api/room-invites") suspend fun roomInvites(): RoomInviteListDto
+    @POST("api/room-invites/{inviteId}/accept") suspend fun acceptRoomInvite(@Path("inviteId") inviteId: Long): RoomItemDto
+    @DELETE("api/room-invites/{inviteId}") suspend fun declineRoomInvite(@Path("inviteId") inviteId: Long)
 
     // 알림함 (LOLog-docs PR #59 spec/inbox.md 5장). 최근 것이 위, 한 번에 20개
     /** tab: ALL·NOTICE·NOTIFICATION. cursor는 받은 nextCursor 그대로 */
