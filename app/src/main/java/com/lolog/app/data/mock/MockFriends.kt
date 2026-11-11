@@ -60,7 +60,7 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
         uploads.removeAll { t - it >= DAY_MS } // 목업은 자정 대신 24시간으로 세요
         if (uploads.size >= CHARACTER_DAILY_LIMIT) fail(ErrorCodes.CHARACTER_LIMIT, "오늘은 캐릭터를 더 만들 수 없어요")
         uploads += t
-        return ProfileCharacter(ProfileCharacterStatus.PROCESSING, character?.thumbnailUrl, now()).also { character = it }
+        return ProfileCharacter(ProfileCharacterStatus.PROCESSING, character?.thumbnailUrl, now(), voice = character?.voice).also { character = it }
     }
 
     /** 워커가 그림을 보냄(목업은 몇 초 뒤). failed면 FAILED로 두고 이번 것은 세지 않아요. 만드는 중이 아니었으면 false */
@@ -71,12 +71,25 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
             uploads.removeLastOrNull()
             c.copy(status = ProfileCharacterStatus.FAILED, updatedAt = now())
         } else {
-            ProfileCharacter(ProfileCharacterStatus.READY, thumbnailUrl, now())
+            // 다시 만들어도 고른 목소리는 그대로예요
+            ProfileCharacter(ProfileCharacterStatus.READY, thumbnailUrl, now(), voice = c.voice)
         }
         return true
     }
 
     fun deleteCharacter() { character = null }
+
+    /**
+     * 목소리 고르기(FR-CHAR-04, 초안). voice null = 안 고름.
+     * 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND, 없거나 목소리가 없는 기본 화자 id면 400 UNKNOWN_CHARACTER
+     */
+    fun setVoice(voice: String?) {
+        val c = character ?: fail(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
+        if (voice != null && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
+            fail(ErrorCodes.UNKNOWN_CHARACTER, "없는 목소리예요")
+        }
+        character = c.copy(voice = voice)
+    }
 
     fun updateNickname(raw: String): Profile {
         val n = raw.trim()

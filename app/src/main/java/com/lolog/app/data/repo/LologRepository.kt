@@ -61,6 +61,11 @@ interface LologRepository {
     suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter
     /** 프로필 캐릭터 지우기. 붙여 둔 카드 화자에서도 빠져요 */
     suspend fun deleteProfileCharacter()
+    /**
+     * 프로필 캐릭터 목소리 고르기(FR-CHAR-04, 초안). voice는 기본 화자 id, null이면 안 고름(쇼츠에서 알아서 골라요).
+     * 없거나 목소리가 없는 기본 화자 id → 400 UNKNOWN_CHARACTER, 프로필 캐릭터가 없음 → 404 CHARACTER_NOT_FOUND
+     */
+    suspend fun setProfileCharacterVoice(voice: String?)
     /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
     suspend fun sendFriendRequest(code: String): FriendRequest
     /** 최신순 */

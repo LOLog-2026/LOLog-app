@@ -171,6 +171,9 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
  *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
  *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
+ *  - 기본 화자 목소리(FR-CHAR-03): -01·-02로 끝나는 12명만 가짜 voiceUrl, 나머지는 null
+ *  - 내 목소리 고르기(FR-CHAR-04): 저장하면 내 프로필 캐릭터의 voice가 바뀌어요(다시 만들어도 그대로).
+ *    캐릭터 없음 → 404 CHARACTER_NOT_FOUND, 없거나 목소리 없는 기본 화자 id → 400 UNKNOWN_CHARACTER
  *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
  *  - 카드 고치기(PATCH)에서 그림 붙이기
  *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
@@ -487,6 +490,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             })
         }
     }
+    override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
         lock.withLock { net(150); friendBook.requests(direction) }

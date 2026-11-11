@@ -201,11 +201,18 @@ object ApiMapper {
         userId = userId?.toString(),
     )
 
-    fun ProfileCharacterDto.toModel() = ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt)
+    /** PATCH /api/me/profile/character/voice 본문. 안 고르면 "voice": null 을 꼭 넣어요(Json 설정이 null을 빼 버려요) */
+    fun voiceBody(voice: String?): JsonObject = buildJsonObject {
+        val v = voice?.trim()?.ifBlank { null }
+        if (v == null) put("voice", JsonNull) else put("voice", v)
+    }
+
+    fun ProfileCharacterDto.toModel() =
+        ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt, voice?.ifBlank { null })
 
     fun DefaultCharacterItem.toModel() = DefaultCharacter(
         id = id, label = label, ageGroup = ageGroup(ageGroup), gender = gender(gender),
-        glasses = glasses, thumbnailUrl = thumbnailUrl?.ifBlank { null },
+        glasses = glasses, thumbnailUrl = thumbnailUrl?.ifBlank { null }, voiceUrl = voiceUrl?.ifBlank { null },
     )
 
     // DTO와 앱 모델 이름이 같아서(FriendUser) 앱 모델은 전체 이름으로 써요

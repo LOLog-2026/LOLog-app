@@ -52,6 +52,7 @@ object ErrorCodes {
     const val SPEAKER_HAS_LINES = "SPEAKER_HAS_LINES"     // 409 대사가 남은 화자를 빼려 함
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
+    const val CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND" // 404 프로필 캐릭터가 없는데 목소리를 고름(docs PR #59 초안)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -134,7 +135,10 @@ fun profileCacheKey(userId: String) = "profile-$userId"
 enum class AgeGroup(val label: String) { CHILD("어린이"), YOUNG("청년"), MIDDLE("중장년") }
 enum class Gender(val label: String) { F("여"), M("남") }
 
-/** GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소 */
+/**
+ * GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소.
+ * voiceUrl은 목소리 미리 듣기 파일의 10분 서명 주소. null이면 목소리가 없어 들어 보기 버튼을 안 보여 줘요
+ */
 data class DefaultCharacter(
     val id: String,
     val label: String,
@@ -142,6 +146,7 @@ data class DefaultCharacter(
     val gender: Gender?,
     val glasses: Boolean,
     val thumbnailUrl: String?,
+    val voiceUrl: String? = null,
 )
 
 data class Line(val id: Long, val speaker: String, val text: String)
@@ -326,8 +331,11 @@ data class Profile(
 
 enum class ProfileCharacterStatus { PROCESSING, READY, FAILED, UNKNOWN }
 
-/** 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만 */
-data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String)
+/**
+ * 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만.
+ * voice는 고른 목소리(기본 화자 id). null이면 안 골랐고 쇼츠에서 알아서 골라요
+ */
+data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String, val voice: String? = null)
 
 /** 친구 한 명. thumbnailUrl은 친구의 프로필 캐릭터 그림(없으면 기본 사람 아이콘) */
 data class Friend(

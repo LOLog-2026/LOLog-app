@@ -189,7 +189,10 @@ data class CardAudioDto(
 
 // ── 기본 화자 (LOLog-docs spec/characters.md 4장) ──
 
-/** DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소 */
+/**
+ * DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소.
+ * voiceUrl은 목소리 파일(인사 한 문장 wav)의 10분 서명 주소. 목소리가 없으면 null (FR-CHAR-03, docs PR #59)
+ */
 @Serializable
 data class DefaultCharacterItem(
     val id: String,
@@ -198,6 +201,7 @@ data class DefaultCharacterItem(
     val gender: String? = null,
     val glasses: Boolean = false,
     val thumbnailUrl: String? = null,
+    val voiceUrl: String? = null,
 )
 
 /** GET /api/characters/defaults */
@@ -239,9 +243,15 @@ data class ProfileResponse(
     val character: ProfileCharacterDto? = null,
 )
 
-/** ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소) */
+/**
+ * ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소).
+ * voice는 고른 목소리(기본 화자 id). 안 골랐으면 null (FR-CHAR-04, docs PR #59)
+ */
 @Serializable
-data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "")
+data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "", val voice: String? = null)
+
+// PATCH /api/me/profile/character/voice 본문 { "voice": "young-f-02" | null }은 null을 꼭 보내야 해서
+// DTO 대신 ApiMapper.voiceBody()가 JsonObject로 직접 만들어요.
 
 /** ProfileUpdateRequest — PATCH /api/me/profile. 1~10자(앞뒤 공백 뺀 길이) */
 @Serializable
