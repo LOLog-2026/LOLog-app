@@ -151,6 +151,12 @@ sealed interface RoomMessage {
     }
 }
 
+/**
+ * 대화 한 묶음(rooms.md 2장, lolog-api #60). 오래된 줄이 앞이에요.
+ * nextCursor가 있으면 그 앞 줄이 더 있어요. 다음 요청에 그대로 넘겨요(뜻은 해석하지 않아요)
+ */
+data class RoomMessagePage(val messages: List<RoomMessage>, val nextCursor: String?)
+
 /** 소식 문장의 주어: "준님이", 나는 "내가", 나간 사람은 "나간 멤버가" */
 val RoomMember.subject: String get() = when {
     isMe -> "내가"

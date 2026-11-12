@@ -385,7 +385,11 @@ data class BlockedUser(
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 
 /** FCM data의 type (api-spec.md 푸시 표) */
-enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST }
+enum class PushType {
+    CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST,
+    // 친구 방(rooms.md 3장 푸시): 초대받음, 내 만화에 댓글, 방장이 해산
+    ROOM_INVITE, ROOM_COMMENT, ROOM_DISBANDED,
+}
 
 data class PushPayload(
     val type: PushType,
@@ -396,7 +400,10 @@ data class PushPayload(
     val cardIds: List<Long> = emptyList(),
     val comicId: Long? = null,
     val cardId: Long? = null,
-    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장) */
+    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장). ROOM_COMMENT도 단 사람 닉네임을 nickname에 넣어요 */
     val requestId: Long? = null,
+    /** ROOM_INVITE·ROOM_COMMENT: 방 ID. ROOM_INVITE·ROOM_DISBANDED: 방 이름(rooms.md 3장) */
+    val roomId: Long? = null,
+    val roomName: String? = null,
     val nickname: String? = null,
 )

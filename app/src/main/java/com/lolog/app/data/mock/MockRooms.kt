@@ -205,6 +205,15 @@ class MockRooms(
         }
     }
 
+    /** 서버처럼 [PAGE]줄씩. cursor는 받은 것 중 가장 오래된 줄의 ID예요 */
+    override suspend fun messagePage(roomId: Long, cursor: String?): RoomMessagePage {
+        val all = messages(roomId)
+        val before = cursor?.toLongOrNull()
+        val upTo = if (before == null) all else all.filter { it.id < before }
+        val page = upTo.takeLast(PAGE)
+        return RoomMessagePage(page, if (upTo.size > PAGE) page.first().id.toString() else null)
+    }
+
     override suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment = lock.withLock {
         net()
         val room = findRoom(roomId)
@@ -424,6 +433,9 @@ class MockRooms(
     }
 
     companion object {
+        /** 대화 한 번에 주는 줄 수(서버와 같음) */
+        const val PAGE = 50
+
         /** 나. 목업 회원 ID는 MockFriends와 같은 1 */
         val ME = RoomMember(MockFriends.MY_USER_ID, "나", isMe = true, friendState = "ME")
 

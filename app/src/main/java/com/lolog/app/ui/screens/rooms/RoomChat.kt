@@ -45,6 +45,10 @@ import com.lolog.app.ui.theme.LologShape
 internal fun RoomChat(
     room: Room,
     messages: List<RoomMessage>,
+    /** 그 앞 대화가 더 있는지. 맨 위까지 올리면 [onLoadOlder]로 받아요(rooms.md 2장 대화 커서) */
+    hasOlder: Boolean,
+    loadingOlder: Boolean,
+    onLoadOlder: () -> Unit,
     replyTo: RoomPost?,
     sending: Boolean,
     onClearReply: () -> Unit,
@@ -55,8 +59,11 @@ internal fun RoomChat(
     var text by remember { mutableStateOf("") }
     // 숨긴 사람의 알림 줄(올림·좋아요)은 그리지 않아요. 댓글은 "숨긴 글" 자리로 남겨요
     val shown = remember(messages) { messages.filterNot { it.hidden && it !is RoomMessage.Comment } }
-    // 새 줄이 생기면 맨 아래로
-    LaunchedEffect(shown.size) { if (shown.isNotEmpty()) list.animateScrollToItem(shown.lastIndex) }
+    // 맨 아래에 새 줄이 생기면 맨 아래로. 앞 대화를 위에 붙일 때는 보던 자리에 그대로 있어요(줄 key로 자리를 지켜요)
+    LaunchedEffect(shown.lastOrNull()?.id) { if (shown.isNotEmpty()) list.animateScrollToItem(list.layoutInfo.totalItemsCount - 1) }
+    // 맨 위 줄이 보이면 앞 대화를 더 받아요
+    val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.layoutInfo.totalItemsCount > 0 } }
+    LaunchedEffect(atTop, hasOlder) { if (atTop && hasOlder) onLoadOlder() }
 
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -65,6 +72,17 @@ internal fun RoomChat(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (loadingOlder || hasOlder) {
+                item(key = "older") {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                        if (loadingOlder) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = LologColors.Muted)
+                        } else {
+                            Text("위로 올리면 이전 대화를 더 불러와요", fontSize = 11.5.sp, color = LologColors.Muted)
+                        }
+                    }
+                }
+            }
             items(shown, key = { it.id }) { m ->
                 when (m) {
                     is RoomMessage.System -> NoticePill(m.text, heart = false)

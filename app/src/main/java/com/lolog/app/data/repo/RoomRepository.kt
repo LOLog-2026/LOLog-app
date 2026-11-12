@@ -25,6 +25,11 @@ interface RoomRepository {
     suspend fun toggleLike(postId: Long): RoomPost
     /** 오래된 줄이 위. 불러오면 그 방의 받지 않은 글이 0이 돼요 */
     suspend fun messages(roomId: Long): List<RoomMessage>
+    /**
+     * 대화를 묶음으로. cursor가 null이면 최근 줄부터(서버는 50줄), 받은 nextCursor를 넘기면 그 앞 줄이에요.
+     * 불러오면 그 방의 받지 않은 글이 0이 돼요
+     */
+    suspend fun messagePage(roomId: Long, cursor: String? = null): RoomMessagePage
     /** postId가 있으면 그 만화 캡션을 단 댓글. 글은 앞뒤 공백을 잘라 1~200자 */
     suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment
 

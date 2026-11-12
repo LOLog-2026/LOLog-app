@@ -120,4 +120,4 @@ data class RoomMessageDto(
 )
 
 @Serializable
-data class RoomMessageListDto(val messages: List<RoomMessageDto> = emptyList())
+data class RoomMessageListDto(val messages: List<RoomMessageDto> = emptyList(), val nextCursor: String? = null)

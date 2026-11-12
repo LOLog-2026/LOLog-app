@@ -5,6 +5,7 @@ import com.lolog.app.data.model.Room
 import com.lolog.app.data.model.RoomErrorCodes
 import com.lolog.app.data.model.RoomInvite
 import com.lolog.app.data.model.RoomMessage
+import com.lolog.app.data.model.RoomMessagePage
 import com.lolog.app.data.model.RoomPost
 import com.lolog.app.data.remote.ApiClient
 import com.lolog.app.data.remote.ErrorDto
@@ -67,10 +68,12 @@ class RemoteRoomRepository(private val network: ApiClient) : RoomRepository {
         return remember(dto.toModel())
     }
 
-    override suspend fun messages(roomId: Long): List<RoomMessage> {
-        val list = call { api.roomMessages(roomId) }.messages
+    override suspend fun messages(roomId: Long): List<RoomMessage> = messagePage(roomId).messages
+
+    override suspend fun messagePage(roomId: Long, cursor: String?): RoomMessagePage {
+        val dto = call { api.roomMessages(roomId, cursor) }
         val byId = posts.values.filter { it.roomId == roomId }.associateBy { it.id }
-        return list.mapNotNull { it.toModel(roomId, byId) }
+        return RoomMessagePage(dto.messages.mapNotNull { it.toModel(roomId, byId) }, dto.nextCursor?.ifBlank { null })
     }
 
     override suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment {

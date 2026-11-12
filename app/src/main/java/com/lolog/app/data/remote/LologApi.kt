@@ -116,7 +116,9 @@ interface MainApi {
     @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
     @PUT("api/rooms/{id}/posts/{postId}/like") suspend fun likeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
     @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
-    @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
+    /** cursor가 null이면 최근 줄부터. 응답의 nextCursor로 그 앞 줄을 받아요(rooms.md 2장) */
+    @GET("api/rooms/{id}/messages")
+    suspend fun roomMessages(@Path("id") id: Long, @Query("cursor") cursor: String? = null): RoomMessageListDto
     @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
     // 방장과 초대(rooms.md "방장과 초대", 초안). 초대·취소는 방장만(403 ROOM_OWNER_ONLY)
     @POST("api/rooms/{id}/invites") suspend fun inviteToRoom(@Path("id") id: Long, @Body body: RoomInviteCreateDto): RoomInviteListDto
