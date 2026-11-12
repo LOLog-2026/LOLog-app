@@ -246,7 +246,12 @@ class AdminUsersViewModel(private val repo: AdminRepository) : ViewModel() {
             // 서버 message는 개발자용이라(api-dto ErrorResponse) 목록에서 받은 대상의 role로 나눠요
             code == ErrorCodes.FORBIDDEN -> s.copy(
                 suspending = false, confirmUnsuspend = false, confirmWithdraw = false,
-                snackbar = if (u.isAdmin) "관리자 계정은 정지하거나 탈퇴시킬 수 없어요" else errorText(e),
+                // 정지 풀기도 관리자 계정은 403이에요(admin.md, 정함 11-13)
+                snackbar = when {
+                    !u.isAdmin -> errorText(e)
+                    s.confirmUnsuspend -> "관리자 계정은 정지를 풀 수 없어요"
+                    else -> "관리자 계정은 정지하거나 탈퇴시킬 수 없어요"
+                },
             )
             else -> s.copy(suspending = false, confirmUnsuspend = false, confirmWithdraw = false, snackbar = errorText(e))
         }

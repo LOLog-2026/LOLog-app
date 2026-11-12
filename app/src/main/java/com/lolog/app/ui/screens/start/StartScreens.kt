@@ -572,7 +572,12 @@ internal const val PASSWORD_TOO_LONG_TEXT = "너무 길어요. 한글은 한 글
 internal fun PasswordRuleLines(password: String) {
     val touched = password.isNotEmpty()
     val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
-    RuleLine(if (!touched || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, touched)
+    val lengthText = when {
+        !touched || lengthOk -> "8~${PASSWORD_MAX}자"
+        password.length > PASSWORD_MAX -> "${PASSWORD_MAX}자 이하 (지금 ${password.length}자)"
+        else -> "8자 이상 (지금 ${password.length}자)"
+    }
+    RuleLine(lengthText, lengthOk, touched)
     RuleLine("영문과 숫자 모두 포함", passwordHasLetterAndDigit(password), touched)
     if (!passwordFitsBytes(password)) RuleLine(PASSWORD_TOO_LONG_TEXT, ok = false, touched = true)
 }
