@@ -263,9 +263,12 @@ data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: Str
 @Serializable
 data class ProfileUpdateRequest(val nickname: String)
 
-/** FriendRequestCreate — POST /api/friend-requests */
+/**
+ * FriendRequestCreate — POST /api/friend-requests. 친구 코드나 같은 방 멤버의 userId(초안) 중 하나만 보내요.
+ * null인 값은 빼고 보내요(LologJson explicitNulls = false)
+ */
 @Serializable
-data class FriendRequestCreate(val friendCode: String)
+data class FriendRequestCreate(val friendCode: String? = null, val userId: Long? = null)
 
 /** 요청의 상대 */
 @Serializable
@@ -302,13 +305,23 @@ data class FriendItem(
 @Serializable
 data class FriendListResponse(val friends: List<FriendItem> = emptyList())
 
-/** POST /api/blocks 본문 { userId } */
+/** POST /api/blocks 본문 { userId, hideInRooms }. hideInRooms는 초안이라 서버가 모르면 무시돼요 */
 @Serializable
-data class BlockCreate(val userId: Long)
+data class BlockCreate(val userId: Long, val hideInRooms: Boolean = false)
 
-/** BlockItem. nickname은 null 가능 */
+/** PATCH /api/blocks/{userId} 본문 { hideInRooms }(초안) */
 @Serializable
-data class BlockItem(val userId: Long, val nickname: String? = null, val friendCode: String = "", val blockedAt: String = "")
+data class BlockUpdate(val hideInRooms: Boolean)
+
+/** BlockItem. nickname은 null 가능, hideInRooms는 초안이라 없으면 false */
+@Serializable
+data class BlockItem(
+    val userId: Long,
+    val nickname: String? = null,
+    val friendCode: String = "",
+    val blockedAt: String = "",
+    val hideInRooms: Boolean = false,
+)
 
 @Serializable
 data class BlockListResponse(val blocks: List<BlockItem> = emptyList())

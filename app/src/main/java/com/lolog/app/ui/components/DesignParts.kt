@@ -87,7 +87,8 @@ private val bubbleShape = RoundedCornerShape(16.dp)
 /**
  * 말풍선. [left]면 Canvas 바탕 + 왼쪽 26dp 이름 동그라미 + 위에 작은 이름,
  * 오른쪽이면 AccentSoft 바탕 + 오른쪽 이름 동그라미. 최대 너비는 화면의 60%.
- * [character]가 있으면 이름 동그라미 대신 화자 그림. [onAvatarClick]이 있으면 동그라미·이름을 누를 수 있어요
+ * [character]가 있으면 이름 동그라미 대신 화자 그림. [onAvatarClick]이 있으면 동그라미·이름을 누를 수 있어요.
+ * [avatar]를 주면 동그라미 대신 그걸 그려요(친구 방의 나간 멤버·숨긴 글처럼 모양이 다를 때)
  */
 @Composable
 fun ChatBubble(
@@ -99,11 +100,16 @@ fun ChatBubble(
     content: (@Composable () -> Unit)? = null,
     character: SpeakerCharacter? = null,
     onAvatarClick: (() -> Unit)? = null,
+    avatar: (@Composable () -> Unit)? = null,
 ) {
     val maxW = (LocalConfiguration.current.screenWidthDp * 0.6f).dp
     val tap = if (onAvatarClick != null) Modifier.clip(CircleShape).clickable(onClick = onAvatarClick) else Modifier
+    val face = avatar
     val avatar = @Composable {
-        Box(tap) { SpeakerAvatar(name, speakerIndex, size = 26.dp, thumbnailUrl = character?.thumbnailUrl, cacheKey = character?.cacheKey) }
+        Box(tap) {
+            if (face != null) face()
+            else SpeakerAvatar(name, speakerIndex, size = 26.dp, thumbnailUrl = character?.thumbnailUrl, cacheKey = character?.cacheKey)
+        }
     }
     Row(
         modifier.fillMaxWidth(),

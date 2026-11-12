@@ -8,6 +8,8 @@ import com.lolog.app.ui.screens.inbox.InboxLine
 import com.lolog.app.ui.screens.inbox.badge
 import com.lolog.app.ui.screens.inbox.inboxTime
 import com.lolog.app.ui.screens.inbox.line
+import com.lolog.app.ui.screens.inbox.RoomTarget
+import com.lolog.app.ui.screens.inbox.roomTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -32,10 +34,29 @@ class InboxTextsTest {
 
     @Test
     fun `모르는 종류는 새 소식이 있어요와 빈 글, 표시는 알림이고 이동할 곳이 없다`() {
-        val room = noti("ROOM_INVITE", "roomId" to "5")
-        assertEquals(InboxLine("새 소식이 있어요", ""), room.line())
-        assertEquals(InboxBadge.OTHER, room.badge())
-        assertNull(Notifier.payloadOf(room.data))
+        val future = noti("FUTURE_TYPE", "roomId" to "5")
+        assertEquals(InboxLine("새 소식이 있어요", ""), future.line())
+        assertEquals(InboxBadge.OTHER, future.badge())
+        assertNull(Notifier.payloadOf(future.data))
+        assertNull(future.roomTarget())
+    }
+
+    @Test
+    fun `방 알림은 방 꼬리표와 문구, 갈 곳`() {
+        val invite = noti("ROOM_INVITE", "inviteId" to "1", "roomId" to "5", "roomName" to "주말 카레팟", "nickname" to "준")
+        assertEquals(InboxLine("준님이 \"주말 카레팟\" 방에 초대했어요", "눌러서 수락하거나 거절해요"), invite.line())
+        assertEquals(InboxBadge.ROOM, invite.badge())
+        assertEquals(RoomTarget.List, invite.roomTarget())
+        // 명세의 초대 푸시에는 닉네임이 없어요
+        assertEquals("\"주말 카레팟\" 방에 초대받았어요", noti("ROOM_INVITE", "roomName" to "주말 카레팟").line().title)
+
+        val comment = noti("ROOM_COMMENT", "roomId" to "1", "postId" to "3", "nickname" to "서연", "roomName" to "과팀플")
+        assertEquals(InboxLine("서연님이 내 만화에 댓글을 달았어요", "과팀플"), comment.line())
+        assertEquals(RoomTarget.Chat(1), comment.roomTarget())
+
+        val gone = noti("ROOM_DISBANDED", "roomName" to "고3 동창")
+        assertEquals(InboxLine("\"고3 동창\" 방이 해산됐어요", "방의 만화와 대화가 지워졌어요"), gone.line())
+        assertEquals(RoomTarget.List, gone.roomTarget())
     }
 
     @Test

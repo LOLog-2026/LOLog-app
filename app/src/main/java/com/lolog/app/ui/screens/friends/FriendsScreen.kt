@@ -42,6 +42,8 @@ import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.screens.rooms.Features
+import com.lolog.app.ui.screens.rooms.RoomBlockHost
+import com.lolog.app.ui.screens.rooms.RoomBlockViewModel
 import com.lolog.app.ui.screens.rooms.RoomListScreen
 import com.lolog.app.ui.screens.start.LabeledField
 import com.lolog.app.ui.theme.LologColors
@@ -106,13 +108,13 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
         }
     }
 
-    /** 친구 끊기·차단하기. 끝나면 목록에서 빼요 */
-    fun remove(friend: Friend, block: Boolean, onDone: () -> Unit) {
+    /** 친구 끊기. 끝나면 목록에서 빼요(차단은 RoomBlockViewModel이 POST /api/blocks 한 번으로 해요) */
+    fun unfriend(friend: Friend, onDone: () -> Unit) {
         if (_state.value.busy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                if (block) repo.block(friend.userId) else repo.removeFriend(friend.userId)
+                repo.removeFriend(friend.userId)
                 _state.update { s -> s.copy(busy = false, friends = s.friends.filterNot { it.userId == friend.userId }) }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, snackbar = errorText(e)) }
@@ -120,6 +122,12 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
             onDone()
         }
     }
+
+    /** 차단이 끝났어요. 목록에서 빼고, 띄울 문구가 있으면 띄워요 */
+    fun blocked(userId: Long, message: String?) =
+        _state.update { s -> s.copy(friends = s.friends.filterNot { it.userId == userId }, snackbar = message ?: s.snackbar) }
+
+    fun toast(msg: String) = _state.update { it.copy(snackbar = msg) }
 
     fun snackbarShown() = _state.update { it.copy(snackbar = null) }
 }
@@ -143,6 +151,9 @@ fun FriendsScreen(
     /** 친구 방(목업에서만). null이면 "방" / "친구" 알약 없이 지금 모양 그대로 */
     onRoom: ((Long) -> Unit)? = null,
     onCreateRoom: (() -> Unit)? = null,
+    /** true면 "방" 알약으로 열어요(방을 나왔거나 방이 없어졌을 때) */
+    openRooms: Boolean = false,
+    onRoomsOpened: () -> Unit = {},
 ) {
     val roomsOn = Features.ROOMS && onRoom != null && onCreateRoom != null
     // 맨 위 알약: 처음엔 "방"
@@ -150,6 +161,10 @@ fun FriendsScreen(
     val repo = LocalContainer.current.repository
     val vm = viewModel { FriendsViewModel(repo) }
     val state by vm.state.collectAsState()
+    // 차단(친구 관계도 같이 끊겨요). 같은 방에 있으면 나가기·숨기기·그대로 보기를 물어요
+    val roomRepo = LocalContainer.current.rooms
+    val blockVm = viewModel(key = "friendBlock") { RoomBlockViewModel(roomRepo, repo) }
+    val blockState by blockVm.state.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
@@ -161,6 +176,7 @@ fun FriendsScreen(
     var highlight by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
+    LaunchedEffect(openRooms) { if (openRooms) { if (roomsOn) showRooms = true; onRoomsOpened() } }
     LaunchedEffect(Unit) { vm.load() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
     // 띠는 화면 범위에서 띄워요(값을 비우면 이 효과가 다시 돌아 띠가 끊겨요)
@@ -204,6 +220,7 @@ fun FriendsScreen(
                 onRoom = { onRoom?.invoke(it) },
                 onCreate = { onCreateRoom?.invoke() },
                 onFriends = { showRooms = false },
+                onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
                 modifier = Modifier.weight(1f),
             )
             state.loading && state.profile == null -> LoadingBox(Modifier.padding(pad))
@@ -336,11 +353,21 @@ fun FriendsScreen(
             },
             confirmText = if (block) "차단하기" else "친구 끊기",
             danger = true,
-            loading = state.busy,
-            onConfirm = { vm.remove(f, block) { confirm = null } },
-            onDismiss = { if (!state.busy) confirm = null },
+            loading = state.busy || blockState.busy,
+            onConfirm = {
+                if (block) {
+                    // DELETE friends 없이 POST /api/blocks 한 번으로 끊기와 차단이 같이 돼요
+                    confirm = null
+                    blockVm.start(f.userId, f.nickname)
+                } else {
+                    vm.unfriend(f) { confirm = null }
+                }
+            },
+            onDismiss = { if (!state.busy && !blockState.busy) confirm = null },
         )
     } }
+
+    RoomBlockHost(blockVm, onDone = { vm.blocked(it.userId, it.message) }, onSnackbar = vm::toast)
 }
 
 /** 맨 위 상자: 닉네임이 없으면 입력 칸, 있으면 내 닉네임과 친구 코드 */

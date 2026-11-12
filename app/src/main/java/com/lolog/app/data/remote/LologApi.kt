@@ -92,6 +92,8 @@ interface MainApi {
     @DELETE("api/friends/{userId}") suspend fun removeFriend(@Path("userId") userId: Long)
     /** 204 */
     @POST("api/blocks") suspend fun block(@Body body: BlockCreate)
+    // 방에서 그 사람 글 숨기기 바꾸기(friends.md 2장, 초안 · 서버 lolog-api #61)
+    @PATCH("api/blocks/{userId}") suspend fun updateBlock(@Path("userId") userId: Long, @Body body: BlockUpdate)
     @GET("api/blocks") suspend fun blocks(): BlockListResponse
     /** 204. 차단한 적 없어도 204 */
     @DELETE("api/blocks/{userId}") suspend fun unblock(@Path("userId") userId: Long)
@@ -103,7 +105,12 @@ interface MainApi {
     @GET("api/rooms") suspend fun rooms(): RoomListDto
     @POST("api/rooms") suspend fun createRoom(@Body body: RoomCreateDto): RoomItemDto
     @GET("api/rooms/{id}") suspend fun room(@Path("id") id: Long): RoomItemDto
-    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long)
+    // 방장이 다른 멤버가 있는데 newOwnerId 없이 나가면 409 NEW_OWNER_REQUIRED(초안). null이면 쿼리를 빼요
+    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long, @Query("newOwnerId") newOwnerId: Long?)
+    // 방 관리(rooms.md "방장과 초대", 초안 · 서버 lolog-api #60). 방장만(403 ROOM_OWNER_ONLY)
+    @PATCH("api/rooms/{id}") suspend fun renameRoom(@Path("id") id: Long, @Body body: RoomRenameDto): RoomItemDto
+    @DELETE("api/rooms/{id}") suspend fun disbandRoom(@Path("id") id: Long)
+    @DELETE("api/rooms/{id}/members/{userId}") suspend fun kickRoomMember(@Path("id") id: Long, @Path("userId") userId: Long)
     @GET("api/rooms/{id}/posts") suspend fun roomPosts(@Path("id") id: Long): RoomPostListDto
     @POST("api/rooms/{id}/posts") suspend fun postToRoom(@Path("id") id: Long, @Body body: RoomPostCreateDto): RoomPostDto
     @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
@@ -111,6 +118,12 @@ interface MainApi {
     @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
     @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
     @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
+    // 방장과 초대(rooms.md "방장과 초대", 초안). 초대·취소는 방장만(403 ROOM_OWNER_ONLY)
+    @POST("api/rooms/{id}/invites") suspend fun inviteToRoom(@Path("id") id: Long, @Body body: RoomInviteCreateDto): RoomInviteListDto
+    @DELETE("api/rooms/{id}/invites/{inviteId}") suspend fun cancelRoomInvite(@Path("id") id: Long, @Path("inviteId") inviteId: Long)
+    @GET("api/room-invites") suspend fun roomInvites(): RoomInviteListDto
+    @POST("api/room-invites/{inviteId}/accept") suspend fun acceptRoomInvite(@Path("inviteId") inviteId: Long): RoomItemDto
+    @DELETE("api/room-invites/{inviteId}") suspend fun declineRoomInvite(@Path("inviteId") inviteId: Long)
 
     // 알림함 (LOLog-docs PR #59 spec/inbox.md 5장). 최근 것이 위, 한 번에 20개
     /** tab: ALL·NOTICE·NOTIFICATION. cursor는 받은 nextCursor 그대로 */

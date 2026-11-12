@@ -9,7 +9,10 @@ import com.lolog.app.data.model.*
 interface RoomRepository {
     /** 마지막 소식이 최근인 방이 위 */
     suspend fun rooms(): List<Room>
-    /** memberIds는 나를 뺀 친구 회원 ID(1~5명). 방 이름은 앞뒤 공백을 잘라 1~20자 */
+    /**
+     * memberIds는 나를 뺀 친구 회원 ID(1~5명). 방 이름은 앞뒤 공백을 잘라 1~20자.
+     * 고른 친구는 멤버가 아니라 초대(room.invites)로 들어가고, 만든 사람이 방장이에요. 방이 20개면 ROOM_LIMIT
+     */
     suspend fun createRoom(name: String, memberIds: List<Long>): Room
     suspend fun room(id: Long): Room
     /** 최근에 올린 만화가 앞 */
@@ -24,5 +27,31 @@ interface RoomRepository {
     suspend fun messages(roomId: Long): List<RoomMessage>
     /** postId가 있으면 그 만화 캡션을 단 댓글. 글은 앞뒤 공백을 잘라 1~200자 */
     suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment
-    suspend fun leaveRoom(roomId: Long)
+
+    // ── 방 관리·나가기 ──
+
+    /** 방장만(ROOM_OWNER_ONLY). 이름은 앞뒤 공백을 잘라 1~20자 */
+    suspend fun rename(roomId: Long, name: String): Room
+    /** 방 해산. 방장만. 방의 만화·대화를 모두 지우고 멤버에게 알려요 */
+    suspend fun disband(roomId: Long)
+    /**
+     * 방 나가기. 내가 방장이고 다른 멤버가 있으면 [newOwnerId](남은 멤버 중 한 명)가 꼭 필요해요(없으면 NEW_OWNER_REQUIRED).
+     * 혼자 남은 방장이 나가면 방이 지워져요. 내가 올린 만화와 글은 "나간 멤버"로 남아요
+     */
+    suspend fun leave(roomId: Long, newOwnerId: Long? = null)
+    /** 멤버 내보내기. 방장만. 그 사람의 글은 "나간 멤버"로 남고, 다시 초대할 수 있어요 */
+    suspend fun kick(roomId: Long, userId: Long)
+
+    // ── 방장과 초대 ──
+
+    /** 방장만(ROOM_OWNER_ONLY). 멤버 + 답을 기다리는 초대가 6명을 넘으면 ROOM_MEMBER_LIMIT. 이미 초대한 사람은 그대로 둬요 */
+    suspend fun invite(roomId: Long, userIds: List<Long>): List<RoomInvite>
+    /** 방장만. 없거나 이미 답한 초대면 ROOM_INVITE_NOT_FOUND */
+    suspend fun cancelInvite(roomId: Long, inviteId: Long)
+    /** 내가 받은 초대(답을 기다리는 것만) */
+    suspend fun myInvites(): List<RoomInvite>
+    /** 수락하면 그 방에 들어가요. 방이 20개면 ROOM_LIMIT, 없거나 이미 답한 초대면 ROOM_INVITE_NOT_FOUND */
+    suspend fun acceptInvite(inviteId: Long): Room
+    /** 거절하면 초대만 없어져요(방장에게 알리지 않음) */
+    suspend fun declineInvite(inviteId: Long)
 }

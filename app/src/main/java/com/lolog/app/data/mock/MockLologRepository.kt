@@ -176,7 +176,7 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *    내 코드 → 400 CANNOT_FRIEND_SELF / 친구 코드 → 409 ALREADY_FRIENDS / 보낸 요청 코드 → 409 FRIEND_REQUEST_EXISTS
  *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
  *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
- *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
+ *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로(친구도 바로 차단돼요)
  *
  * 화자 그림 규칙(MockCharacters.kt, LOLog-docs spec/characters.md)
  *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,
@@ -511,13 +511,23 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     }
     override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
+    override suspend fun requestByUserId(userId: Long): FriendRequest = lock.withLock { net(); friendBook.sendTo(userId, roomPeople(userId)) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
         lock.withLock { net(150); friendBook.requests(direction) }
     override suspend fun acceptFriendRequest(id: Long): Friend = lock.withLock { net(); friendBook.accept(id) }
     override suspend fun deleteFriendRequest(id: Long) = lock.withLock { net(); friendBook.deleteRequest(id) }
     override suspend fun friends(): List<Friend> = lock.withLock { net(); friendBook.friends() }
     override suspend fun removeFriend(userId: Long) = lock.withLock { net(); friendBook.removeFriend(userId) }
-    override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
+    override suspend fun block(userId: Long, hideInRooms: Boolean) =
+        lock.withLock { net(); friendBook.block(userId, hideInRooms, roomPeople(userId)) }
+    override suspend fun setHideInRooms(userId: Long, hide: Boolean) = lock.withLock { net(); friendBook.setHideInRooms(userId, hide) }
+
+    /** 지금 나와 같은 방에 있는 사람의 닉네임(없으면 null). MockRooms.of가 채워요 */
+    internal var roomPeople: (Long) -> String? = { null }
+
+    /** 방 목업이 멤버의 friendState·숨긴 글을 맞추려고 불러요(네트워크 흉내 없음) */
+    internal suspend fun friendStateOf(userId: Long): String = lock.withLock { friendBook.friendState(userId) }
+    internal suspend fun hiddenInRooms(): Set<Long> = lock.withLock { friendBook.hiddenInRooms() }
     override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
     override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
 

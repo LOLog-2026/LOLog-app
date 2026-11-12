@@ -41,6 +41,8 @@ class RoomCreateViewModel(private val rooms: RoomRepository, private val repo: L
         val error: String? = null,
         val creating: Boolean = false,
         val createdId: Long? = null,
+        /** 초대를 보낸 사람 수(방에 들어가서 스낵바로 알려요) */
+        val invitedCount: Int = 0,
         val snackbar: String? = null,
     )
 
@@ -64,7 +66,7 @@ class RoomCreateViewModel(private val rooms: RoomRepository, private val repo: L
             _state.update { it.copy(creating = true) }
             try {
                 val room = rooms.createRoom(name, memberIds)
-                _state.update { it.copy(creating = false, createdId = room.id) }
+                _state.update { it.copy(creating = false, createdId = room.id, invitedCount = memberIds.distinct().size) }
             } catch (e: Throwable) {
                 _state.update { it.copy(creating = false, snackbar = errorText(e)) }
             }
@@ -74,9 +76,9 @@ class RoomCreateViewModel(private val rooms: RoomRepository, private val repo: L
     fun toast(msg: String?) = _state.update { it.copy(snackbar = msg) }
 }
 
-/** 방 만들기: 방 이름 + 친구 고르기(나 포함 최대 6명). 만들면 그 방으로 들어가요 */
+/** 방 만들기: 방 이름 + 초대할 친구 고르기(나 포함 최대 6명). 만들면 그 방으로 들어가고, 고른 친구에게 초대가 가요 */
 @Composable
-fun RoomCreateScreen(onBack: () -> Unit, onCreated: (Long) -> Unit, onAddFriend: () -> Unit) {
+fun RoomCreateScreen(onBack: () -> Unit, onCreated: (roomId: Long, invited: Int) -> Unit, onAddFriend: () -> Unit) {
     val container = LocalContainer.current
     val roomRepo = container.rooms ?: return
     val vm = viewModel { RoomCreateViewModel(roomRepo, container.repository) }
@@ -86,7 +88,7 @@ fun RoomCreateScreen(onBack: () -> Unit, onCreated: (Long) -> Unit, onAddFriend:
     var picked by rememberSaveable { mutableStateOf(listOf<Long>()) }
     val maxPick = RoomRules.MEMBER_MAX - 1
 
-    LaunchedEffect(state.createdId) { state.createdId?.let(onCreated) }
+    LaunchedEffect(state.createdId) { state.createdId?.let { onCreated(it, state.invitedCount) } }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
 
     Scaffold(
@@ -98,7 +100,7 @@ fun RoomCreateScreen(onBack: () -> Unit, onCreated: (Long) -> Unit, onAddFriend:
             if (!friends.isNullOrEmpty()) {
                 Box(Modifier.fillMaxWidth().background(LologColors.Paper).navigationBarsPadding().imePadding().padding(16.dp)) {
                     PrimaryButton(
-                        if (picked.isEmpty()) "만들기" else "만들기 (나 포함 ${picked.size + 1}명)",
+                        "방 만들고 초대하기",
                         onClick = { vm.create(name, picked) },
                         enabled = name.isNotBlank() && picked.isNotEmpty(),
                         loading = state.creating,
@@ -128,11 +130,11 @@ fun RoomCreateScreen(onBack: () -> Unit, onCreated: (Long) -> Unit, onAddFriend:
                     )
                     Spacer(Modifier.height(22.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionTitle("같이 볼 친구")
+                        SectionTitle("초대할 친구")
                         Spacer(Modifier.weight(1f))
                         Text("${picked.size} / $maxPick", fontSize = 12.sp, color = LologColors.Muted)
                     }
-                    Text("나를 포함해 ${RoomRules.MEMBER_MAX}명까지 들어갈 수 있어요", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 2.dp, bottom = 6.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
                 items(friends, key = { it.userId }) { f ->
                     val on = f.userId in picked
@@ -143,6 +145,12 @@ fun RoomCreateScreen(onBack: () -> Unit, onCreated: (Long) -> Unit, onAddFriend:
                             else -> picked + f.userId
                         }
                     }
+                }
+                item {
+                    Text(
+                        "고른 친구에게 초대가 가요. 친구가 수락하면 방에 들어와요. 나를 포함해 ${RoomRules.MEMBER_MAX}명까지예요.",
+                        fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 10.dp),
+                    )
                 }
             }
         }

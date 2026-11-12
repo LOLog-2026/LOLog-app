@@ -111,6 +111,7 @@ class MockFriendsTest {
     fun 차단하면_친구와_요청에서_빠지고_차단_목록_맨_위로() {
         val f = ready()
         val friend = f.friends().first { it.friendCode == "K2PH7RTA" }
+        // 친구도 바로 차단돼요. 친구 관계도 같이 끊겨요
         f.block(friend.userId)
         assertFalse(f.friends().any { it.userId == friend.userId })
         assertEquals("K2PH7RTA", f.blocks().first().friendCode)
@@ -129,5 +130,54 @@ class MockFriendsTest {
     @Test
     fun 친구도_요청도_아닌_사람_차단은_USER_NOT_FOUND() {
         assertError(ErrorCodes.USER_NOT_FOUND) { ready().block(9999) }
+    }
+
+    // ── 방 멤버 친구 요청·차단(rooms.md "방에서 친구 요청", friends.md "차단") ──
+
+    @Test
+    fun 친구를_차단하면_친구_목록에서_빠지고_BLOCKED() {
+        val f = ready()
+        f.block(11)
+        assertFalse(f.friends().any { it.userId == 11L })
+        assertEquals("BLOCKED", f.friendState(11))
+    }
+
+    @Test
+    fun 이미_차단한_사람을_또_차단해도_숨기기는_그대로() {
+        val f = ready()
+        f.block(31, hideInRooms = false) // 태오님은 숨기기로 차단돼 있어요
+        assertTrue(f.blocks().first { it.userId == 31L }.hideInRooms)
+    }
+
+    @Test
+    fun RECEIVED인_방_멤버에게_보내면_바로_친구() {
+        val f = ready()
+        assertEquals("RECEIVED", f.friendState(52)) // 민지님이 먼저 보냄
+        val r = f.sendTo(52, "민지")
+        assertEquals(FriendRequestStatus.ACCEPTED, r.status)
+        assertEquals("FRIEND", f.friendState(52))
+    }
+
+    @Test
+    fun 방_멤버에게_userId로_보내면_요청_보냄() {
+        val f = ready()
+        assertEquals("NONE", f.friendState(51))
+        assertEquals(FriendRequestStatus.PENDING, f.sendTo(51, "준").status)
+        assertEquals("REQUESTED", f.friendState(51))
+        // 방을 나간 사람(같은 방에 없음)은 친구 코드를 모를 때와 같아요
+        assertError(ErrorCodes.FRIEND_CODE_NOT_FOUND) { f.sendTo(99, null) }
+        assertError(ErrorCodes.USER_BLOCKED) { f.sendTo(31, "태오") }
+    }
+
+    @Test
+    fun 같은_방_멤버를_숨기기로_차단하고_숨기기를_바꾼다() {
+        val f = ready()
+        f.block(51, hideInRooms = true, roomNickname = "준")
+        assertEquals("BLOCKED", f.friendState(51))
+        assertTrue(51L in f.hiddenInRooms())
+        f.setHideInRooms(51, false)
+        assertFalse(f.blocks().first { it.userId == 51L }.hideInRooms)
+        assertFalse(51L in f.hiddenInRooms())
+        assertError(ErrorCodes.USER_NOT_FOUND) { f.setHideInRooms(9999, true) }
     }
 }

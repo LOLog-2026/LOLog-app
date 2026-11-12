@@ -373,8 +373,14 @@ data class FriendRequest(
     val createdAt: String,
 )
 
-/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null */
-data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: String, val blockedAt: String)
+/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null. hideInRooms는 같은 방에서 그 사람 글을 "숨긴 글"로 보일지(초안) */
+data class BlockedUser(
+    val userId: Long,
+    val nickname: String?,
+    val friendCode: String,
+    val blockedAt: String,
+    val hideInRooms: Boolean = false,
+)
 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 

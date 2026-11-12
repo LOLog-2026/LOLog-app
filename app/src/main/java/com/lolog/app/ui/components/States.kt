@@ -83,6 +83,10 @@ fun errorText(e: Throwable): String {
         RoomErrorCodes.ROOM_MEMBER_LIMIT -> "나를 포함해 ${RoomRules.MEMBER_MAX}명까지 들어갈 수 있어요"
         RoomErrorCodes.ROOM_NOT_FOUND -> "방을 찾지 못했어요"
         RoomErrorCodes.ROOM_POST_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
+        RoomErrorCodes.ROOM_LIMIT -> "방은 ${RoomRules.ROOM_MAX}개까지 들어갈 수 있어요"
+        RoomErrorCodes.ROOM_OWNER_ONLY -> "방장만 할 수 있어요"
+        RoomErrorCodes.ROOM_INVITE_NOT_FOUND -> "이미 답했거나 취소된 초대예요"
+        RoomErrorCodes.NEW_OWNER_REQUIRED -> "새 방장을 골라야 나갈 수 있어요"
         // 서버의 message는 개발자용이라 화면에 그대로 띄우지 않아요(api-dto ErrorResponse)
         else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else "문제가 생겼어요. 잠시 후 다시 시도해 주세요"
     }

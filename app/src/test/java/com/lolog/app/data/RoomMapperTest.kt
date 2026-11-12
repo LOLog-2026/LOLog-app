@@ -2,12 +2,14 @@ package com.lolog.app.data
 
 import com.lolog.app.data.model.RoomMessage
 import com.lolog.app.data.remote.LologJson
+import com.lolog.app.data.remote.RoomActivityDto
 import com.lolog.app.data.remote.RoomItemDto
 import com.lolog.app.data.remote.RoomMapper
 import com.lolog.app.data.remote.RoomMapper.toModel
 import com.lolog.app.data.remote.RoomMessageListDto
 import com.lolog.app.data.remote.RoomPostDto
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +38,42 @@ class RoomMapperTest {
         assertEquals("내가 만화를 좋아해요", text("LIKED", true))
         assertEquals("나 \"민트초코 최고\"", text("COMMENTED", true, "민트초코 최고"))
         assertEquals("준 \"안녕\"", text("COMMENTED", false, "안녕"))
+    }
+
+    @Test
+    fun `ownerId·invites·isOwner가 없는 예전 RoomItem도 읽힌다`() {
+        val room = LologJson.decodeFromString(RoomItemDto.serializer(), """
+            {"id":1,"name":"방","members":[{"userId":1,"nickname":"나","thumbnailUrl":null,"isMe":true}],
+             "lastActivity":null,"unread":0,"createdAt":"2026-11-11T02:00:00Z"}
+        """.trimIndent()).toModel()
+        assertNull(room.ownerId)
+        assertTrue(room.invites.isEmpty())
+        assertFalse(room.members[0].isOwner)
+        assertFalse(room.members[0].suspended)
+        assertNull(room.members[0].friendState)
+        assertFalse(room.isMineOwner)
+    }
+
+    @Test
+    fun `방장과 기다리는 초대를 읽는다`() {
+        val room = LologJson.decodeFromString(RoomItemDto.serializer(), """
+            {"id":7,"name":"주말 카레팟","ownerId":1,
+             "members":[{"userId":1,"nickname":"나","thumbnailUrl":null,"isMe":true,"isOwner":true}],
+             "invites":[{"id":3,"room":{"id":7,"name":"주말 카레팟"},
+               "invitedUser":{"userId":2,"nickname":"준","thumbnailUrl":null,"isMe":false,"isOwner":false},
+               "invitedBy":null,"createdAt":"2026-11-11T03:00:00Z"}],
+             "lastActivity":{"type":"CREATED","nickname":"나","isMe":true,"at":"2026-11-11T02:00:00Z","text":null},
+             "unread":0,"createdAt":"2026-11-11T02:00:00Z"}
+        """.trimIndent()).toModel()
+        assertEquals(1L, room.ownerId)
+        assertTrue(room.isMineOwner)
+        val invite = room.invites.single()
+        assertEquals(7L, invite.roomId)
+        assertEquals("주말 카레팟", invite.roomName)
+        assertEquals("준", invite.invitedUser?.nickname)
+        assertNull(invite.invitedBy)
+        assertFalse(invite.hasBlockedMember) // 서버가 안 보내면 false
+        assertEquals(2, room.headcount)
     }
 
     @Test
@@ -74,5 +112,72 @@ class RoomMapperTest {
         val unknown = list[4] as RoomMessage.Comment
         assertEquals("모르는 만화", unknown.post?.title) // 목록에 없으면 서버 요약으로
         assertNull((list[5] as RoomMessage.Comment).post)
+    }
+
+    @Test
+    fun `나간 멤버는 userId·nickname·thumbnailUrl이 null이어도 읽히고 친구 버튼이 없다`() {
+        val post = LologJson.decodeFromString(
+            RoomPostDto.serializer(),
+            """{"id":10,"roomId":1,"comicId":3,"title":"민트초코","imageUrl":"u",
+             "author":{"userId":null,"nickname":null,"thumbnailUrl":null,"isMe":false,"isOwner":false,"suspended":false,"friendState":null,"left":true},
+             "postedAt":"t","likeCount":0,"likedByMe":false,"commentCount":0}""",
+        ).toModel()
+        assertTrue(post.author.left)
+        assertEquals("나간 멤버", post.author.displayName)
+        assertNull(post.author.friendState)
+    }
+
+    @Test
+    fun `마지막 소식의 사람이 나갔으면 나간 멤버가`() {
+        assertEquals("나간 멤버가 만화를 올렸어요", RoomMapper.activityText(RoomActivityDto("POSTED", null, false, "t")))
+        assertEquals("나간 멤버가 만화를 좋아해요", RoomMapper.activityText(RoomActivityDto("LIKED", null, false, "t")))
+        assertEquals("나간 멤버 \"ㅋㅋ\"", RoomMapper.activityText(RoomActivityDto("COMMENTED", null, false, "t", "ㅋㅋ")))
+    }
+
+    @Test
+    fun `숨긴 만화는 title·imageUrl이 null이어도 읽히고 hidden`() {
+        val post = LologJson.decodeFromString(
+            RoomPostDto.serializer(),
+            """{"id":11,"roomId":1,"comicId":4,"title":null,"imageUrl":null,"author":{"userId":31,"nickname":"태오","isMe":false},
+             "postedAt":"t","likeCount":0,"likedByMe":false,"commentCount":0,"hidden":true}""",
+        ).toModel()
+        assertTrue(post.hidden)
+        assertEquals("", post.title)
+        assertNull(post.imageUrl)
+        // hidden이 없는 응답은 false
+        assertFalse(
+            LologJson.decodeFromString(
+                RoomPostDto.serializer(),
+                """{"id":12,"roomId":1,"comicId":5,"author":{"userId":2,"nickname":"준","isMe":false}}""",
+            ).toModel().hidden,
+        )
+    }
+
+    @Test
+    fun `대화 JSON에 left·hidden이 없어도 읽힌다`() {
+        val list = LologJson.decodeFromString(
+            RoomMessageListDto.serializer(),
+            """{"messages":[{"id":1,"type":"COMMENT","member":{"userId":2,"nickname":"준","isMe":false},"at":"t","postId":null,"post":null,"text":"안녕"}]}""",
+        ).messages.mapNotNull { it.toModel(1, emptyMap()) }
+        val c = list.single() as RoomMessage.Comment
+        assertFalse(c.hidden)
+        assertFalse(c.author.left)
+        assertEquals("준", c.author.displayName)
+    }
+
+    @Test
+    fun `나간 멤버와 숨긴 글을 읽는다`() {
+        val list = LologJson.decodeFromString(
+            RoomMessageListDto.serializer(),
+            """{"messages":[
+              {"id":1,"type":"POSTED","member":{"userId":null,"nickname":null,"thumbnailUrl":null,"isMe":false,"left":true},"at":"t1","postId":10},
+              {"id":2,"type":"COMMENT","member":{"userId":31,"nickname":"태오","isMe":false},"at":"t2","postId":10,"post":null,"text":null,"hidden":true}
+            ]}""",
+        ).messages.mapNotNull { it.toModel(1, emptyMap()) }
+        assertEquals("나간 멤버가 만화를 올렸어요", (list[0] as RoomMessage.System).text)
+        val hidden = list[1] as RoomMessage.Comment
+        assertTrue(hidden.hidden)
+        assertEquals("", hidden.text)
+        assertNull(hidden.post)
     }
 }

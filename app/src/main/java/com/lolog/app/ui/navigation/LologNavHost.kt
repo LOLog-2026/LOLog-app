@@ -39,8 +39,10 @@ import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
 import com.lolog.app.ui.screens.inbox.InboxScreen
 import com.lolog.app.ui.screens.inbox.NoticeScreen
+import com.lolog.app.ui.screens.inbox.RoomTarget
 import com.lolog.app.ui.screens.rooms.Features
 import com.lolog.app.ui.screens.rooms.RoomCreateScreen
+import com.lolog.app.ui.screens.rooms.RoomInviteScreen
 import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
@@ -71,6 +73,8 @@ private const val SETTINGS_MESSAGE = "settingsMessage"
 private const val FRIENDS_MESSAGE = "friendsMessage"
 /** 친구 추가에서 바로 친구가 됐으면 true: 친구 목록 맨 위 줄을 잠깐 연노랑으로 */
 private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
+/** 친구 탭을 "방" 알약으로 열기(방을 나가거나 방이 없어졌을 때) */
+private const val FRIENDS_ROOMS = "friendsRooms"
 // 내 목소리 고르기에서 저장하고 내 캐릭터 화면으로 돌아올 때 띠 문구
 private const val VOICE_MESSAGE = "voiceMessage"
 /** 알림함 → 공지사항 자세히로 넘기는 값. 목록에서 받은 그대로 그려요(따로 조회 없음) */
@@ -78,6 +82,8 @@ private const val NOTICE_ID = "noticeId"
 private const val NOTICE_TITLE = "noticeTitle"
 private const val NOTICE_BODY = "noticeBody"
 private const val NOTICE_DATE = "noticeDate"
+/** 방 만들기·친구 초대 화면 → 방 화면 스낵바 문구 */
+private const val ROOM_MESSAGE = "roomMessage"
 /** 공지 쓰기·고치기 화면 → 관리자 공지 목록 스낵바 문구 */
 private const val ADMIN_NOTICE_MESSAGE = "adminNoticeMessage"
 
@@ -113,14 +119,19 @@ object Routes {
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
     /** 친구 방(목업에서만) */
-    const val ROOM = "room/{id}"
+    /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
+    const val ROOM = "room/{id}?tab={tab}"
     const val ROOM_CREATE = "rooms/create"
+    /** 방장: 친구 초대 */
+    const val ROOM_INVITE = "rooms/{id}/invite"
 
     fun analyzing(id: Long) = "analyzing/$id"
     fun card(id: Long) = "card/$id"
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
     fun room(id: Long) = "room/$id"
+    fun roomChat(id: Long) = "room/$id?tab=2"
+    fun roomInvite(id: Long) = "rooms/$id/invite"
     fun notice(id: Long) = "notice/$id"
 }
 
@@ -146,6 +157,15 @@ fun NavHostController.goTab(route: String) {
         popUpTo(Routes.HOME) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+/** 방 목록(친구 탭의 "방" 알약)으로 돌아가요. [message]는 거기서 띄울 스낵바 문구 */
+fun NavHostController.openRoomList(message: String? = null) {
+    if (!popBackStack(Routes.FRIENDS, inclusive = false)) goTab(Routes.FRIENDS)
+    currentBackStackEntry?.savedStateHandle?.let {
+        it[FRIENDS_ROOMS] = true
+        if (message != null) it[FRIENDS_MESSAGE] = message
     }
 }
 
@@ -338,6 +358,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             composable(Routes.FRIENDS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(FRIENDS_MESSAGE, null).collectAsState()
                 val highlight by entry.savedStateHandle.getStateFlow(FRIENDS_HIGHLIGHT, false).collectAsState()
+                val openRooms by entry.savedStateHandle.getStateFlow(FRIENDS_ROOMS, false).collectAsState()
                 FriendsScreen(
                     onBack = { nav.goTab(Routes.HOME) },
                     onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
@@ -352,6 +373,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     },
                     onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
                     onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
+                    openRooms = openRooms,
+                    onRoomsOpened = { entry.savedStateHandle[FRIENDS_ROOMS] = false },
                 )
             }
             if (Features.ROOMS) {
@@ -359,15 +382,41 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     RoomCreateScreen(
                         onBack = { nav.popBackStack() },
                         // 만들면 그 방으로. 뒤로 가면 방 만들기 대신 방 목록으로
-                        onCreated = { id -> nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } } },
+                        onCreated = { id, invited ->
+                            nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } }
+                            nav.currentBackStackEntry?.savedStateHandle?.set(ROOM_MESSAGE, "${invited}명에게 초대를 보냈어요")
+                        },
                         onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
                     )
                 }
-                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                composable(
+                    Routes.ROOM,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.LongType },
+                        navArgument("tab") { type = NavType.IntType; defaultValue = 0 },
+                    ),
+                ) { entry ->
+                    val id = entry.arguments!!.getLong("id")
+                    val message by entry.savedStateHandle.getStateFlow<String?>(ROOM_MESSAGE, null).collectAsState()
                     RoomScreen(
+                        roomId = id,
+                        initialTab = entry.arguments!!.getInt("tab"),
+                        onBack = { nav.popBackStack() },
+                        onLeft = { msg -> nav.openRoomList(msg) },
+                        onInvite = { nav.navigate(Routes.roomInvite(id)) { launchSingleTop = true } },
+                        message = message,
+                        onMessageShown = { entry.savedStateHandle[ROOM_MESSAGE] = null },
+                    )
+                }
+                composable(Routes.ROOM_INVITE, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                    RoomInviteScreen(
                         roomId = it.arguments!!.getLong("id"),
                         onBack = { nav.popBackStack() },
-                        onLeft = { nav.popBackStack() },
+                        // 초대하면 방으로 돌아가 스낵바로 알려요
+                        onInvited = { count ->
+                            nav.previousBackStackEntry?.savedStateHandle?.set(ROOM_MESSAGE, "${count}명에게 초대를 보냈어요")
+                            nav.popBackStack()
+                        },
                     )
                 }
             }
@@ -455,6 +504,12 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         nav.navigate(Routes.notice(n.id)) { launchSingleTop = true }
                     },
                     onPush = { nav.openPush(it) },
+                    onRoom = { target ->
+                        when (target) {
+                            RoomTarget.List -> nav.openRoomList()
+                            is RoomTarget.Chat -> nav.navigate(Routes.roomChat(target.roomId)) { launchSingleTop = true }
+                        }
+                    },
                 )
             }
             composable(Routes.NOTICE, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->

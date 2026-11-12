@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +58,23 @@ class BlockedViewModel(private val repo: LologRepository) : ViewModel() {
                 repo.unblock(b.userId)
                 _state.update { s -> s.copy(blocks = s.blocks.filterNot { it.userId == b.userId }, busy = s.busy - b.userId) }
             } catch (e: Throwable) {
+                _state.update { it.copy(busy = it.busy - b.userId, snackbar = errorText(e)) }
+            }
+        }
+    }
+
+    /** 방에서 이 사람 글 숨기기(hideInRooms). 먼저 바꿔 보이고, 실패하면 되돌려요 */
+    fun setHide(b: BlockedUser, hide: Boolean) {
+        if (b.userId in _state.value.busy) return
+        fun put(value: Boolean) = _state.update { s -> s.copy(blocks = s.blocks.map { if (it.userId == b.userId) it.copy(hideInRooms = value) else it }) }
+        viewModelScope.launch {
+            put(hide)
+            _state.update { it.copy(busy = it.busy + b.userId) }
+            try {
+                repo.setHideInRooms(b.userId, hide)
+                _state.update { it.copy(busy = it.busy - b.userId, snackbar = if (hide) "방에서 이 사람 글을 숨겨요" else "방에서 이 사람 글이 보여요") }
+            } catch (e: Throwable) {
+                put(!hide)
                 _state.update { it.copy(busy = it.busy - b.userId, snackbar = errorText(e)) }
             }
         }
@@ -113,6 +131,20 @@ fun BlockedScreen(onBack: () -> Unit) {
                             }
                         }
                         SmallPillButton("풀기", { if (!busy) vm.unblock(b) })
+                    }
+                    // 같은 방에서 이 사람 글을 "숨긴 글"로 보일지
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 56.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("방에서 글 숨기기", fontSize = 13.sp, color = LologColors.Muted, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = b.hideInRooms,
+                            onCheckedChange = { vm.setHide(b, it) },
+                            enabled = !busy,
+                            modifier = Modifier.scale(0.75f),
+                            colors = SwitchDefaults.colors(checkedTrackColor = LologColors.Accent, checkedThumbColor = LologColors.Paper),
+                        )
                     }
                 }
                 item {

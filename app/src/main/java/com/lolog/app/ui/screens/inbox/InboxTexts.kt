@@ -20,7 +20,23 @@ enum class InboxBadge(val label: String) {
     COMIC("만화"),
     CHARACTER("캐릭터"),
     FRIEND("친구"),
+    ROOM("방"),
     OTHER("알림"),
+}
+
+/** 방 알림(ROOM_INVITE·ROOM_COMMENT·ROOM_DISBANDED)을 눌렀을 때 갈 곳. 푸시 이동(notification/)과 따로 ui에서 정해요 */
+sealed interface RoomTarget {
+    /** 방 목록(받은 초대가 맨 위) */
+    data object List : RoomTarget
+    /** 그 방의 대화 탭 */
+    data class Chat(val roomId: Long) : RoomTarget
+}
+
+/** 방 알림이면 갈 곳, 아니면 null(rooms.md 3장 푸시 표의 앱 동작) */
+fun InboxItem.Notification.roomTarget(): RoomTarget? = when (type) {
+    "ROOM_INVITE", "ROOM_DISBANDED" -> RoomTarget.List
+    "ROOM_COMMENT" -> data["roomId"]?.toLongOrNull()?.let { RoomTarget.Chat(it) } ?: RoomTarget.List
+    else -> null
 }
 
 fun InboxItem.badge(): InboxBadge = when (this) {
@@ -30,6 +46,7 @@ fun InboxItem.badge(): InboxBadge = when (this) {
         "COMIC_DONE", "COMIC_FAILED" -> InboxBadge.COMIC
         "PROFILE_CHARACTER_READY", "PROFILE_CHARACTER_FAILED" -> InboxBadge.CHARACTER
         "FRIEND_REQUEST" -> InboxBadge.FRIEND
+        "ROOM_INVITE", "ROOM_COMMENT", "ROOM_DISBANDED" -> InboxBadge.ROOM
         else -> InboxBadge.OTHER
     }
 }
@@ -50,10 +67,23 @@ fun InboxItem.line(): InboxLine = when (this) {
             data["nickname"]?.takeIf { it.isNotBlank() }?.let { "${it}님이 친구 요청을 보냈어요" } ?: "친구 요청이 왔어요",
             "받은 요청에서 수락할 수 있어요",
         )
-        // 방 초대처럼 앞으로 생길 종류. 목록에서 빼지 않아요
+        // 방 알림(rooms.md 3장). 초대 푸시에는 초대한 사람 닉네임이 없어서, 오면 쓰고 없으면 방 이름만 써요
+        "ROOM_INVITE" -> InboxLine(
+            data["nickname"]?.takeIf { it.isNotBlank() }?.let { "${it}님이 \"${roomName()}\" 방에 초대했어요" }
+                ?: "\"${roomName()}\" 방에 초대받았어요",
+            "눌러서 수락하거나 거절해요",
+        )
+        "ROOM_COMMENT" -> InboxLine(
+            data["nickname"]?.takeIf { it.isNotBlank() }?.let { "${it}님이 내 만화에 댓글을 달았어요" } ?: "내 만화에 댓글이 달렸어요",
+            data["roomName"].orEmpty(),
+        )
+        "ROOM_DISBANDED" -> InboxLine("\"${roomName()}\" 방이 해산됐어요", "방의 만화와 대화가 지워졌어요")
+        // 앞으로 생길 종류. 목록에서 빼지 않아요
         else -> InboxLine("새 소식이 있어요", "")
     }
 }
+
+private fun InboxItem.Notification.roomName() = data["roomName"].orEmpty()
 
 /** 오른쪽 시간: "방금" · "n분 전" · "n시간 전" · "어제" · "11/10". [now]는 테스트에서 시각을 고정하려고 받아요 */
 fun inboxTime(iso: String, now: ZonedDateTime = ZonedDateTime.now()): String {

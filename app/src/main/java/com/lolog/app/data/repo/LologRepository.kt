@@ -68,6 +68,11 @@ interface LologRepository {
     suspend fun setProfileCharacterVoice(voice: String?)
     /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
     suspend fun sendFriendRequest(code: String): FriendRequest
+    /**
+     * 같은 방 멤버에게 userId로 요청 보내기(rooms.md "방에서 친구 요청", 초안). 지금 같은 방에 없으면 FRIEND_CODE_NOT_FOUND.
+     * 상대가 이미 나에게 요청했으면 status가 ACCEPTED(바로 친구)
+     */
+    suspend fun requestByUserId(userId: Long): FriendRequest
     /** 최신순 */
     suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest>
     suspend fun acceptFriendRequest(id: Long): Friend
@@ -76,10 +81,16 @@ interface LologRepository {
     /** 최근에 친구가 된 사람이 위 */
     suspend fun friends(): List<Friend>
     suspend fun removeFriend(userId: Long)
-    suspend fun block(userId: Long)
+    /**
+     * 회원이면 누구나 차단할 수 있어요. 친구면 친구 관계도 같이 끊겨요(friends.md 차단).
+     * [hideInRooms]면 같은 방에서 그 사람 글을 "숨긴 글"로 보여요. 이미 차단한 사람이면 hideInRooms는 바뀌지 않아요(바꾸는 건 [setHideInRooms])
+     */
+    suspend fun block(userId: Long, hideInRooms: Boolean = false)
     /** 최신순 */
     suspend fun blocks(): List<BlockedUser>
     suspend fun unblock(userId: Long)
+    /** 차단한 사람의 방 글 숨기기 바꾸기(초안) */
+    suspend fun setHideInRooms(userId: Long, hide: Boolean)
 
     // 화자 그림 (LOLog-docs spec/characters.md)
     /** 기본 화자 24명. 썸네일 주소는 10분마다 바뀌니 캐시는 id 기준으로 해요 */
