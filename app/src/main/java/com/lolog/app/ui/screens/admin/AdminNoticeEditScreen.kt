@@ -240,7 +240,7 @@ fun AdminNoticeEditScreen(original: InboxItem.Notice?, onBack: () -> Unit, onDon
 
 /** 흰 칸: 위에 작은 회색 이름(오른쪽에 글자 수) + 입력. 틀리면 빨간 테두리 */
 @Composable
-private fun FieldBox(label: String, error: Boolean, counter: String? = null, content: @Composable () -> Unit) {
+internal fun FieldBox(label: String, error: Boolean, counter: String? = null, content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(LologShape.md).background(LologColors.Paper)
             .border(1.dp, if (error) LologColors.Rec else LologColors.Line, LologShape.md)
@@ -256,7 +256,7 @@ private fun FieldBox(label: String, error: Boolean, counter: String? = null, con
 }
 
 @Composable
-private fun FieldError(text: String) {
+internal fun FieldError(text: String) {
     Text(text, fontSize = 12.sp, color = LologColors.Rec, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
 }
 
