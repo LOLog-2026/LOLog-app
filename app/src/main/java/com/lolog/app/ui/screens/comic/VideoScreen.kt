@@ -56,8 +56,10 @@ import com.lolog.app.data.model.inProgress
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.GhostButton
+import com.lolog.app.ui.components.IndeterminateBar
 import com.lolog.app.ui.components.ListErrorState
 import com.lolog.app.ui.components.LologDialog
+import com.lolog.app.ui.components.LologNoticeDialog
 import com.lolog.app.ui.components.LologSnackbarHost
 import com.lolog.app.ui.components.LologTopBar
 import com.lolog.app.ui.components.PrimaryButton
@@ -65,6 +67,7 @@ import com.lolog.app.ui.components.TypingDots
 import com.lolog.app.ui.components.errorText
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,7 +80,9 @@ import kotlinx.coroutines.launch
  *  - 완성: 세로 영상(9:16) 재생. 주소는 10분짜리라 재생에 실패하면 한 번 새 주소를 받아 다시 틀어요
  *  - 실패: 안내. 카드에서 다시 만들 수 있어요(실패는 횟수에 안 세요)
  *  - 아래 "쇼츠 지우기"는 만드는 중에도 돼요(지워도 횟수는 돌아오지 않아요)
- *  - 완성이면 "폰에 저장": 동영상(Movies/LOLog)에 mp4로 넣어요. 공유는 저장한 파일로 해요(video.md)
+ *  - 완성이면 "인스타그램 릴스에 공유": mp4를 받아 인스타 공유 화면으로 넘기고 릴스는 사용자가 골라요(#92).
+ *    받는 중에는 창(진행 막대 · [취소]), 인스타가 없으면 창, 못 받으면 띠. 올렸는지는 알 수 없어서 돌아와도 띠는 없어요
+ *  - 완성이면 "폰에 저장": 동영상(Movies/LOLog)에 mp4로 넣어요
  */
 
 class VideoViewModel(private val repo: LologRepository, private val videoId: Long) : ViewModel() {
@@ -175,11 +180,33 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
         scope.launch {
             try {
                 val r = VideoExport.saveToMovies(context, url, "lolog_shorts_$videoId", container.network, vm::freshVideoUrl)
-                vm.toast(VideoExport.message(r))
+                VideoExport.message(r)?.let(vm::toast)
             } finally {
                 saving = false
             }
         }
+    }
+    // 인스타그램에 넘길 영상을 받는 동안의 작업. 있으면 받는 중 창을 띄우고 [취소]로 멈춰요
+    var shareJob by remember { mutableStateOf<Job?>(null) }
+    val sharing = shareJob != null
+    var noInstagram by remember { mutableStateOf(false) }
+    fun share(url: String) {
+        if (saving || sharing) return
+        shareJob = scope.launch {
+            val me = coroutineContext[Job]
+            try {
+                val r = VideoExport.shareToInstagram(context, url, videoId, container.network, vm::freshVideoUrl)
+                if (r == VideoExport.Result.NO_INSTAGRAM) noInstagram = true
+                else VideoExport.message(r, sharing = true)?.let(vm::toast)
+            } finally {
+                // 취소 뒤 바로 다시 누른 새 작업은 지우지 않아요
+                if (shareJob === me) shareJob = null
+            }
+        }
+    }
+    fun cancelShare() {
+        shareJob?.cancel()
+        shareJob = null
     }
 
     LaunchedEffect(Unit) { vm.watch() }
@@ -201,10 +228,17 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     val url = video.videoUrl
+                    // 공유·저장·지우는 중에는 세 버튼 모두 다시 못 눌러요
+                    val idle = !state.busy && !saving && !sharing
                     if (video.status == VideoStatus.DONE && url != null) {
-                        PrimaryButton("폰에 저장", { save(url) }, loading = saving, enabled = !state.busy)
+                        PrimaryButton("인스타그램 릴스에 공유", { share(url) }, enabled = idle)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GhostButton(if (saving) "저장하는 중…" else "폰에 저장", { save(url) }, Modifier.weight(1f), enabled = idle)
+                            GhostButton("쇼츠 지우기", { askDelete = true }, Modifier.weight(1f), enabled = idle)
+                        }
+                    } else {
+                        GhostButton("쇼츠 지우기", { askDelete = true }, enabled = idle)
                     }
-                    GhostButton("쇼츠 지우기", { askDelete = true }, enabled = !state.busy && !saving)
                 }
             }
         },
@@ -228,6 +262,25 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (sharing) {
+        LologNoticeDialog(
+            title = "영상을 준비하고 있어요",
+            body = "쇼츠 파일을 폰에 받는 중이에요. 다 받으면 인스타그램이 열려요.",
+            buttonText = "취소",
+            onButton = ::cancelShare,
+            primary = false,
+        ) { IndeterminateBar(Modifier.padding(top = 4.dp)) }
+    }
+
+    if (noInstagram) {
+        LologNoticeDialog(
+            title = "인스타그램 앱이 없어요",
+            body = "릴스에 공유하려면 인스타그램 앱이 필요해요. 설치한 뒤 다시 눌러 주세요.",
+            buttonText = "확인",
+            onButton = { noInstagram = false },
+        )
     }
 
     if (askDelete) {

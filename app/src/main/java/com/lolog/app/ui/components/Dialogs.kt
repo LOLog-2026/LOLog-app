@@ -48,6 +48,39 @@ fun LologDialog(
     }
 }
 
+/**
+ * 버튼 하나짜리 창. [LologDialog]와 같은 모양이에요(쇼츠 릴스 공유 시안 3·5번).
+ * @param primary true면 코랄 버튼([확인]), false면 흰 바탕 보조 버튼([취소])
+ * @param content 본문 아래에 넣을 것(진행 막대 등)
+ */
+@Composable
+fun LologNoticeDialog(
+    title: String,
+    body: String,
+    buttonText: String,
+    onButton: () -> Unit,
+    primary: Boolean = true,
+    /** 뒤로가기·창 밖 누르기로 닫을 때. 안 주면 [onButton]과 같아요 */
+    onDismissRequest: () -> Unit = onButton,
+    content: (@Composable () -> Unit)? = null,
+) {
+    Dialog(onDismissRequest = onDismissRequest) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(LologColors.Paper, com.lolog.app.ui.theme.LologShape.dialog)
+                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+            Text(body, fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp)
+            content?.invoke()
+            Spacer(Modifier.height(8.dp))
+            if (primary) PrimaryButton(buttonText, onButton) else GhostButton(buttonText, onButton)
+        }
+    }
+}
+
 /** 화면 아래 검은 토스트 (시안 14·19번) */
 @Composable
 fun LologSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier) {
