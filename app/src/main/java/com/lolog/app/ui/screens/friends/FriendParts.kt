@@ -22,6 +22,9 @@ import com.lolog.app.ui.theme.LologColors
  * 시안의 얼굴 그림은 예시예요. 친구의 프로필 캐릭터(character.thumbnailUrl)가 있으면 그 그림, 없으면 기본 사람 아이콘.
  */
 
+/** 내가 차단한 사람에게 친구 요청을 보냈을 때(USER_BLOCKED). 친구 추가와 방 멤버 시트가 같이 써요 */
+internal const val USER_BLOCKED_TEXT = "차단한 사람이에요. 설정의 \"차단한 사람\"에서 풀고 보내 주세요"
+
 /** 친구 동그라미 그림 */
 @Composable
 internal fun FriendAvatar(thumbnailUrl: String?, size: Dp = 44.dp) {

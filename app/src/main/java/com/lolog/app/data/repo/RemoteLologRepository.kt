@@ -83,6 +83,11 @@ class RemoteLologRepository(
     override suspend fun comic(id: Long) = call { api.comic(id).toDetail(id) }
     override suspend fun deleteComic(id: Long) = call { api.deleteComic(id) }
 
+    override suspend fun requestVideo(cardId: Long) = call { api.requestVideo(cardId).toModel() }
+    override suspend fun videos(cursor: String?, size: Int, sort: SortOrder) = call { api.videos(cursor, size, sort.query).toModel() }
+    override suspend fun video(id: Long) = call { api.video(id).toModel() }
+    override suspend fun deleteVideo(id: Long) = call { api.deleteVideo(id) }
+
     override suspend fun profile() = call { api.profile().toModel() }
     override suspend fun updateNickname(nickname: String) = call { api.updateProfile(ProfileUpdateRequest(nickname.trim())).toModel() }
     override suspend fun uploadProfileCharacter(photo: ByteArray) = call {
@@ -90,19 +95,34 @@ class RemoteLologRepository(
         api.uploadProfileCharacter(part).toModel()
     }
     override suspend fun deleteProfileCharacter() = call { api.deleteProfileCharacter() }
+    override suspend fun setProfileCharacterVoice(voice: String?) =
+        call { api.setProfileCharacterVoice(ApiMapper.voiceBody(voice)) }
     override suspend fun sendFriendRequest(code: String) =
-        call { api.sendFriendRequest(FriendRequestCreate(code.trim().uppercase(Locale.ROOT))).toModel() }
+        call { api.sendFriendRequest(FriendRequestCreate(friendCode = code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =
         call { api.friendRequests(direction.query).requests.map { it.toModel() } }
     override suspend fun acceptFriendRequest(id: Long) = call { api.acceptFriendRequest(id).toModel() }
     override suspend fun deleteFriendRequest(id: Long) = call { api.deleteFriendRequest(id) }
     override suspend fun friends() = call { api.friends().friends.map { it.toModel() } }
     override suspend fun removeFriend(userId: Long) = call { api.removeFriend(userId) }
-    override suspend fun block(userId: Long) = call { api.block(BlockCreate(userId)) }
+    override suspend fun requestByUserId(userId: Long) =
+        call { api.sendFriendRequest(FriendRequestCreate(userId = userId)).toModel() }
+    override suspend fun block(userId: Long, hideInRooms: Boolean) = call { api.block(BlockCreate(userId, hideInRooms)) }
+    override suspend fun setHideInRooms(userId: Long, hide: Boolean) = call { api.updateBlock(userId, BlockUpdate(hide)) }
     override suspend fun blocks() = call { api.blocks().blocks.map { it.toModel() } }
     override suspend fun unblock(userId: Long) = call { api.unblock(userId) }
 
     override suspend fun defaultCharacters() = call { api.defaultCharacters().characters.map { it.toModel() } }
+
+    override suspend fun inbox(tab: InboxTab, cursor: String?) = call { api.inbox(tab.query, cursor).toModel() }
+    override suspend fun inboxHasUnread() = call { api.inboxUnread().hasUnread }
+    override suspend fun readInbox(kind: InboxKind, id: Long) = call { api.readInbox(kind.path, id) }
+    override suspend fun readAllInbox() = call { api.readAllInbox() }
+
+    override suspend fun createNotice(title: String, body: String) = call { api.createNotice(NoticeCreateDto(title, body)).toModel() }
+    override suspend fun updateNotice(id: Long, title: String?, body: String?) =
+        call { api.updateNotice(id, NoticeUpdateDto(title, body)).toModel() }
+    override suspend fun deleteNotice(id: Long) = call { api.deleteNotice(id) }
 
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))

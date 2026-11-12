@@ -18,6 +18,7 @@ object ErrorCodes {
     const val TOKEN_EXPIRED = "TOKEN_EXPIRED"           // 401 토큰 만료 (앱은 이때만 갱신)
     const val INVALID_TOKEN = "INVALID_TOKEN"           // 401 토큰이 틀림
     const val UNAUTHORIZED = "UNAUTHORIZED"             // 401 토큰이 없거나 틀림
+    const val ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"   // 403 정지된 계정으로 로그인·소셜 로그인(docs PR #59 admin.md 초안)
     const val CARD_NOT_FOUND = "CARD_NOT_FOUND"
     const val COMIC_NOT_FOUND = "COMIC_NOT_FOUND"
     const val RECORDING_NOT_FOUND = "RECORDING_NOT_FOUND"
@@ -28,6 +29,9 @@ object ErrorCodes {
     const val CARD_LOCKED = "CARD_LOCKED"               // 409 만화 만드는 중 고치기·지우기
     const val COMIC_IN_PROGRESS = "COMIC_IN_PROGRESS"   // 409 만드는 중에 또 요청
     const val COMIC_LIMIT = "COMIC_LIMIT"               // 409 한 카드 3번 (실패는 안 셈)
+    const val VIDEO_IN_PROGRESS = "VIDEO_IN_PROGRESS"   // 409 그 카드로 만드는 중인 쇼츠가 있음(video.md 2장)
+    const val VIDEO_LIMIT = "VIDEO_LIMIT"               // 409 한 카드에 실패가 아닌 쇼츠 2개(지워도 안 돌아옴)
+    const val VIDEO_NOT_FOUND = "VIDEO_NOT_FOUND"       // 404 없는 쇼츠
     const val PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"   // 413 녹음 올리기
     const val INTERNAL_ERROR = "INTERNAL_ERROR"         // 500
     const val INVALID_CODE = "INVALID_CODE"             // 400 가입 인증번호가 틀림
@@ -52,6 +56,12 @@ object ErrorCodes {
     const val SPEAKER_HAS_LINES = "SPEAKER_HAS_LINES"     // 409 대사가 남은 화자를 빼려 함
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
+    const val CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND" // 404 프로필 캐릭터가 없는데 목소리를 고름(docs PR #59 초안)
+    // 알림함 (LOLog-docs PR #59 inbox.md 7장)
+    const val NOTICE_NOT_FOUND = "NOTICE_NOT_FOUND"             // 404 없는 공지사항을 읽음
+    const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
+    // 관리자 (LOLog-docs spec/admin.md 7장)
+    const val FORBIDDEN = "FORBIDDEN" // 403 관리자가 아닌데 관리자 주소를 부름
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -81,8 +91,13 @@ fun isValidPassword(pw: String): Boolean =
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
 
-/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요 */
-data class Account(val email: String, val linkedProviders: Set<SocialProvider>, val hasPassword: Boolean = false)
+/** GET /auth/me. hasPassword가 false면(소셜로만 가입) 설정에 "비밀번호 바꾸기"를 숨겨요. isAdmin이면 설정에 관리자 화면 입구를 보여 줘요 */
+data class Account(
+    val email: String,
+    val linkedProviders: Set<SocialProvider>,
+    val hasPassword: Boolean = false,
+    val isAdmin: Boolean = false,
+)
 
 // ── 녹음 ──────────────────────────────────────────────
 
@@ -134,7 +149,10 @@ fun profileCacheKey(userId: String) = "profile-$userId"
 enum class AgeGroup(val label: String) { CHILD("어린이"), YOUNG("청년"), MIDDLE("중장년") }
 enum class Gender(val label: String) { F("여"), M("남") }
 
-/** GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소 */
+/**
+ * GET /api/characters/defaults 한 항목. thumbnailUrl은 256 그림의 10분 서명 주소.
+ * voiceUrl은 목소리 미리 듣기 파일의 10분 서명 주소. null이면 목소리가 없어 들어 보기 버튼을 안 보여 줘요
+ */
 data class DefaultCharacter(
     val id: String,
     val label: String,
@@ -142,11 +160,44 @@ data class DefaultCharacter(
     val gender: Gender?,
     val glasses: Boolean,
     val thumbnailUrl: String?,
+    val voiceUrl: String? = null,
 )
 
 data class Line(val id: Long, val speaker: String, val text: String)
 
 data class ComicRef(val id: Long, val status: ComicStatus)
+
+// ── 쇼츠(카드 영상, LOLog-docs video.md) ─────────────────
+
+/** 한 카드로 쇼츠는 실패가 아닌 것 2개까지(video.md 2장, FR-EXT-02). 넘으면 409 VIDEO_LIMIT */
+const val VIDEO_LIMIT_PER_CARD = 2
+
+/** QUEUED 대기 → VOICE 콘티·목소리 → DRAWING 그림·합치기 → DONE·FAILED (video.md 1장). 모르는 값은 UNKNOWN */
+enum class VideoStatus { QUEUED, VOICE, DRAWING, DONE, FAILED, UNKNOWN }
+
+val VideoStatus.inProgress: Boolean get() = this == VideoStatus.QUEUED || this == VideoStatus.VOICE || this == VideoStatus.DRAWING
+
+/** 카드 자세히의 videos[] 한 항목 */
+data class VideoRef(val id: Long, val status: VideoStatus)
+
+/**
+ * 쇼츠 하나(GET /api/videos, /api/videos/{id}). videoUrl·thumbnailUrl·durationMs는 DONE일 때만이고 주소는 10분짜리.
+ * cardId는 카드를 지웠으면 null, cardSummary는 요청할 때의 카드 요약(목록 제목)
+ */
+data class VideoSummary(
+    val id: Long,
+    val cardId: Long?,
+    val cardSummary: String,
+    val status: VideoStatus,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationMs: Long? = null,
+    val createdAt: String,
+)
+
+data class VideoPage(val videos: List<VideoSummary>, val nextCursor: String?)
+
+data class VideoAccepted(val videoId: Long, val status: VideoStatus)
 
 data class CardSummary(
     val id: Long,
@@ -203,7 +254,20 @@ data class CardDetail(
     val recordingId: Long? = null,
     /** 카드 구간 음성(순간 다시 듣기) */
     val audio: CardAudio = CardAudio(),
+    /** 이 카드로 만든 쇼츠(최근 것이 앞). 지운 쇼츠는 없어요 */
+    val videos: List<VideoRef> = emptyList(),
 ) {
+    /**
+     * 쇼츠를 더 만들 수 있는 횟수(앱 계산). 서버는 지운 쇼츠도 세지만 앱은 모르니, 넘치면 서버의 409 VIDEO_LIMIT로 알려요
+     */
+    val videoRemaining: Int get() = (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
+
+    /** 그 카드로 만드는 중인 쇼츠가 있음(409 VIDEO_IN_PROGRESS) */
+    val videoInProgress: Boolean get() = videos.any { it.status.inProgress }
+
+    /** 쇼츠가 카드 내용을 쓰는 동안(대기·목소리)은 서버가 카드 고치기·지우기를 막아요(409 CARD_LOCKED, video.md 8장) */
+    val videoLocked: Boolean get() = videos.any { it.status == VideoStatus.QUEUED || it.status == VideoStatus.VOICE }
+
     /** 서버 값이 없으면 실패를 뺀 개수로 앱이 계산 */
     val remaining: Int
         get() = comicRemaining ?: (COMIC_LIMIT_PER_CARD - comics.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0)
@@ -326,8 +390,11 @@ data class Profile(
 
 enum class ProfileCharacterStatus { PROCESSING, READY, FAILED, UNKNOWN }
 
-/** 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만 */
-data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String)
+/**
+ * 내 프로필 캐릭터(ProfileCharacterResponse). thumbnailUrl은 쓸 수 있는 그림이 있을 때만.
+ * voice는 고른 목소리(기본 화자 id). null이면 안 골랐고 쇼츠에서 알아서 골라요
+ */
+data class ProfileCharacter(val status: ProfileCharacterStatus, val thumbnailUrl: String?, val updatedAt: String, val voice: String? = null)
 
 /** 친구 한 명. thumbnailUrl은 친구의 프로필 캐릭터 그림(없으면 기본 사람 아이콘) */
 data class Friend(
@@ -354,13 +421,25 @@ data class FriendRequest(
     val createdAt: String,
 )
 
-/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null */
-data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: String, val blockedAt: String)
+/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null. hideInRooms는 같은 방에서 그 사람 글을 "숨긴 글"로 보일지(초안) */
+data class BlockedUser(
+    val userId: Long,
+    val nickname: String?,
+    val friendCode: String,
+    val blockedAt: String,
+    val hideInRooms: Boolean = false,
+)
 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 
 /** FCM data의 type (api-spec.md 푸시 표) */
-enum class PushType { CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST }
+enum class PushType {
+    CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST,
+    // 친구 방(rooms.md 3장 푸시): 초대받음, 내 만화에 댓글, 방장이 해산
+    ROOM_INVITE, ROOM_COMMENT, ROOM_DISBANDED,
+    // 쇼츠(video.md 2장): 완성·실패
+    VIDEO_DONE, VIDEO_FAILED,
+}
 
 data class PushPayload(
     val type: PushType,
@@ -371,7 +450,12 @@ data class PushPayload(
     val cardIds: List<Long> = emptyList(),
     val comicId: Long? = null,
     val cardId: Long? = null,
-    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장) */
+    /** FRIEND_REQUEST: 받은 친구 요청 ID와 보낸 사람 닉네임(friends.md 3장). ROOM_COMMENT도 단 사람 닉네임을 nickname에 넣어요 */
     val requestId: Long? = null,
+    /** ROOM_INVITE·ROOM_COMMENT: 방 ID. ROOM_INVITE·ROOM_DISBANDED: 방 이름(rooms.md 3장) */
+    val roomId: Long? = null,
+    val roomName: String? = null,
     val nickname: String? = null,
+    /** VIDEO_DONE·VIDEO_FAILED: 쇼츠 ID. 카드 ID는 cardId(카드를 지웠으면 null) */
+    val videoId: Long? = null,
 )

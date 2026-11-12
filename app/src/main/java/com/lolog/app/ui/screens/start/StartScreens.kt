@@ -218,6 +218,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                     when {
                         e === SocialCancelled -> s
                         code == ErrorCodes.ACCOUNT_EXISTS && provider != null -> s.copy(accountExists = provider)
+                        // 정지된 계정은 이메일·구글·네이버 모두 비밀번호 칸 아래에 띄워요(시안 3). 기한·이유는 보여 주지 않아요
+                        code == ErrorCodes.ACCOUNT_SUSPENDED -> s.copy(passwordError = errorText(e))
                         provider != null -> s.copy(snackbar = socialErrorText(e))
                         code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
                         code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")

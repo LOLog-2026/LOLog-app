@@ -3,21 +3,25 @@ package com.lolog.app.data.repo
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Room
 import com.lolog.app.data.model.RoomErrorCodes
+import com.lolog.app.data.model.RoomInvite
 import com.lolog.app.data.model.RoomMessage
+import com.lolog.app.data.model.RoomMessagePage
 import com.lolog.app.data.model.RoomPost
 import com.lolog.app.data.remote.ApiClient
 import com.lolog.app.data.remote.ErrorDto
 import com.lolog.app.data.remote.LologJson
 import com.lolog.app.data.remote.RoomCommentDto
 import com.lolog.app.data.remote.RoomCreateDto
+import com.lolog.app.data.remote.RoomInviteCreateDto
 import com.lolog.app.data.remote.RoomMapper.toModel
 import com.lolog.app.data.remote.RoomPostCreateDto
+import com.lolog.app.data.remote.RoomRenameDto
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import retrofit2.HttpException
 
 /**
- * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51).
+ * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51 · 방장과 초대는 #59 · 방 관리와 나간 멤버는 #60).
  * 서버 주소에는 방 ID가 필요한데 [RoomRepository]의 내리기·좋아요는 만화 ID만 받아서,
  * 받은 만화를 기억해 두고(어느 방인지, 내가 좋아요를 눌렀는지) 그걸로 주소와 PUT·DELETE를 골라요.
  */
@@ -64,10 +68,12 @@ class RemoteRoomRepository(private val network: ApiClient) : RoomRepository {
         return remember(dto.toModel())
     }
 
-    override suspend fun messages(roomId: Long): List<RoomMessage> {
-        val list = call { api.roomMessages(roomId) }.messages
+    override suspend fun messages(roomId: Long): List<RoomMessage> = messagePage(roomId).messages
+
+    override suspend fun messagePage(roomId: Long, cursor: String?): RoomMessagePage {
+        val dto = call { api.roomMessages(roomId, cursor) }
         val byId = posts.values.filter { it.roomId == roomId }.associateBy { it.id }
-        return list.mapNotNull { it.toModel(roomId, byId) }
+        return RoomMessagePage(dto.messages.mapNotNull { it.toModel(roomId, byId) }, dto.nextCursor?.ifBlank { null })
     }
 
     override suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment {
@@ -79,9 +85,36 @@ class RemoteRoomRepository(private val network: ApiClient) : RoomRepository {
             ?: throw LologException(ErrorCodes.NETWORK, "댓글을 보내지 못했어요")
     }
 
-    override suspend fun leaveRoom(roomId: Long) {
-        call { api.leaveRoom(roomId) }
+    override suspend fun rename(roomId: Long, name: String): Room =
+        call { api.renameRoom(roomId, RoomRenameDto(name.trim())) }.toModel()
+
+    override suspend fun disband(roomId: Long) {
+        call { api.disbandRoom(roomId) }
         posts.values.removeIf { it.roomId == roomId }
+    }
+
+    override suspend fun leave(roomId: Long, newOwnerId: Long?) {
+        call { api.leaveRoom(roomId, newOwnerId) }
+        posts.values.removeIf { it.roomId == roomId }
+    }
+
+    override suspend fun kick(roomId: Long, userId: Long) {
+        call { api.kickRoomMember(roomId, userId) }
+    }
+
+    override suspend fun invite(roomId: Long, userIds: List<Long>): List<RoomInvite> =
+        call { api.inviteToRoom(roomId, RoomInviteCreateDto(userIds.distinct())) }.invites.map { it.toModel() }
+
+    override suspend fun cancelInvite(roomId: Long, inviteId: Long) {
+        call { api.cancelRoomInvite(roomId, inviteId) }
+    }
+
+    override suspend fun myInvites(): List<RoomInvite> = call { api.roomInvites() }.invites.map { it.toModel() }
+
+    override suspend fun acceptInvite(inviteId: Long): Room = call { api.acceptRoomInvite(inviteId) }.toModel()
+
+    override suspend fun declineInvite(inviteId: Long) {
+        call { api.declineRoomInvite(inviteId) }
     }
 
     private suspend fun <T> call(block: suspend () -> T): T = try {

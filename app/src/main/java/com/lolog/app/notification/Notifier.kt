@@ -40,6 +40,22 @@ class Notifier(private val context: Context) {
                 NotificationChannels.PUSH, "친구 요청이 왔어요",
                 payload.nickname?.let { "${it}님이 친구 요청을 보냈어요" } ?: "새 친구 요청이 있어요",
             )
+            // 방 푸시(rooms.md 3장). 문구는 알림함 줄(InboxTexts)과 같게 맞춰요. 댓글 내용은 넣지 않아요(FR-NOTI-03)
+            PushType.ROOM_INVITE -> Triple(
+                NotificationChannels.PUSH, "방에 초대받았어요",
+                payload.roomName?.let { "\"$it\" 방에 초대받았어요. 눌러서 수락하거나 거절해요" } ?: "눌러서 수락하거나 거절해요",
+            )
+            PushType.ROOM_COMMENT -> Triple(
+                NotificationChannels.PUSH, "내 만화에 댓글이 달렸어요",
+                payload.nickname?.let { "${it}님이 내 만화에 댓글을 달았어요" } ?: "방에서 확인해 보세요",
+            )
+            // 쇼츠(video.md 2장). 문구에 대사를 넣지 않아요(FR-NOTI-03)
+            PushType.VIDEO_DONE -> Triple(NotificationChannels.PUSH, "쇼츠가 완성됐어요 🎬", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
+            PushType.VIDEO_FAILED -> Triple(NotificationChannels.PUSH, "쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요.")
+            PushType.ROOM_DISBANDED -> Triple(
+                NotificationChannels.PUSH, payload.roomName?.let { "\"$it\" 방이 해산됐어요" } ?: "방이 해산됐어요",
+                "방의 만화와 대화가 지워졌어요",
+            )
         }
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -68,6 +84,9 @@ class Notifier(private val context: Context) {
         private const val EXTRA_COUNT = "push_count"
         private const val EXTRA_REQUEST = "push_request"
         private const val EXTRA_NICKNAME = "push_nickname"
+        private const val EXTRA_ROOM = "push_room"
+        private const val EXTRA_ROOM_NAME = "push_room_name"
+        private const val EXTRA_VIDEO = "push_video"
 
         fun Intent.putPayload(p: PushPayload) {
             putExtra(EXTRA_TYPE, p.type.name)
@@ -78,11 +97,14 @@ class Notifier(private val context: Context) {
             p.cardId?.let { putExtra(EXTRA_CARD, it) }
             p.requestId?.let { putExtra(EXTRA_REQUEST, it) }
             p.nickname?.let { putExtra(EXTRA_NICKNAME, it) }
+            p.roomId?.let { putExtra(EXTRA_ROOM, it) }
+            p.roomName?.let { putExtra(EXTRA_ROOM_NAME, it) }
+            p.videoId?.let { putExtra(EXTRA_VIDEO, it) }
         }
 
         /**
          * FCM data(문자열 맵) → PushPayload. 키는 명세(api-dto 3장): type, recordingId, cardCount, comicId, cardId,
-         * FRIEND_REQUEST는 requestId, nickname.
+         * FRIEND_REQUEST는 requestId, nickname. 방 푸시는 roomId, roomName, nickname(rooms.md 3장).
          * 카드를 지웠으면 cardId가 빈 문자열이라 null이 돼요. 모르는 type이면 null.
          */
         fun payloadOf(data: Map<String, String>): PushPayload? {
@@ -98,6 +120,9 @@ class Notifier(private val context: Context) {
                 cardId = data["cardId"]?.toLongOrNull(),
                 requestId = data["requestId"]?.toLongOrNull(),
                 nickname = data["nickname"]?.ifBlank { null },
+                roomId = data["roomId"]?.toLongOrNull(),
+                roomName = data["roomName"]?.ifBlank { null },
+                videoId = data["videoId"]?.toLongOrNull(),
             )
         }
 
@@ -120,6 +145,9 @@ class Notifier(private val context: Context) {
                 cardId = long(EXTRA_CARD, "cardId"),
                 requestId = long(EXTRA_REQUEST, "requestId"),
                 nickname = (getStringExtra(EXTRA_NICKNAME) ?: getStringExtra("nickname"))?.ifBlank { null },
+                roomId = long(EXTRA_ROOM, "roomId"),
+                roomName = (getStringExtra(EXTRA_ROOM_NAME) ?: getStringExtra("roomName"))?.ifBlank { null },
+                videoId = long(EXTRA_VIDEO, "videoId"),
             )
         }
     }

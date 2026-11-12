@@ -59,9 +59,15 @@ data class TokenDto(
  * MeResponse. linkedProviders는 대문자 GOOGLE·NAVER.
  * hasPassword는 LOLog-docs #45 댓글에서 새로 생긴 필드예요. 서버가 아직 안 보내면 false라서
  * 설정의 "비밀번호 바꾸기" 줄이 숨어요(일부러 이렇게 둬요)
+ * role은 "USER" 또는 "ADMIN"(docs PR #59 admin.md "1. 관리자 구분" 초안). 서버가 아직 안 보내면 USER로 봐요
  */
 @Serializable
-data class MeDto(val email: String = "", val linkedProviders: List<String> = emptyList(), val hasPassword: Boolean = false)
+data class MeDto(
+    val email: String = "",
+    val linkedProviders: List<String> = emptyList(),
+    val hasPassword: Boolean = false,
+    val role: String = "USER",
+)
 
 /** PasswordResetCodeRequest. 응답은 늘 204(본문 없음) */
 @Serializable
@@ -174,6 +180,7 @@ data class CardDetailDto(
     val createdAt: String = "",
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
     val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
+    val videos: List<VideoRefDto> = emptyList(), // 이 카드로 만든 쇼츠(video.md 2장), 최근 것이 앞
 )
 
 /** CardAudio — CardDetail.audio. url·durationMs는 READY일 때만 와요 */
@@ -189,7 +196,10 @@ data class CardAudioDto(
 
 // ── 기본 화자 (LOLog-docs spec/characters.md 4장) ──
 
-/** DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소 */
+/**
+ * DefaultCharacterItem. ageGroup CHILD·YOUNG·MIDDLE, gender F·M. thumbnailUrl은 10분 서명 주소.
+ * voiceUrl은 목소리 파일(인사 한 문장 wav)의 10분 서명 주소. 목소리가 없으면 null (FR-CHAR-03, docs PR #59)
+ */
 @Serializable
 data class DefaultCharacterItem(
     val id: String,
@@ -198,6 +208,7 @@ data class DefaultCharacterItem(
     val gender: String? = null,
     val glasses: Boolean = false,
     val thumbnailUrl: String? = null,
+    val voiceUrl: String? = null,
 )
 
 /** GET /api/characters/defaults */
@@ -228,6 +239,32 @@ data class ComicDto(
 @Serializable
 data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor: String? = null)
 
+// ── 쇼츠 (LOLog-docs spec/video.md 2장, 서버 lolog-api #68) ──
+
+/** 202 POST /api/cards/{id}/videos */
+@Serializable
+data class VideoAcceptedDto(val videoId: Long, val status: String? = null)
+
+/** VideoResponse. videoUrl·thumbnailUrl·durationMs는 DONE일 때만, cardId는 카드를 지웠으면 null */
+@Serializable
+data class VideoDto(
+    val id: Long,
+    val cardId: Long? = null,
+    val cardSummary: String? = null,
+    val status: String? = null,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationMs: Long? = null,
+    val createdAt: String = "",
+)
+
+@Serializable
+data class VideoPageDto(val videos: List<VideoDto> = emptyList(), val nextCursor: String? = null)
+
+/** CardDetail.videos[] */
+@Serializable
+data class VideoRefDto(val id: Long, val status: String? = null)
+
 // ── 친구·프로필 (LOLog-docs spec/friends.md 2장) ──
 
 /** ProfileResponse — GET·PATCH /api/me/profile. character는 내 프로필 캐릭터(만든 적이 없으면 null) */
@@ -239,17 +276,26 @@ data class ProfileResponse(
     val character: ProfileCharacterDto? = null,
 )
 
-/** ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소) */
+/**
+ * ProfileCharacterResponse. status PROCESSING·READY·FAILED. thumbnailUrl은 쓸 수 있는 그림이 있을 때만(10분 서명 주소).
+ * voice는 고른 목소리(기본 화자 id). 안 골랐으면 null (FR-CHAR-04, docs PR #59)
+ */
 @Serializable
-data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "")
+data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "", val voice: String? = null)
+
+// PATCH /api/me/profile/character/voice 본문 { "voice": "young-f-02" | null }은 null을 꼭 보내야 해서
+// DTO 대신 ApiMapper.voiceBody()가 JsonObject로 직접 만들어요.
 
 /** ProfileUpdateRequest — PATCH /api/me/profile. 1~10자(앞뒤 공백 뺀 길이) */
 @Serializable
 data class ProfileUpdateRequest(val nickname: String)
 
-/** FriendRequestCreate — POST /api/friend-requests */
+/**
+ * FriendRequestCreate — POST /api/friend-requests. 친구 코드나 같은 방 멤버의 userId(초안) 중 하나만 보내요.
+ * null인 값은 빼고 보내요(LologJson explicitNulls = false)
+ */
 @Serializable
-data class FriendRequestCreate(val friendCode: String)
+data class FriendRequestCreate(val friendCode: String? = null, val userId: Long? = null)
 
 /** 요청의 상대 */
 @Serializable
@@ -286,13 +332,23 @@ data class FriendItem(
 @Serializable
 data class FriendListResponse(val friends: List<FriendItem> = emptyList())
 
-/** POST /api/blocks 본문 { userId } */
+/** POST /api/blocks 본문 { userId, hideInRooms }. hideInRooms는 초안이라 서버가 모르면 무시돼요 */
 @Serializable
-data class BlockCreate(val userId: Long)
+data class BlockCreate(val userId: Long, val hideInRooms: Boolean = false)
 
-/** BlockItem. nickname은 null 가능 */
+/** PATCH /api/blocks/{userId} 본문 { hideInRooms }(초안) */
 @Serializable
-data class BlockItem(val userId: Long, val nickname: String? = null, val friendCode: String = "", val blockedAt: String = "")
+data class BlockUpdate(val hideInRooms: Boolean)
+
+/** BlockItem. nickname은 null 가능, hideInRooms는 초안이라 없으면 false */
+@Serializable
+data class BlockItem(
+    val userId: Long,
+    val nickname: String? = null,
+    val friendCode: String = "",
+    val blockedAt: String = "",
+    val hideInRooms: Boolean = false,
+)
 
 @Serializable
 data class BlockListResponse(val blocks: List<BlockItem> = emptyList())
@@ -302,3 +358,51 @@ data class BlockListResponse(val blocks: List<BlockItem> = emptyList())
 /** FcmTokenRequest — PUT·DELETE /api/devices/fcm-token */
 @Serializable
 data class FcmTokenDto(val token: String)
+
+// ── 알림함 (LOLog-docs PR #59 spec/inbox.md 5장) ──
+
+/** GET /api/inbox. nextCursor는 서버가 정한 문자열(뜻을 해석하지 않아요) */
+@Serializable
+data class InboxPageDto(val items: List<InboxItemDto> = emptyList(), val nextCursor: String? = null)
+
+/** InboxItem. kind가 NOTICE면 notice, NOTIFICATION이면 notification이 차 있고 다른 쪽은 null */
+@Serializable
+data class InboxItemDto(
+    val kind: String,
+    val id: Long,
+    val createdAt: String,
+    val read: Boolean = false,
+    val notice: InboxNoticeDto? = null,
+    val notification: InboxNotificationDto? = null,
+)
+
+@Serializable
+data class InboxNoticeDto(val title: String = "", val body: String = "")
+
+/** data는 푸시에 넣은 값 그대로(서버가 type은 빼고 보내요). 값은 모두 문자열 */
+@Serializable
+data class InboxNotificationDto(val type: String, val data: Map<String, String> = emptyMap())
+
+/** GET /api/inbox/unread */
+@Serializable
+data class InboxUnreadDto(val hasUnread: Boolean = false)
+
+// ── 관리자 공지 (LOLog-docs spec/admin.md 7장) ──
+
+/** POST /api/admin/notices */
+@Serializable
+data class NoticeCreateDto(val title: String, val body: String)
+
+/** PATCH /api/admin/notices/{id}. 바꾼 것만 채워요. null 필드는 보내지 않아요(LologJson explicitNulls = false) */
+@Serializable
+data class NoticeUpdateDto(val title: String? = null, val body: String? = null)
+
+/** Notice. 쓰기·고치기의 응답 */
+@Serializable
+data class NoticeDto(
+    val id: Long,
+    val title: String = "",
+    val body: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)

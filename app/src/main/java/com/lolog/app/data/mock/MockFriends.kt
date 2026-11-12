@@ -16,6 +16,8 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     private val received = mutableListOf<FriendRequest>()   // 최신순
     private val sent = mutableListOf<FriendRequest>()       // 최신순
     private val blocked = mutableListOf<BlockedUser>()      // 최신순
+    /** 친구를 끊은 사람(닉네임, 친구 코드). 끊은 뒤에 차단할 때 찾아요 */
+    private val exFriends = mutableMapOf<Long, Pair<String, String>>()
     /** 코드 넣기 시각(ms). 1분에 10번까지 */
     private val attempts = ArrayDeque<Long>()
     private var nextId = 500L
@@ -33,9 +35,12 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
         received += listOf(
             FriendRequest(201, FriendRequestDirection.RECEIVED, FriendUser(21, "민수", "T8GX5JRW"), FriendRequestStatus.PENDING, now.minusMinutes(3).toString()),
             FriendRequest(202, FriendRequestDirection.RECEIVED, FriendUser(22, "하은", "Z9CX4WVB"), FriendRequestStatus.PENDING, now.minusHours(5).toString()),
+            // 같은 방(과팀플 4인방) 멤버 민지님이 보낸 요청. 방 멤버 시트에서 "수락"으로 보여요
+            FriendRequest(204, FriendRequestDirection.RECEIVED, FriendUser(52, "민지", "P6WQ3LMA"), FriendRequestStatus.PENDING, now.minusDays(1).toString()),
         )
         sent += FriendRequest(203, FriendRequestDirection.SENT, FriendUser(23, "지아", "M4TR8KXH"), FriendRequestStatus.PENDING, now.minusDays(2).toString())
-        blocked += BlockedUser(31, "태오", BLOCKED_CODE, "2026-11-09T15:00:00+09:00")
+        // 태오님은 같은 방(고등학교 동창)에 있고, 방에서 글을 숨겨요
+        blocked += BlockedUser(31, "태오", BLOCKED_CODE, "2026-11-09T15:00:00+09:00", hideInRooms = true)
     }
 
     private fun now() = OffsetDateTime.now().toString()
@@ -60,7 +65,7 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
         uploads.removeAll { t - it >= DAY_MS } // 목업은 자정 대신 24시간으로 세요
         if (uploads.size >= CHARACTER_DAILY_LIMIT) fail(ErrorCodes.CHARACTER_LIMIT, "오늘은 캐릭터를 더 만들 수 없어요")
         uploads += t
-        return ProfileCharacter(ProfileCharacterStatus.PROCESSING, character?.thumbnailUrl, now()).also { character = it }
+        return ProfileCharacter(ProfileCharacterStatus.PROCESSING, character?.thumbnailUrl, now(), voice = character?.voice).also { character = it }
     }
 
     /** 워커가 그림을 보냄(목업은 몇 초 뒤). failed면 FAILED로 두고 이번 것은 세지 않아요. 만드는 중이 아니었으면 false */
@@ -71,12 +76,25 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
             uploads.removeLastOrNull()
             c.copy(status = ProfileCharacterStatus.FAILED, updatedAt = now())
         } else {
-            ProfileCharacter(ProfileCharacterStatus.READY, thumbnailUrl, now())
+            // 다시 만들어도 고른 목소리는 그대로예요
+            ProfileCharacter(ProfileCharacterStatus.READY, thumbnailUrl, now(), voice = c.voice)
         }
         return true
     }
 
     fun deleteCharacter() { character = null }
+
+    /**
+     * 목소리 고르기(FR-CHAR-04, 초안). voice null = 안 고름.
+     * 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND, 없거나 목소리가 없는 기본 화자 id면 400 UNKNOWN_CHARACTER
+     */
+    fun setVoice(voice: String?) {
+        val c = character ?: fail(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
+        if (voice != null && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
+            fail(ErrorCodes.UNKNOWN_CHARACTER, "없는 목소리예요")
+        }
+        character = c.copy(voice = voice)
+    }
 
     fun updateNickname(raw: String): Profile {
         val n = raw.trim()
@@ -120,6 +138,42 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
         return req
     }
 
+    /**
+     * 같은 방 멤버에게 userId로 요청 보내기(초안). [roomNickname]은 지금 같은 방에 있는 사람의 닉네임이고, 없으면(방에 없으면)
+     * 친구 코드를 모를 때와 같은 FRIEND_CODE_NOT_FOUND예요. 상대가 이미 나에게 요청했으면 바로 친구(ACCEPTED)
+     */
+    fun sendTo(userId: Long, roomNickname: String?): FriendRequest {
+        if (nickname == null) fail(ErrorCodes.PROFILE_REQUIRED, "닉네임을 먼저 정해 주세요")
+        if (userId == MY_USER_ID) fail(ErrorCodes.CANNOT_FRIEND_SELF, "나에게는 보낼 수 없어요")
+        if (roomNickname == null) fail(ErrorCodes.FRIEND_CODE_NOT_FOUND, "지금 같은 방에 없는 사람이에요")
+        if (blocked.any { it.userId == userId }) fail(ErrorCodes.USER_BLOCKED, "차단한 사람이에요")
+        if (friendList.any { it.userId == userId }) fail(ErrorCodes.ALREADY_FRIENDS, "이미 친구예요")
+        if (sent.any { it.user.userId == userId }) fail(ErrorCodes.FRIEND_REQUEST_EXISTS, "이미 요청을 보냈어요")
+        if (friendList.size >= FriendRules.FRIEND_MAX) fail(ErrorCodes.FRIEND_LIMIT, "친구는 100명까지예요")
+        received.firstOrNull { it.user.userId == userId }?.let { r ->
+            received.remove(r)
+            friendList.add(0, Friend(r.user.userId, r.user.nickname, r.user.friendCode, now()))
+            return r.copy(direction = FriendRequestDirection.SENT, status = FriendRequestStatus.ACCEPTED)
+        }
+        // 방 멤버의 친구 코드는 목업에서 지어 줘요
+        val req = FriendRequest(nextId++, FriendRequestDirection.SENT, FriendUser(userId, roomNickname, "R%07d".format(userId)), FriendRequestStatus.PENDING, now())
+        sent.add(0, req)
+        return req
+    }
+
+    /** 방 멤버 시트의 friendState(FRIEND·REQUESTED·RECEIVED·NONE·BLOCKED·ME) */
+    fun friendState(userId: Long): String = when {
+        userId == MY_USER_ID -> "ME"
+        blocked.any { it.userId == userId } -> "BLOCKED"
+        friendList.any { it.userId == userId } -> "FRIEND"
+        sent.any { it.user.userId == userId } -> "REQUESTED"
+        received.any { it.user.userId == userId } -> "RECEIVED"
+        else -> "NONE"
+    }
+
+    /** 방에서 글을 숨기는 차단한 사람 */
+    fun hiddenInRooms(): Set<Long> = blocked.filter { it.hideInRooms }.map { it.userId }.toSet()
+
     fun requests(direction: FriendRequestDirection): List<FriendRequest> =
         (if (direction == FriendRequestDirection.RECEIVED) received else sent).toList()
 
@@ -141,22 +195,35 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
 
     fun friends(): List<Friend> = friendList.toList()
 
-    fun removeFriend(userId: Long) { friendList.removeAll { it.userId == userId } }
+    fun removeFriend(userId: Long) {
+        friendList.firstOrNull { it.userId == userId }?.let { exFriends[userId] = it.nickname to it.friendCode }
+        friendList.removeAll { it.userId == userId }
+    }
 
-    /** 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로 */
-    fun block(userId: Long) {
+    /**
+     * 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로(친구도 바로 차단돼요, friends.md 차단).
+     * 친구, 요청이 오간 사람, 끊은 친구, 같은 방 멤버([roomNickname])를 차단할 수 있어요. hideInRooms는 방에서 그 사람 글을 숨길지.
+     * 이미 차단한 사람이면 그대로 두고 hideInRooms도 바꾸지 않아요(friends.md 4장)
+     */
+    fun block(userId: Long, hideInRooms: Boolean = false, roomNickname: String? = null) {
         if (userId == MY_USER_ID) fail(ErrorCodes.CANNOT_FRIEND_SELF, "나는 차단할 수 없어요")
+        if (blocked.any { it.userId == userId }) return
         val who = friendList.firstOrNull { it.userId == userId }?.let { it.nickname to it.friendCode }
             ?: (received + sent).firstOrNull { it.user.userId == userId }?.let { it.user.nickname to it.user.friendCode }
-        if (who == null) {
-            if (blocked.any { it.userId == userId }) return
-            fail(ErrorCodes.USER_NOT_FOUND, "차단할 사람을 찾지 못했어요")
-        }
+            ?: exFriends[userId]
+            ?: roomNickname?.let { it to "R%07d".format(userId) }
+        if (who == null) fail(ErrorCodes.USER_NOT_FOUND, "차단할 사람을 찾지 못했어요")
         friendList.removeAll { it.userId == userId }
         received.removeAll { it.user.userId == userId }
         sent.removeAll { it.user.userId == userId }
-        blocked.removeAll { it.userId == userId }
-        blocked.add(0, BlockedUser(userId, who.first, who.second, now()))
+        blocked.add(0, BlockedUser(userId, who.first, who.second, now(), hideInRooms))
+    }
+
+    /** 방에서 그 사람 글 숨기기 바꾸기(초안). 차단한 사람이 아니면 USER_NOT_FOUND(목업) */
+    fun setHideInRooms(userId: Long, hide: Boolean) {
+        val i = blocked.indexOfFirst { it.userId == userId }
+        if (i < 0) fail(ErrorCodes.USER_NOT_FOUND, "차단한 사람이 아니에요")
+        blocked[i] = blocked[i].copy(hideInRooms = hide)
     }
 
     fun blocks(): List<BlockedUser> = blocked.toList()

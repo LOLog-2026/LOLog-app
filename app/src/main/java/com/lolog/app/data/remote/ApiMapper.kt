@@ -79,7 +79,8 @@ object ApiMapper {
 
     // ── 인증 ──
 
-    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet(), hasPassword)
+    /** role이 "ADMIN"일 때만 관리자로 봐요. 안 오거나 모르는 값이면 일반 회원 */
+    fun MeDto.toModel() = Account(email, linkedProviders.mapNotNull(::provider).toSet(), hasPassword, isAdmin = role == "ADMIN")
     fun providers(raw: List<String>) = raw.mapNotNull(::provider).toSet()
 
     // ── 녹음 ──
@@ -126,6 +127,7 @@ object ApiMapper {
         createdAt = createdAt, recordedAt = recordedAt, comicRemaining = comicRemaining,
         recordingId = recordingId,
         audio = audio.toModel(),
+        videos = videos.map { VideoRef(it.id, videoStatus(it.status)) },
     )
 
     /**
@@ -180,6 +182,15 @@ object ApiMapper {
 
     fun ComicAcceptedDto.toModel() = ComicAccepted(comicId, comicStatus(status))
 
+    /** 모르는 상태는 UNKNOWN(만드는 중도, 끝난 것도 아님) */
+    fun videoStatus(raw: String?) = runCatching { VideoStatus.valueOf(raw!!.trim().uppercase()) }.getOrDefault(VideoStatus.UNKNOWN)
+    fun VideoAcceptedDto.toModel() = VideoAccepted(videoId, videoStatus(status))
+    fun VideoDto.toModel() = VideoSummary(
+        id = id, cardId = cardId, cardSummary = cardSummary.orEmpty(), status = videoStatus(status),
+        videoUrl = videoUrl?.ifBlank { null }, thumbnailUrl = thumbnailUrl?.ifBlank { null }, durationMs = durationMs, createdAt = createdAt,
+    )
+    fun VideoPageDto.toModel() = VideoPage(videos.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
+
     /** cardId가 null이면 카드가 지워진 만화예요 */
     fun ComicDto.toSummary() = ComicSummary(
         id, cardId ?: 0L, comicStatus(status), imageUrl, createdAt.orEmpty(), cardSummary,
@@ -201,11 +212,18 @@ object ApiMapper {
         userId = userId?.toString(),
     )
 
-    fun ProfileCharacterDto.toModel() = ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt)
+    /** PATCH /api/me/profile/character/voice 본문. 안 고르면 "voice": null 을 꼭 넣어요(Json 설정이 null을 빼 버려요) */
+    fun voiceBody(voice: String?): JsonObject = buildJsonObject {
+        val v = voice?.trim()?.ifBlank { null }
+        if (v == null) put("voice", JsonNull) else put("voice", v)
+    }
+
+    fun ProfileCharacterDto.toModel() =
+        ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt, voice?.ifBlank { null })
 
     fun DefaultCharacterItem.toModel() = DefaultCharacter(
         id = id, label = label, ageGroup = ageGroup(ageGroup), gender = gender(gender),
-        glasses = glasses, thumbnailUrl = thumbnailUrl?.ifBlank { null },
+        glasses = glasses, thumbnailUrl = thumbnailUrl?.ifBlank { null }, voiceUrl = voiceUrl?.ifBlank { null },
     )
 
     // DTO와 앱 모델 이름이 같아서(FriendUser) 앱 모델은 전체 이름으로 써요
@@ -218,5 +236,23 @@ object ApiMapper {
 
     fun FriendItem.toModel() = Friend(userId, nickname, friendCode, friendsSince, character?.thumbnailUrl?.ifBlank { null })
 
-    fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt)
+    fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt, hideInRooms)
+
+    // ── 알림함 ──
+
+    /** 모르는 kind는 빼요(앞으로 생길 알림 type은 kind가 NOTIFICATION이라 그대로 남아요) */
+    fun InboxPageDto.toModel() = InboxPage(items.mapNotNull { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
+
+    fun InboxItemDto.toModel(): InboxItem? = when (kind.uppercase()) {
+        "NOTICE" -> InboxItem.Notice(id, notice?.title.orEmpty(), notice?.body.orEmpty(), createdAt, read)
+        "NOTIFICATION" -> notification?.let {
+            // 서버는 data에서 type을 빼고 보내요. Notifier.payloadOf가 읽을 수 있게 다시 넣어요
+            InboxItem.Notification(id, it.type, it.data + ("type" to it.type), createdAt, read)
+        }
+        else -> null
+    }
+
+    // ── 관리자 공지 ──
+
+    fun NoticeDto.toModel() = AdminNotice(id, title, body, createdAt, updatedAt)
 }

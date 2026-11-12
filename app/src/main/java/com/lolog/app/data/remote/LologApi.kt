@@ -64,6 +64,13 @@ interface MainApi {
 
     /** 요청 본문 없음 */
     @POST("api/cards/{id}/comics") suspend fun requestComic(@Path("id") cardId: Long): ComicAcceptedDto
+
+    // 쇼츠 (LOLog-docs spec/video.md 2장). 409 VIDEO_IN_PROGRESS·VIDEO_LIMIT, 없으면 404 VIDEO_NOT_FOUND
+    @POST("api/cards/{id}/videos") suspend fun requestVideo(@Path("id") cardId: Long): VideoAcceptedDto
+    @GET("api/videos")
+    suspend fun videos(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): VideoPageDto
+    @GET("api/videos/{id}") suspend fun video(@Path("id") id: Long): VideoDto
+    @DELETE("api/videos/{id}") suspend fun deleteVideo(@Path("id") id: Long)
     @GET("api/comics")
     suspend fun comics(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): ComicPageDto
     @GET("api/comics/{id}") suspend fun comic(@Path("id") id: Long): ComicDto
@@ -78,6 +85,8 @@ interface MainApi {
     suspend fun uploadProfileCharacter(@Part photo: MultipartBody.Part): ProfileCharacterDto
     /** 204. 없어도 204 */
     @DELETE("api/me/profile/character") suspend fun deleteProfileCharacter()
+    /** 프로필 캐릭터 목소리 고르기(characters.md FR-CHAR-04, 초안). 본문은 ApiMapper.voiceBody(). 204 */
+    @PATCH("api/me/profile/character/voice") suspend fun setProfileCharacterVoice(@Body body: JsonObject)
     /** 201. 상대가 이미 나에게 요청했으면 바로 친구가 되고 status가 ACCEPTED */
     @POST("api/friend-requests") suspend fun sendFriendRequest(@Body body: FriendRequestCreate): FriendRequestResponse
     /** direction: received·sent (필수) */
@@ -90,6 +99,8 @@ interface MainApi {
     @DELETE("api/friends/{userId}") suspend fun removeFriend(@Path("userId") userId: Long)
     /** 204 */
     @POST("api/blocks") suspend fun block(@Body body: BlockCreate)
+    // 방에서 그 사람 글 숨기기 바꾸기(friends.md 2장, 초안 · 서버 lolog-api #61)
+    @PATCH("api/blocks/{userId}") suspend fun updateBlock(@Path("userId") userId: Long, @Body body: BlockUpdate)
     @GET("api/blocks") suspend fun blocks(): BlockListResponse
     /** 204. 차단한 적 없어도 204 */
     @DELETE("api/blocks/{userId}") suspend fun unblock(@Path("userId") userId: Long)
@@ -101,14 +112,44 @@ interface MainApi {
     @GET("api/rooms") suspend fun rooms(): RoomListDto
     @POST("api/rooms") suspend fun createRoom(@Body body: RoomCreateDto): RoomItemDto
     @GET("api/rooms/{id}") suspend fun room(@Path("id") id: Long): RoomItemDto
-    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long)
+    // 방장이 다른 멤버가 있는데 newOwnerId 없이 나가면 409 NEW_OWNER_REQUIRED(초안). null이면 쿼리를 빼요
+    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long, @Query("newOwnerId") newOwnerId: Long?)
+    // 방 관리(rooms.md "방장과 초대", 초안 · 서버 lolog-api #60). 방장만(403 ROOM_OWNER_ONLY)
+    @PATCH("api/rooms/{id}") suspend fun renameRoom(@Path("id") id: Long, @Body body: RoomRenameDto): RoomItemDto
+    @DELETE("api/rooms/{id}") suspend fun disbandRoom(@Path("id") id: Long)
+    @DELETE("api/rooms/{id}/members/{userId}") suspend fun kickRoomMember(@Path("id") id: Long, @Path("userId") userId: Long)
     @GET("api/rooms/{id}/posts") suspend fun roomPosts(@Path("id") id: Long): RoomPostListDto
     @POST("api/rooms/{id}/posts") suspend fun postToRoom(@Path("id") id: Long, @Body body: RoomPostCreateDto): RoomPostDto
     @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
     @PUT("api/rooms/{id}/posts/{postId}/like") suspend fun likeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
     @DELETE("api/rooms/{id}/posts/{postId}/like") suspend fun unlikeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long): RoomPostDto
-    @GET("api/rooms/{id}/messages") suspend fun roomMessages(@Path("id") id: Long): RoomMessageListDto
+    /** cursor가 null이면 최근 줄부터. 응답의 nextCursor로 그 앞 줄을 받아요(rooms.md 2장) */
+    @GET("api/rooms/{id}/messages")
+    suspend fun roomMessages(@Path("id") id: Long, @Query("cursor") cursor: String? = null): RoomMessageListDto
     @POST("api/rooms/{id}/messages") suspend fun commentInRoom(@Path("id") id: Long, @Body body: RoomCommentDto): RoomMessageDto
+    // 방장과 초대(rooms.md "방장과 초대", 초안). 초대·취소는 방장만(403 ROOM_OWNER_ONLY)
+    @POST("api/rooms/{id}/invites") suspend fun inviteToRoom(@Path("id") id: Long, @Body body: RoomInviteCreateDto): RoomInviteListDto
+    @DELETE("api/rooms/{id}/invites/{inviteId}") suspend fun cancelRoomInvite(@Path("id") id: Long, @Path("inviteId") inviteId: Long)
+    @GET("api/room-invites") suspend fun roomInvites(): RoomInviteListDto
+    @POST("api/room-invites/{inviteId}/accept") suspend fun acceptRoomInvite(@Path("inviteId") inviteId: Long): RoomItemDto
+    @DELETE("api/room-invites/{inviteId}") suspend fun declineRoomInvite(@Path("inviteId") inviteId: Long)
+
+    // 알림함 (LOLog-docs PR #59 spec/inbox.md 5장). 최근 것이 위, 한 번에 20개
+    /** tab: ALL·NOTICE·NOTIFICATION. cursor는 받은 nextCursor 그대로 */
+    @GET("api/inbox") suspend fun inbox(@Query("tab") tab: String, @Query("cursor") cursor: String?): InboxPageDto
+    @GET("api/inbox/unread") suspend fun inboxUnread(): InboxUnreadDto
+    /** 204. kind는 notice·notification. 없으면 404 NOTICE_NOT_FOUND·NOTIFICATION_NOT_FOUND */
+    @POST("api/inbox/{kind}/{id}/read") suspend fun readInbox(@Path("kind") kind: String, @Path("id") id: Long)
+    /** 204. 지금까지 온 것을 모두 읽음 */
+    @POST("api/inbox/read") suspend fun readAllInbox()
+
+    // 관리자 공지 (LOLog-docs spec/admin.md 7장). 관리자가 아니면 403 FORBIDDEN, 없는 공지는 404 NOTICE_NOT_FOUND
+    /** 201 Notice */
+    @POST("api/admin/notices") suspend fun createNotice(@Body body: NoticeCreateDto): NoticeDto
+    /** 바꾼 것만 보내요. 200 Notice */
+    @PATCH("api/admin/notices/{id}") suspend fun updateNotice(@Path("id") id: Long, @Body body: NoticeUpdateDto): NoticeDto
+    /** 204 */
+    @DELETE("api/admin/notices/{id}") suspend fun deleteNotice(@Path("id") id: Long)
 
     @PUT("api/devices/fcm-token") suspend fun putFcmToken(@Body body: FcmTokenDto)
     @HTTP(method = "DELETE", path = "api/devices/fcm-token", hasBody = true)

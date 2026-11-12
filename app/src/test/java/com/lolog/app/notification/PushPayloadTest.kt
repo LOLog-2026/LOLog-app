@@ -34,6 +34,22 @@ class PushPayloadTest {
     }
 
     @Test
+    fun 방_푸시는_방_ID와_이름과_닉네임을_읽는다() {
+        val invite = payloadOf(mapOf("type" to "ROOM_INVITE", "inviteId" to "3", "roomId" to "7", "roomName" to "과팀플"))!!
+        assertEquals(PushType.ROOM_INVITE, invite.type)
+        assertEquals(7L, invite.roomId)
+        assertEquals("과팀플", invite.roomName)
+        val comment = payloadOf(mapOf("type" to "ROOM_COMMENT", "roomId" to "7", "postId" to "9", "nickname" to "서연"))!!
+        assertEquals(PushType.ROOM_COMMENT, comment.type)
+        assertEquals(7L, comment.roomId)
+        assertEquals("서연", comment.nickname)
+        val disbanded = payloadOf(mapOf("type" to "ROOM_DISBANDED", "roomName" to "과팀플"))!!
+        assertEquals(PushType.ROOM_DISBANDED, disbanded.type)
+        assertNull(disbanded.roomId)
+        assertEquals("과팀플", disbanded.roomName)
+    }
+
+    @Test
     fun 모르는_type은_무시한다() {
         assertNull(payloadOf(mapOf("type" to "SOMETHING_NEW")))
         assertNull(payloadOf(mapOf("comicId" to "1")))

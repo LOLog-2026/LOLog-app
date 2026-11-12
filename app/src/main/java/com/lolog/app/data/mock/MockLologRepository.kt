@@ -63,6 +63,19 @@ internal class MockCodes {
     fun used(email: String) { sentAt.remove(email.lowercase()); fails.remove(email.lowercase()) }
 }
 
+/** 목업 이메일 로그인 검사. offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호, 그다음 suspended@lolog.app은 정지된 계정 */
+internal fun mockCheckLogin(email: String, password: String) {
+    if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
+    if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+    if (email.equals(MOCK_SUSPENDED_EMAIL, true)) throw LologException(ErrorCodes.ACCOUNT_SUSPENDED, "정지된 계정이에요")
+}
+
+/** 이 이메일로 로그인하면 me()가 관리자(isAdmin = true) */
+internal fun mockIsAdmin(email: String) = email.equals(MOCK_ADMIN_EMAIL, true)
+
+internal const val MOCK_ADMIN_EMAIL = "admin@lolog.app"
+internal const val MOCK_SUSPENDED_EMAIL = "suspended@lolog.app"
+
 /** 목업 비밀번호 바꾸기 검사. 지금 비밀번호는 로그인 목업과 같은 규칙(4자 미만이면 틀림) */
 internal fun mockCheckPasswordChange(currentPassword: String, newPassword: String) {
     if (currentPassword.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "지금 비밀번호가 맞지 않아요")
@@ -145,6 +158,9 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 내 정보(me)의 hasPassword: 이메일로 로그인했으면 true, 소셜로 로그인했으면 false
  *  - 이메일 가입/로그인에 taken@lolog.app → 409 ACCOUNT_EXISTS (18번)
  *  - 비밀번호가 4자 미만 → 401 INVALID_CREDENTIALS
+ *  - 관리자(admin.md): admin@lolog.app으로 로그인하면 me()의 isAdmin = true, 그 밖(소셜 포함)은 false
+ *  - suspended@lolog.app으로 로그인(비밀번호 4자 이상) → 403 ACCOUNT_SUSPENDED
+ *  - 공지 쓰기·고치기·지우기(MockInbox): 관리자가 아니면 403 FORBIDDEN, 제목이 비거나 100자 넘으면·본문이 비면 400 INVALID_REQUEST
  *  - 네이버로 시작하기 → 409 ACCOUNT_EXISTS (18번)
  *  - 설정에서 Google 연결 → 409 SOCIAL_ALREADY_LINKED (19번), 네이버 연결 → 연결됨
  *  - 녹음 문장이 6개 미만 → 카드 0개 (20번)
@@ -160,7 +176,7 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *    내 코드 → 400 CANNOT_FRIEND_SELF / 친구 코드 → 409 ALREADY_FRIENDS / 보낸 요청 코드 → 409 FRIEND_REQUEST_EXISTS
  *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
  *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
- *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
+ *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로(친구도 바로 차단돼요)
  *
  * 화자 그림 규칙(MockCharacters.kt, LOLog-docs spec/characters.md)
  *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,
@@ -171,6 +187,9 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
  *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
  *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
+ *  - 기본 화자 목소리(FR-CHAR-03): -01·-02로 끝나는 12명만 가짜 voiceUrl, 나머지는 null
+ *  - 내 목소리 고르기(FR-CHAR-04): 저장하면 내 프로필 캐릭터의 voice가 바뀌어요(다시 만들어도 그대로).
+ *    캐릭터 없음 → 404 CHARACTER_NOT_FOUND, 없거나 목소리 없는 기본 화자 id → 400 UNKNOWN_CHARACTER
  *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
  *  - 카드 고치기(PATCH)에서 그림 붙이기
  *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
@@ -221,6 +240,8 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private val resetCodes = MockCodes()
     /** 마지막 로그인 방법. me()의 hasPassword를 정해요(앱을 새로 켜서 모르면 이메일로 봐요) */
     private var loggedInWithEmail = true
+    /** admin@lolog.app으로 로그인했으면 true. 앱을 새로 켜서 모르면 일반 회원으로 봐요 */
+    private var loggedInAsAdmin = false
 
     override suspend fun requestEmailCode(email: String) {
         net()
@@ -233,15 +254,15 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         if (email.equals("taken@lolog.app", true)) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         if (!isValidPassword(password)) throw LologException(ErrorCodes.INVALID_REQUEST, "비밀번호는 8~64자, 영문과 숫자를 섞어 주세요", "password")
         loggedInWithEmail = true
+        loggedInAsAdmin = false
         tokens.save("mock-access", "mock-refresh")
     }
 
     override suspend fun login(email: String, password: String) {
         net()
-        // 시험용: offline@… 은 인터넷 끊김, 비밀번호 4자 미만은 틀린 비밀번호
-        if (email.startsWith("offline@", true)) throw LologException(ErrorCodes.NETWORK, "인터넷 연결을 확인해 주세요")
-        if (password.length < 4) throw LologException(ErrorCodes.INVALID_CREDENTIALS, "이메일이나 비밀번호가 맞지 않아요")
+        mockCheckLogin(email, password)
         loggedInWithEmail = true
+        loggedInAsAdmin = mockIsAdmin(email)
         tokens.save("mock-access", "mock-refresh")
     }
 
@@ -249,6 +270,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         net()
         if (provider == SocialProvider.NAVER) throw LologException(ErrorCodes.ACCOUNT_EXISTS, "이미 가입된 이메일이에요")
         loggedInWithEmail = false
+        loggedInAsAdmin = false
         tokens.save("mock-access", "mock-refresh")
         return false
     }
@@ -256,7 +278,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun logout() { net(150); tokens.clear() }
     override suspend fun withdraw() { net(); lock.withLock { cardStore.clear(); comicStore.clear() }; tokens.clear() }
 
-    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail) }
+    override suspend fun me(): Account { net(150); return Account(MockData.EMAIL, linked.toSet(), hasPassword = loggedInWithEmail, isAdmin = loggedInAsAdmin) }
 
     override suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider> {
         net()
@@ -376,7 +398,11 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private fun CardDetail.withLiveComics(): CardDetail {
         val refs = comicStore.filter { it.cardId == id }.map { ComicRef(it.id, it.status) }
         // 서버처럼 남은 횟수를 세서 내려 줘요: 실패는 빼고, 그리는 중은 셈
-        return copy(comics = refs, comicRemaining = (COMIC_LIMIT_PER_CARD - refs.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0))
+        return copy(
+            comics = refs,
+            comicRemaining = (COMIC_LIMIT_PER_CARD - refs.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0),
+            videos = videoStore.filter { it.cardId == id }.map { VideoRef(it.id, it.status) },
+        )
     }
 
     private fun CardDetail.toSummary() = CardSummary(
@@ -458,6 +484,59 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         if (!comicStore.removeAll { it.id == id }) throw LologException(ErrorCodes.COMIC_NOT_FOUND, "만화를 찾지 못했어요")
     }
 
+    // ── 쇼츠(video.md) ──
+    // 최근 것이 앞. 카드별 만든 횟수(지워도 안 돌아옴, 실패하면 돌아옴)는 서버처럼 따로 세요
+    private val videoStore = mutableListOf<VideoSummary>()
+    private val videoCount = mutableMapOf<Long, Int>()
+
+    override suspend fun requestVideo(cardId: Long): VideoAccepted = lock.withLock {
+        net()
+        val card = findCard(cardId)
+        if (videoStore.any { it.cardId == cardId && it.status.inProgress }) {
+            throw LologException(ErrorCodes.VIDEO_IN_PROGRESS, "이 카드로 만드는 중인 쇼츠가 있어요")
+        }
+        if ((videoCount[cardId] ?: 0) >= VIDEO_LIMIT_PER_CARD) throw LologException(ErrorCodes.VIDEO_LIMIT, "이 카드로는 쇼츠를 더 만들 수 없어요")
+        videoCount[cardId] = (videoCount[cardId] ?: 0) + 1
+        val video = VideoSummary(nextId++, cardId, card.summary, VideoStatus.QUEUED, createdAt = now())
+        videoStore.add(0, video)
+        runVideo(video.id)
+        VideoAccepted(video.id, VideoStatus.QUEUED)
+    }
+
+    /** 목업 진행: 대기 → 목소리 → 그림 → 완성. 목업에는 영상 파일이 없어 완성돼도 재생은 실패 안내가 떠요 */
+    private fun runVideo(videoId: Long) = scope.launch {
+        suspend fun set(status: VideoStatus) = lock.withLock {
+            val i = videoStore.indexOfFirst { it.id == videoId }
+            if (i >= 0) videoStore[i] = videoStore[i].copy(
+                status = status,
+                videoUrl = if (status == VideoStatus.DONE) "mock://video/$videoId" else null,
+                durationMs = if (status == VideoStatus.DONE) 28_400 else null,
+            )
+            videoStore.getOrNull(i)
+        }
+        delay(2_000); set(VideoStatus.VOICE)
+        delay(3_000); set(VideoStatus.DRAWING)
+        delay(4_000)
+        val done = set(VideoStatus.DONE) ?: return@launch
+        _push.emit(PushPayload(PushType.VIDEO_DONE, cardId = done.cardId, videoId = videoId))
+    }
+
+    override suspend fun videos(cursor: String?, size: Int, sort: SortOrder): VideoPage = lock.withLock {
+        net()
+        val (items, next) = mockPage(videoStore.toList(), cursor, size, sort)
+        VideoPage(items, next)
+    }
+
+    override suspend fun video(id: Long): VideoSummary = lock.withLock {
+        net(150)
+        videoStore.firstOrNull { it.id == id } ?: throw LologException(ErrorCodes.VIDEO_NOT_FOUND, "쇼츠를 찾지 못했어요")
+    }
+
+    override suspend fun deleteVideo(id: Long) = lock.withLock {
+        net()
+        if (!videoStore.removeAll { it.id == id }) throw LologException(ErrorCodes.VIDEO_NOT_FOUND, "쇼츠를 찾지 못했어요")
+    }
+
     // ── 친구 ──
     private val friendBook = MockFriends()
 
@@ -487,19 +566,45 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             })
         }
     }
+    override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
+    override suspend fun requestByUserId(userId: Long): FriendRequest = lock.withLock { net(); friendBook.sendTo(userId, roomPeople(userId)) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
         lock.withLock { net(150); friendBook.requests(direction) }
     override suspend fun acceptFriendRequest(id: Long): Friend = lock.withLock { net(); friendBook.accept(id) }
     override suspend fun deleteFriendRequest(id: Long) = lock.withLock { net(); friendBook.deleteRequest(id) }
     override suspend fun friends(): List<Friend> = lock.withLock { net(); friendBook.friends() }
     override suspend fun removeFriend(userId: Long) = lock.withLock { net(); friendBook.removeFriend(userId) }
-    override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
+    override suspend fun block(userId: Long, hideInRooms: Boolean) =
+        lock.withLock { net(); friendBook.block(userId, hideInRooms, roomPeople(userId)) }
+    override suspend fun setHideInRooms(userId: Long, hide: Boolean) = lock.withLock { net(); friendBook.setHideInRooms(userId, hide) }
+
+    /** 지금 나와 같은 방에 있는 사람의 닉네임(없으면 null). MockRooms.of가 채워요 */
+    internal var roomPeople: (Long) -> String? = { null }
+
+    /** 방 목업이 멤버의 friendState·숨긴 글을 맞추려고 불러요(네트워크 흉내 없음) */
+    internal suspend fun friendStateOf(userId: Long): String = lock.withLock { friendBook.friendState(userId) }
+    internal suspend fun hiddenInRooms(): Set<Long> = lock.withLock { friendBook.hiddenInRooms() }
     override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
     override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
 
     // ── 화자 그림 ──
     override suspend fun defaultCharacters(): List<DefaultCharacter> { net(); return MockCharacters.defaults }
+
+    // ── 알림함 ──
+    private val inboxBook = MockInbox()
+
+    override suspend fun inbox(tab: InboxTab, cursor: String?): InboxPage = lock.withLock { net(250); inboxBook.page(tab, cursor) }
+    override suspend fun inboxHasUnread(): Boolean = lock.withLock { net(150); inboxBook.hasUnread() }
+    override suspend fun readInbox(kind: InboxKind, id: Long) = lock.withLock { net(150); inboxBook.read(kind, id) }
+    override suspend fun readAllInbox() = lock.withLock { net(); inboxBook.readAll() }
+
+    // 관리자 공지: 알림함 공지에 그대로 반영돼요. admin@lolog.app으로 로그인하지 않았으면 403 FORBIDDEN
+    override suspend fun createNotice(title: String, body: String) =
+        lock.withLock { net(); inboxBook.createNotice(loggedInAsAdmin, title, body) }
+    override suspend fun updateNotice(id: Long, title: String?, body: String?) =
+        lock.withLock { net(); inboxBook.updateNotice(loggedInAsAdmin, id, title, body) }
+    override suspend fun deleteNotice(id: Long) = lock.withLock { net(); inboxBook.deleteNotice(loggedInAsAdmin, id) }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }

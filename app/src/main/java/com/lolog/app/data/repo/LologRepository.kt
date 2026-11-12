@@ -52,6 +52,15 @@ interface LologRepository {
     suspend fun comic(id: Long): ComicDetail
     suspend fun deleteComic(id: Long)
 
+    // 쇼츠 (LOLog-docs spec/video.md 2장)
+    /** 202 QUEUED. 만드는 중이면 409 VIDEO_IN_PROGRESS, 한 카드 2개를 넘으면 409 VIDEO_LIMIT */
+    suspend fun requestVideo(cardId: Long): VideoAccepted
+    /** 다음 쪽도 처음과 같은 sort로 불러요(만화 목록과 같음) */
+    suspend fun videos(cursor: String? = null, size: Int = 20, sort: SortOrder = SortOrder.NEWEST): VideoPage
+    suspend fun video(id: Long): VideoSummary
+    /** 만드는 중에도 지울 수 있어요. 지워도 횟수는 돌아오지 않아요 */
+    suspend fun deleteVideo(id: Long)
+
     // 친구·프로필·차단 (LOLog-docs spec/friends.md)
     /** 처음 부르면 서버가 프로필을 만들어요. 닉네임을 정하기 전에는 friendCode가 null */
     suspend fun profile(): Profile
@@ -61,8 +70,18 @@ interface LologRepository {
     suspend fun uploadProfileCharacter(photo: ByteArray): ProfileCharacter
     /** 프로필 캐릭터 지우기. 붙여 둔 카드 화자에서도 빠져요 */
     suspend fun deleteProfileCharacter()
+    /**
+     * 프로필 캐릭터 목소리 고르기(FR-CHAR-04, 초안). voice는 기본 화자 id, null이면 안 고름(쇼츠에서 알아서 골라요).
+     * 없거나 목소리가 없는 기본 화자 id → 400 UNKNOWN_CHARACTER, 프로필 캐릭터가 없음 → 404 CHARACTER_NOT_FOUND
+     */
+    suspend fun setProfileCharacterVoice(voice: String?)
     /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
     suspend fun sendFriendRequest(code: String): FriendRequest
+    /**
+     * 같은 방 멤버에게 userId로 요청 보내기(rooms.md "방에서 친구 요청", 초안). 지금 같은 방에 없으면 FRIEND_CODE_NOT_FOUND.
+     * 상대가 이미 나에게 요청했으면 status가 ACCEPTED(바로 친구)
+     */
+    suspend fun requestByUserId(userId: Long): FriendRequest
     /** 최신순 */
     suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest>
     suspend fun acceptFriendRequest(id: Long): Friend
@@ -71,14 +90,39 @@ interface LologRepository {
     /** 최근에 친구가 된 사람이 위 */
     suspend fun friends(): List<Friend>
     suspend fun removeFriend(userId: Long)
-    suspend fun block(userId: Long)
+    /**
+     * 회원이면 누구나 차단할 수 있어요. 친구면 친구 관계도 같이 끊겨요(friends.md 차단).
+     * [hideInRooms]면 같은 방에서 그 사람 글을 "숨긴 글"로 보여요. 이미 차단한 사람이면 hideInRooms는 바뀌지 않아요(바꾸는 건 [setHideInRooms])
+     */
+    suspend fun block(userId: Long, hideInRooms: Boolean = false)
     /** 최신순 */
     suspend fun blocks(): List<BlockedUser>
     suspend fun unblock(userId: Long)
+    /** 차단한 사람의 방 글 숨기기 바꾸기(초안) */
+    suspend fun setHideInRooms(userId: Long, hide: Boolean)
 
     // 화자 그림 (LOLog-docs spec/characters.md)
     /** 기본 화자 24명. 썸네일 주소는 10분마다 바뀌니 캐시는 id 기준으로 해요 */
     suspend fun defaultCharacters(): List<DefaultCharacter>
+
+    // 알림함 (LOLog-docs PR #59 spec/inbox.md)
+    /** 최근 것이 위, 한 번에 20개. cursor는 받은 nextCursor 그대로 */
+    suspend fun inbox(tab: InboxTab, cursor: String? = null): InboxPage
+    /** 종 버튼의 점: 안 읽은 알림이나 공지사항이 하나라도 있는지 */
+    suspend fun inboxHasUnread(): Boolean
+    /** 한 줄 읽음. 없으면 404 NOTICE_NOT_FOUND·NOTIFICATION_NOT_FOUND */
+    suspend fun readInbox(kind: InboxKind, id: Long)
+    /** 지금까지 온 것을 모두 읽음 */
+    suspend fun readAllInbox()
+
+    // 관리자 공지 (LOLog-docs spec/admin.md 4·7장). 목록은 inbox(InboxTab.NOTICE)를 같이 써요
+    // 관리자가 아니면 403 FORBIDDEN, 제목·본문이 틀리면 400 INVALID_REQUEST(field title·body)
+    /** 새 공지. 제목 1~100자, 본문은 비면 안 돼요. 모든 사람의 알림함 공지사항에 올라가요(푸시는 없음) */
+    suspend fun createNotice(title: String, body: String): AdminNotice
+    /** 바꾼 것만 넘겨요(null은 보내지 않아요). 없으면 404 NOTICE_NOT_FOUND */
+    suspend fun updateNotice(id: Long, title: String? = null, body: String? = null): AdminNotice
+    /** 모두의 알림함에서 사라져요. 없으면 404 NOTICE_NOT_FOUND */
+    suspend fun deleteNotice(id: Long)
 
     // 기기
     suspend fun registerFcmToken(token: String)

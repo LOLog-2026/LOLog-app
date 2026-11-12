@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +29,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.lolog.app.data.model.DefaultCharacter
 import com.lolog.app.data.model.ProfileCharacter
 import com.lolog.app.data.model.ProfileCharacterStatus
 import com.lolog.app.data.repo.LologException
@@ -34,6 +37,7 @@ import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
+import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.util.ProfilePhoto
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,6 +54,8 @@ import kotlinx.coroutines.launch
  *  - READY: 그림. 다른 사진으로 다시 만들기, 지우기
  *  - FAILED: 실패 안내. 예전 그림이 있으면 그대로 쓰여요
  *  - 친구 탭 맨 위 상자와 화자 고르기 팝업의 "내 캐릭터 만들기"에서 들어와요
+ *  - 캐릭터가 있으면(READY이거나 그림이 있으면) 안내 칸 아래 "내 목소리" 줄(FR-CHAR-04, 시안 5·8).
+ *    누르면 내 목소리 고르기 화면. 서버가 생길 때까지 VOICE_PICK_ENABLED로 숨겨요
  */
 
 class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel() {
@@ -59,6 +65,8 @@ class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel()
         val busy: Boolean = false,
         val toast: String? = null,
         val loadFailed: Boolean = false,
+        /** 고른 목소리의 label·voiceUrl을 찾으려고 받은 기본 화자 목록(목소리를 골랐을 때만 받아요) */
+        val defaults: List<DefaultCharacter> = emptyList(),
     )
 
     private val _state = MutableStateFlow(State())
@@ -69,6 +77,17 @@ class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel()
         runCatching { repo.profile() }
             .onSuccess { p -> _state.update { it.copy(loading = false, loadFailed = false, character = p.character) }; watch() }
             .onFailure { _state.update { it.copy(loading = false, loadFailed = it.character == null) } }
+        // 내 목소리 줄에 label과 들어 보기를 보여 주려고 기본 화자 목록을 받아요. 못 받으면 label 없이 보여요
+        if (VOICE_PICK_ENABLED && _state.value.character?.voice != null) {
+            runCatching { repo.defaultCharacters() }.onSuccess { list -> _state.update { it.copy(defaults = list) } }
+        }
+    }
+
+    /** 목소리 재생 실패 때: 목록을 다시 받아(서명 주소 10분) 그 화자의 새 voiceUrl */
+    suspend fun freshVoiceUrl(id: String): String? {
+        val list = runCatching { repo.defaultCharacters() }.getOrNull() ?: return null
+        _state.update { it.copy(defaults = list) }
+        return list.firstOrNull { it.id == id }?.voiceUrl
     }
 
     // 그리는 중이면 화면에 있는 동안 5초마다 다시 봐요. 푸시가 안 와도 결과가 보이게요
@@ -121,7 +140,14 @@ class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel()
 }
 
 @Composable
-fun ProfileCharacterScreen(onBack: () -> Unit) {
+fun ProfileCharacterScreen(
+    onBack: () -> Unit,
+    /** "내 목소리" 줄을 누르면 내 목소리 고르기 화면으로 */
+    onPickVoice: () -> Unit = {},
+    /** 내 목소리 고르기에서 저장하고 돌아왔을 때 띠 문구("목소리를 골랐어요") */
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
+) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { ProfileCharacterViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -137,6 +163,14 @@ fun ProfileCharacterScreen(onBack: () -> Unit) {
         snackbar.showSnackbar(msg)
         vm.toastShown()
     }
+    LaunchedEffect(message) {
+        val msg = message ?: return@LaunchedEffect
+        vm.load()
+        onMessageShown()
+        snackbar.showSnackbar(msg)
+    }
+    val scope = rememberCoroutineScope()
+    val voice = rememberVoicePlayer(onError = { scope.launch { snackbar.showSnackbar(VOICE_LOAD_FAILED) } })
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) vm.upload { ProfilePhoto.prepare(context, uri) }
@@ -202,6 +236,16 @@ fun ProfileCharacterScreen(onBack: () -> Unit) {
                     Bullet("사진은 그림으로 바꾼 뒤 바로 지워요")
                     Bullet("하루에 3번까지 만들 수 있어요")
                 }
+                // 캐릭터가 있을 때만 목소리를 고를 수 있어요(없으면 서버가 404)
+                if (VOICE_PICK_ENABLED && c != null && (c.status == ProfileCharacterStatus.READY || c.thumbnailUrl != null)) {
+                    Spacer(Modifier.height(12.dp))
+                    val picked = c.voice?.let { id -> state.defaults.firstOrNull { it.id == id } }
+                    MyVoiceRow(
+                        voiceId = c.voice, picked = picked, player = voice,
+                        freshUrl = { id -> vm.freshVoiceUrl(id) }, onClick = { voice.stop(); onPickVoice() },
+                    )
+                    VoiceRecordingNote(voice, Modifier.padding(top = 8.dp))
+                }
                 if (c?.status == ProfileCharacterStatus.FAILED) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -237,6 +281,39 @@ fun ProfileCharacterScreen(onBack: () -> Unit) {
             onConfirm = { askDelete = false; vm.delete() },
             onDismiss = { askDelete = false },
         )
+    }
+}
+
+/** "내 목소리" 줄(시안 5·8). 안 골랐으면 "고르기 ›", 골랐으면 label + 들어 보기 + "바꾸기 ›" */
+@Composable
+private fun MyVoiceRow(
+    voiceId: String?,
+    picked: DefaultCharacter?,
+    player: VoicePlayer,
+    freshUrl: suspend (String) -> String?,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(LologShape.md).border(1.dp, LologColors.Line, LologShape.md)
+            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("내 목소리", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+            Text(
+                when {
+                    voiceId == null -> "아직 안 골랐어요. 쇼츠에서 알아서 골라 읽어요."
+                    else -> picked?.label ?: "고른 목소리가 있어요"
+                },
+                fontSize = 12.sp, color = LologColors.Muted, lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (voiceId != null && picked != null) {
+            Spacer(Modifier.width(8.dp))
+            VoicePreviewButton(picked.voiceUrl, picked.id, player, freshUrl = { freshUrl(picked.id) }, compact = true)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(if (voiceId == null) "고르기 ›" else "바꾸기 ›", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
     }
 }
 

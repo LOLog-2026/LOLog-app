@@ -16,6 +16,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -113,13 +114,16 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
     }
 }
 
-// ── 15 내 만화 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
+// ── 15 컨텐츠(내 만화) 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
 
 @Composable
-fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -> Unit = {}) {
+fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -> Unit = {}, onVideo: (Long) -> Unit = {}) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { ComicListViewModel(repo) }
     val state by vm.state.collectAsState()
+    // 미디어 탭(쇼츠) 목록. 탭을 오가도 목록·정렬을 지키려고 화면에 하나 둬요
+    val videoVm = viewModel { VideoListViewModel(repo) }
+    val videoState by videoVm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
         // 그리는 중인 게 있으면 가끔 새로 고침
@@ -135,6 +139,8 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }
     // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
     BackHandler(onBack = onBack)
+    // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠). 처음엔 4컷
+    var tab by rememberSaveable { mutableIntStateOf(0) }
 
     // 정렬을 바꾸면 첫 편부터 보여 줘요
     val pager = key(state.sort) { rememberPagerState { state.comics.size } }
@@ -145,13 +151,19 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // 위 칸: 흰 바탕 제목 줄. 맨 위에 고정, 아래만 넘어가요
-            ListHeader {
-                LologTopBar("내 만화", onBack = onBack, actions = { SortMenu(state.sort, vm::setSort) })
+            // 위 칸: 흰 바탕 제목 줄 + "4컷 / 미디어" 탭(아래 1dp 선은 탭이 그려요). 맨 위에 고정, 아래만 넘어가요
+            Column(Modifier.fillMaxWidth().background(LologColors.Paper)) {
+                // 정렬은 탭마다 따로(4컷·쇼츠 목록 모두 latest·oldest)
+                LologTopBar("컨텐츠", onBack = onBack, actions = {
+                    if (tab == 0) SortMenu(state.sort, vm::setSort) else SortMenu(videoState.sort, videoVm::setSort)
+                })
+                ContentTabs(listOf("4컷", "미디어"), tab, { tab = it })
             }
             // 아래 칸: 연한 회색, 노트 줄 없음
             Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
                 when {
+                    // 미디어 탭: 내 쇼츠(video.md 2장)
+                    tab == 1 -> VideoTab(videoVm, videoState, onVideo, onLibrary)
                     state.loading -> SkeletonList(count = 4)
                     state.error != null && state.comics.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
                     state.comics.isEmpty() -> EmptyState(
@@ -243,7 +255,7 @@ private fun StateChip(stage: ComicStage) {
 
 /** 쪽 표시 점: 지금 쪽은 코랄 긴 막대. 많으면 지금 쪽 주변 7개만 */
 @Composable
-private fun PageDots(count: Int, current: Int) {
+internal fun PageDots(count: Int, current: Int) {
     val window = 7
     val start = (current - window / 2).coerceIn(0, (count - window).coerceAtLeast(0))
     val end = (start + window).coerceAtMost(count)

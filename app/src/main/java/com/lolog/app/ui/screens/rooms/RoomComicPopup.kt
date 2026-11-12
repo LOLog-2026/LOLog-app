@@ -80,7 +80,7 @@ internal fun ComicPopup(room: Room, post: RoomPost, onLike: () -> Unit, onClose:
                         Column(Modifier.weight(1f)) {
                             Text(post.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                "${if (post.author.isMe) "내 만화" else post.author.nickname} · ${relativeTime(post.postedAt)}",
+                                "${if (post.author.isMe) "내 만화" else post.author.displayName} · ${relativeTime(post.postedAt)}",
                                 fontSize = 12.sp, color = LologColors.Muted,
                             )
                         }

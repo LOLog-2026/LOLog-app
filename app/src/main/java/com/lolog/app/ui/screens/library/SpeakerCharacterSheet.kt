@@ -47,6 +47,8 @@ import kotlinx.coroutines.coroutineScope
  *    고르면 닉네임이 이름 칸에 들어가고, 그림이 있으면 그 사람의 PROFILE이 골라져요
  *    그림이 없으면 회색 안내 + 기본 화자 가로 줄 + "AI에게 맡기기". 나는 "내 캐릭터 만들기"(이번엔 자리만)
  *  - 기본: 나이대·성별 거르기 + 격자. 이름은 그대로 둬요
+ *    고르면 격자 아래 설명 줄(label + 인사 문장)과 오른쪽 "들어 보기"(voiceUrl이 있을 때만, FR-CHAR-03 시안 1~4)
+ *    다른 그림을 고르거나 탭을 바꾸거나 팝업을 닫으면 멈춰요. 친구 프로필 탭에는 목소리가 없어요(명세에 친구 목소리 없음)
  *  - 맨 아래 "그림 떼기"(지금 그림이 붙어 있을 때만)
  *  - 그 아래 "이 화자 빼기"(onRemove를 넘긴 카드 고치기에서만). 대사가 남아 있으면 꺼지고 회색 안내
  *  - "AI에게 맡기기"·그냥 닫기 = 그림은 그대로 두고 이름만 저장
@@ -119,6 +121,17 @@ class SpeakerCharacterViewModel(private val repo: LologRepository) : ViewModel()
         }
     }
 
+    /**
+     * 목소리 재생에 실패했을 때(서명 주소 10분이 지났을 수 있어요) 기본 화자 목록을 다시 받아 그 화자의 새 voiceUrl을 돌려줘요.
+     * 받은 목록은 썸네일 주소도 새것이라 그대로 들고 있어요
+     */
+    suspend fun freshVoiceUrl(id: String): String? {
+        val list = runCatching { repo.defaultCharacters() }.getOrNull() ?: return null
+        defaultsAt = System.currentTimeMillis()
+        _state.update { it.copy(defaults = list, defaultsFailed = false) }
+        return list.firstOrNull { it.id == id }?.voiceUrl
+    }
+
     private companion object {
         const val DEFAULTS_TTL_MS = 9 * 60 * 1000L
     }
@@ -153,6 +166,8 @@ fun SpeakerCharacterSheet(
     removeEnabled: Boolean = true,
     /** "내 캐릭터 만들기": 팝업을 닫고(적은 이름은 저장) 내 캐릭터 화면으로 가요 */
     onMakeMine: () -> Unit = {},
+    /** 목소리 재생 실패 때 기본 화자 목록을 다시 받아 새 voiceUrl을 돌려줘요(SpeakerCharacterViewModel.freshVoiceUrl) */
+    freshVoiceUrl: suspend (String) -> String? = { null },
 ) {
     val current = speaker.character
     var name by remember { mutableStateOf(speaker.name.orEmpty()) }
@@ -161,6 +176,9 @@ fun SpeakerCharacterSheet(
     var picked by remember { mutableStateOf(current?.takeIf { it.type == CharacterType.DEFAULT }?.id) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val voice = rememberVoicePlayer(onError = { scope.launch { snackbar.showSnackbar(VOICE_LOAD_FAILED) } })
+    // 다른 그림을 고르거나 탭을 바꾸면 멈춰요(팝업을 닫으면 rememberVoicePlayer가 멈춰요)
+    LaunchedEffect(picked, tab) { voice.stop() }
 
     val people = remember(data.me, data.friends) { peopleOf(data.me, data.friends) }
     // 처음 열 때: 지금 붙은 PROFILE의 사람을 골라 둬요
@@ -217,6 +235,7 @@ fun SpeakerCharacterSheet(
                         name = name, onName = { name = it }, placeholder = placeholder,
                         picked = picked, onPick = { picked = it },
                         onKeep = ::keep, onAttach = { pickedDefault()?.let(::attach) },
+                        voice = voice, freshVoiceUrl = freshVoiceUrl,
                     )
                 }
 
@@ -372,6 +391,8 @@ private fun DefaultTab(
     onPick: (String) -> Unit,
     onKeep: () -> Unit,
     onAttach: () -> Unit,
+    voice: VoicePlayer,
+    freshVoiceUrl: suspend (String) -> String?,
 ) {
     var age by remember { mutableStateOf<AgeGroup?>(null) }
     var gender by remember { mutableStateOf<Gender?>(null) }
@@ -402,8 +423,13 @@ private fun DefaultTab(
                     repeat(GRID_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
-            // 고른 그림 아래 한글 설명 한 줄
-            PickedLabel(defaults.firstOrNull { it.id == picked }?.label ?: " ")
+            // 고른 그림 아래 설명 줄: label + 인사 문장 + 들어 보기(시안 1·2). 안 골랐으면 빈 줄
+            val chosen = defaults.firstOrNull { it.id == picked }
+            if (chosen == null) PickedLabel(" ") else {
+                Spacer(Modifier.height(4.dp))
+                PickedVoiceRow(chosen, voice, freshVoiceUrl)
+                VoiceRecordingNote(voice, Modifier.padding(top = 8.dp))
+            }
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -431,6 +457,26 @@ private fun DefaultThumb(d: DefaultCharacter, selected: Boolean, size: Dp?, onCl
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
         }
+    }
+}
+
+/** 고른 기본 화자 설명 줄. 재생 중이면 인사 문장 뒤에 "읽는 중" */
+@Composable
+private fun PickedVoiceRow(d: DefaultCharacter, voice: VoicePlayer, freshVoiceUrl: suspend (String) -> String?) {
+    Row(
+        Modifier.fillMaxWidth().clip(LologShape.md).background(LologColors.Canvas).padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(d.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val reading = voice.playingId == d.id
+            Text(
+                if (reading) "$VOICE_GREETING 읽는 중" else VOICE_GREETING,
+                fontSize = 11.5.sp, color = LologColors.Muted, maxLines = 1, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        VoicePreviewButton(d.voiceUrl, d.id, voice, freshUrl = { freshVoiceUrl(d.id) })
     }
 }
 

@@ -16,24 +16,34 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lolog.app.AppContainer
+import com.lolog.app.data.model.InboxItem
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.FriendRequestDirection
-import com.lolog.app.data.model.PushType
 import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
+import com.lolog.app.ui.screens.admin.AdminHomeScreen
+import com.lolog.app.ui.screens.admin.AdminNoticeEditScreen
+import com.lolog.app.ui.screens.admin.AdminNoticeListScreen
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
+import com.lolog.app.ui.screens.comic.VideoScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
 import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
 import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
+import com.lolog.app.ui.screens.friends.VOICE_PICKED
+import com.lolog.app.ui.screens.friends.VoicePickScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
+import com.lolog.app.ui.screens.inbox.InboxScreen
+import com.lolog.app.ui.screens.inbox.NoticeScreen
+import com.lolog.app.ui.screens.inbox.RoomTarget
 import com.lolog.app.ui.screens.rooms.Features
 import com.lolog.app.ui.screens.rooms.RoomCreateScreen
+import com.lolog.app.ui.screens.rooms.RoomInviteScreen
 import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
@@ -64,6 +74,19 @@ private const val SETTINGS_MESSAGE = "settingsMessage"
 private const val FRIENDS_MESSAGE = "friendsMessage"
 /** 친구 추가에서 바로 친구가 됐으면 true: 친구 목록 맨 위 줄을 잠깐 연노랑으로 */
 private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
+/** 친구 탭을 "방" 알약으로 열기(방을 나가거나 방이 없어졌을 때) */
+private const val FRIENDS_ROOMS = "friendsRooms"
+// 내 목소리 고르기에서 저장하고 내 캐릭터 화면으로 돌아올 때 띠 문구
+private const val VOICE_MESSAGE = "voiceMessage"
+/** 알림함 → 공지사항 자세히로 넘기는 값. 목록에서 받은 그대로 그려요(따로 조회 없음) */
+private const val NOTICE_ID = "noticeId"
+private const val NOTICE_TITLE = "noticeTitle"
+private const val NOTICE_BODY = "noticeBody"
+private const val NOTICE_DATE = "noticeDate"
+/** 방 만들기·친구 초대 화면 → 방 화면 스낵바 문구 */
+private const val ROOM_MESSAGE = "roomMessage"
+/** 공지 쓰기·고치기 화면 → 관리자 공지 목록 스낵바 문구 */
+private const val ADMIN_NOTICE_MESSAGE = "adminNoticeMessage"
 
 object Routes {
     const val SPLASH = "splash"
@@ -79,32 +102,49 @@ object Routes {
     const val FRIEND_REQUESTS = "friends/requests"
     const val NICKNAME = "nickname"
     const val PROFILE_CHARACTER = "profile/character"
+    const val VOICE_PICK = "profile/character/voice"
     const val BLOCKED = "blocked"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
+    const val ADMIN = "admin"
+    /** 관리자 공지 목록 */
+    const val ADMIN_NOTICES = "admin/notices"
+    /** 공지 쓰기·고치기. 고칠 공지는 목록 화면의 savedStateHandle로 넘겨요 */
+    const val ADMIN_NOTICE_EDIT = "admin/notices/edit"
+    /** 알림함(공지사항·알림) */
+    const val INBOX = "inbox"
+    const val NOTICE = "notice/{id}"
     const val RECORDING = "recording"
     const val ANALYZING = "analyzing/{recordingId}"
     const val CARD = "card/{cardId}"
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
+    const val VIDEO = "video/{videoId}"
     /** 친구 방(목업에서만) */
-    const val ROOM = "room/{id}"
+    /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
+    const val ROOM = "room/{id}?tab={tab}"
     const val ROOM_CREATE = "rooms/create"
+    /** 방장: 친구 초대 */
+    const val ROOM_INVITE = "rooms/{id}/invite"
 
     fun analyzing(id: Long) = "analyzing/$id"
     fun card(id: Long) = "card/$id"
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
+    fun video(id: Long) = "video/$id"
     fun room(id: Long) = "room/$id"
+    fun roomChat(id: Long) = "room/$id?tab=2"
+    fun roomInvite(id: Long) = "rooms/$id/invite"
+    fun notice(id: Long) = "notice/$id"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-// 아래 탭 4개: 보관함 · 홈 · 내 만화 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
+// 아래 탭 4개: 보관함 · 홈 · 컨텐츠 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
 private val tabs = listOf(
     Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
-    Tab(Routes.COMICS, "내 만화", Icons.Outlined.GridView),
+    Tab(Routes.COMICS, "컨텐츠", Icons.Outlined.GridView),
     Tab(Routes.FRIENDS, "친구", Icons.Outlined.People),
 )
 
@@ -120,6 +160,15 @@ fun NavHostController.goTab(route: String) {
         popUpTo(Routes.HOME) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+/** 방 목록(친구 탭의 "방" 알약)으로 돌아가요. [message]는 거기서 띄울 스낵바 문구 */
+fun NavHostController.openRoomList(message: String? = null) {
+    if (!popBackStack(Routes.FRIENDS, inclusive = false)) goTab(Routes.FRIENDS)
+    currentBackStackEntry?.savedStateHandle?.let {
+        it[FRIENDS_ROOMS] = true
+        if (message != null) it[FRIENDS_MESSAGE] = message
     }
 }
 
@@ -149,23 +198,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
         }
     }
 
-    // 알림을 눌렀을 때 갈 화면 (협의 2-2 기본안)
+    // 알림을 눌렀을 때 갈 화면. 알림함의 알림 줄도 같은 함수(openPush)를 써요
     LaunchedEffect(pendingPush, loggedIn, current) {
         val p = pendingPush ?: return@LaunchedEffect
         if (!loggedIn || current == null || current == Routes.SPLASH) return@LaunchedEffect
-        when (p.type) {
-            // 명세: 새 카드 → 보관함 새로고침. (제안한 cardIds가 오고 1개면 그 카드로)
-            PushType.CARDS_CREATED ->
-                if (p.cardIds.size == 1) nav.navigate(Routes.card(p.cardIds.first())) else nav.goTab(Routes.LIBRARY)
-            PushType.COMIC_DONE -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
-            // 실패 → 그 만화 화면. "만들지 못했어요" 안내와 "다시 시도" 버튼이 거기 있어요
-            PushType.COMIC_FAILED -> p.comicId?.let { nav.navigate(Routes.comic(it)) } ?: nav.goTab(Routes.COMICS)
-            // 내 캐릭터 완성·실패 → 내 캐릭터 화면(api-dto 푸시 표: 프로필 새로고침)
-            PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED ->
-                nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
-            // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
-            PushType.FRIEND_REQUEST -> nav.navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
-        }
+        nav.openPush(p)
         onPushHandled()
     }
 
@@ -242,6 +279,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
                     onComics = { nav.goTab(Routes.COMICS) },
                     onSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onInbox = { nav.navigate(Routes.INBOX) { launchSingleTop = true } },
                     finishedRecordingId = finished,
                     onFinishedShown = { entry.savedStateHandle[FINISHED_RECORDING] = null },
                 )
@@ -290,6 +328,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onDeleted = { nav.popBackStack() },
                     onNotFound = { nav.goTab(Routes.LIBRARY) },
                     onMakeCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
+                    onVideo = { videoId -> nav.navigate(Routes.video(videoId)) },
                 )
             }
             composable(Routes.CARD_EDIT, arguments = listOf(navArgument("cardId") { type = NavType.LongType })) {
@@ -306,6 +345,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             composable(Routes.COMICS) {
                 ComicListScreen(
                     onComic = { nav.navigate(Routes.comic(it)) },
+                    onVideo = { nav.navigate(Routes.video(it)) },
                     onBack = { nav.goTab(Routes.HOME) },
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
                 )
@@ -320,9 +360,17 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onDeleted = { nav.popBackStack() },
                 )
             }
+            composable(Routes.VIDEO, arguments = listOf(navArgument("videoId") { type = NavType.LongType })) {
+                VideoScreen(
+                    videoId = it.arguments!!.getLong("videoId"),
+                    onBack = { nav.popBackStack() },
+                    onDeleted = { nav.popBackStack() },
+                )
+            }
             composable(Routes.FRIENDS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(FRIENDS_MESSAGE, null).collectAsState()
                 val highlight by entry.savedStateHandle.getStateFlow(FRIENDS_HIGHLIGHT, false).collectAsState()
+                val openRooms by entry.savedStateHandle.getStateFlow(FRIENDS_ROOMS, false).collectAsState()
                 FriendsScreen(
                     onBack = { nav.goTab(Routes.HOME) },
                     onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
@@ -337,6 +385,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     },
                     onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
                     onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
+                    openRooms = openRooms,
+                    onRoomsOpened = { entry.savedStateHandle[FRIENDS_ROOMS] = false },
                 )
             }
             if (Features.ROOMS) {
@@ -344,15 +394,41 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     RoomCreateScreen(
                         onBack = { nav.popBackStack() },
                         // 만들면 그 방으로. 뒤로 가면 방 만들기 대신 방 목록으로
-                        onCreated = { id -> nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } } },
+                        onCreated = { id, invited ->
+                            nav.navigate(Routes.room(id)) { popUpTo(Routes.ROOM_CREATE) { inclusive = true } }
+                            nav.currentBackStackEntry?.savedStateHandle?.set(ROOM_MESSAGE, "${invited}명에게 초대를 보냈어요")
+                        },
                         onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
                     )
                 }
-                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                composable(
+                    Routes.ROOM,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.LongType },
+                        navArgument("tab") { type = NavType.IntType; defaultValue = 0 },
+                    ),
+                ) { entry ->
+                    val id = entry.arguments!!.getLong("id")
+                    val message by entry.savedStateHandle.getStateFlow<String?>(ROOM_MESSAGE, null).collectAsState()
                     RoomScreen(
+                        roomId = id,
+                        initialTab = entry.arguments!!.getInt("tab"),
+                        onBack = { nav.popBackStack() },
+                        onLeft = { msg -> nav.openRoomList(msg) },
+                        onInvite = { nav.navigate(Routes.roomInvite(id)) { launchSingleTop = true } },
+                        message = message,
+                        onMessageShown = { entry.savedStateHandle[ROOM_MESSAGE] = null },
+                    )
+                }
+                composable(Routes.ROOM_INVITE, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
+                    RoomInviteScreen(
                         roomId = it.arguments!!.getLong("id"),
                         onBack = { nav.popBackStack() },
-                        onLeft = { nav.popBackStack() },
+                        // 초대하면 방으로 돌아가 스낵바로 알려요
+                        onInvited = { count ->
+                            nav.previousBackStackEntry?.savedStateHandle?.set(ROOM_MESSAGE, "${count}명에게 초대를 보냈어요")
+                            nav.popBackStack()
+                        },
                     )
                 }
             }
@@ -379,12 +455,104 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
+                    onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
             }
-            composable(Routes.PROFILE_CHARACTER) {
-                ProfileCharacterScreen(onBack = { nav.popBackStack() })
+            composable(Routes.ADMIN) {
+                AdminHomeScreen(
+                    onBack = { nav.popBackStack() },
+                    onNotices = { nav.navigate(Routes.ADMIN_NOTICES) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.ADMIN_NOTICES) { entry ->
+                val message by entry.savedStateHandle.getStateFlow<String?>(ADMIN_NOTICE_MESSAGE, null).collectAsState()
+                AdminNoticeListScreen(
+                    onBack = { nav.popBackStack() },
+                    onNew = {
+                        entry.savedStateHandle[NOTICE_ID] = null
+                        nav.navigate(Routes.ADMIN_NOTICE_EDIT) { launchSingleTop = true }
+                    },
+                    onEdit = { n ->
+                        entry.savedStateHandle[NOTICE_ID] = n.id
+                        entry.savedStateHandle[NOTICE_TITLE] = n.title
+                        entry.savedStateHandle[NOTICE_BODY] = n.body
+                        entry.savedStateHandle[NOTICE_DATE] = n.createdAt
+                        nav.navigate(Routes.ADMIN_NOTICE_EDIT) { launchSingleTop = true }
+                    },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[ADMIN_NOTICE_MESSAGE] = null },
+                )
+            }
+            composable(Routes.ADMIN_NOTICE_EDIT) {
+                val list = nav.previousBackStackEntry?.savedStateHandle
+                // 목록에서 넘긴 id가 있으면 고치기, 없으면 새로 쓰기
+                val original = remember {
+                    list?.get<Long>(NOTICE_ID)?.let { id ->
+                        InboxItem.Notice(
+                            id, list.get<String>(NOTICE_TITLE).orEmpty(), list.get<String>(NOTICE_BODY).orEmpty(),
+                            list.get<String>(NOTICE_DATE).orEmpty(), read = true,
+                        )
+                    }
+                }
+                AdminNoticeEditScreen(
+                    original = original,
+                    onBack = { nav.popBackStack() },
+                    onDone = { message ->
+                        list?.set(ADMIN_NOTICE_MESSAGE, message)
+                        nav.popBackStack()
+                    },
+                )
+            }
+            composable(Routes.INBOX) { entry ->
+                InboxScreen(
+                    onBack = { nav.popBackStack() },
+                    onNotice = { n ->
+                        entry.savedStateHandle[NOTICE_ID] = n.id
+                        entry.savedStateHandle[NOTICE_TITLE] = n.title
+                        entry.savedStateHandle[NOTICE_BODY] = n.body
+                        entry.savedStateHandle[NOTICE_DATE] = n.createdAt
+                        nav.navigate(Routes.notice(n.id)) { launchSingleTop = true }
+                    },
+                    onPush = { nav.openPush(it) },
+                    onRoom = { target ->
+                        when (target) {
+                            RoomTarget.List -> nav.openRoomList()
+                            is RoomTarget.Chat -> nav.navigate(Routes.roomChat(target.roomId)) { launchSingleTop = true }
+                        }
+                    },
+                )
+            }
+            composable(Routes.NOTICE, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                val id = entry.arguments!!.getLong("id")
+                val inbox = nav.previousBackStackEntry?.savedStateHandle
+                // 알림함에서 넘긴 값이 이 공지 것일 때만 그려요
+                val ok = remember { inbox?.get<Long>(NOTICE_ID) == id }
+                NoticeScreen(
+                    title = remember { if (ok) inbox?.get<String>(NOTICE_TITLE) else null },
+                    body = remember { if (ok) inbox?.get<String>(NOTICE_BODY).orEmpty() else "" },
+                    createdAt = remember { if (ok) inbox?.get<String>(NOTICE_DATE) else null },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.PROFILE_CHARACTER) { entry ->
+                val message by entry.savedStateHandle.getStateFlow<String?>(VOICE_MESSAGE, null).collectAsState()
+                ProfileCharacterScreen(
+                    onBack = { nav.popBackStack() },
+                    onPickVoice = { nav.navigate(Routes.VOICE_PICK) { launchSingleTop = true } },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[VOICE_MESSAGE] = null },
+                )
+            }
+            composable(Routes.VOICE_PICK) {
+                VoicePickScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = {
+                        nav.previousBackStackEntry?.savedStateHandle?.set(VOICE_MESSAGE, VOICE_PICKED)
+                        nav.popBackStack()
+                    },
+                )
             }
             composable(Routes.NICKNAME) {
                 NicknameScreen(

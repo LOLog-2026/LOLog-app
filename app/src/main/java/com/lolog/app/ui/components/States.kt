@@ -35,6 +35,7 @@ import com.lolog.app.data.model.COMIC_LIMIT_PER_CARD
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.RoomErrorCodes
 import com.lolog.app.data.model.RoomRules
+import com.lolog.app.data.model.VIDEO_LIMIT_PER_CARD
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.ui.theme.LologColors
 
@@ -59,6 +60,8 @@ fun errorText(e: Throwable): String {
         ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 계정에 연결된 소셜 계정이에요"
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
+        ErrorCodes.ACCOUNT_SUSPENDED -> "정지된 계정이에요."
+        ErrorCodes.FORBIDDEN -> "관리자만 할 수 있어요"
         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> "입력한 내용을 확인해 주세요"
         ErrorCodes.UNKNOWN_SPEAKER -> "화자를 다시 골라 주세요"
         ErrorCodes.RECORDING_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
@@ -66,6 +69,9 @@ fun errorText(e: Throwable): String {
         ErrorCodes.INTERNAL_ERROR -> "잠시 후 다시 시도해 주세요"
         ErrorCodes.CARD_LOCKED -> "만화를 만드는 중이에요"
         ErrorCodes.COMIC_IN_PROGRESS -> "지금 그리는 만화가 끝나면 다시 그릴 수 있어요"
+        ErrorCodes.VIDEO_IN_PROGRESS -> "지금 만드는 쇼츠가 끝나면 다시 만들 수 있어요"
+        ErrorCodes.VIDEO_LIMIT -> "이 카드로는 쇼츠를 ${VIDEO_LIMIT_PER_CARD}번까지 만들 수 있어요"
+        ErrorCodes.VIDEO_NOT_FOUND -> "지워졌거나 찾을 수 없는 쇼츠예요"
         ErrorCodes.TOKEN_EXPIRED -> "다시 로그인해 주세요"
         ErrorCodes.NETWORK -> "인터넷 연결을 확인하고 다시 시도해 주세요"
         // 화자 그림 (문구는 명세에 없어서 프론트가 정함)
@@ -81,6 +87,10 @@ fun errorText(e: Throwable): String {
         RoomErrorCodes.ROOM_MEMBER_LIMIT -> "나를 포함해 ${RoomRules.MEMBER_MAX}명까지 들어갈 수 있어요"
         RoomErrorCodes.ROOM_NOT_FOUND -> "방을 찾지 못했어요"
         RoomErrorCodes.ROOM_POST_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
+        RoomErrorCodes.ROOM_LIMIT -> "방은 ${RoomRules.ROOM_MAX}개까지 들어갈 수 있어요"
+        RoomErrorCodes.ROOM_OWNER_ONLY -> "방장만 할 수 있어요"
+        RoomErrorCodes.ROOM_INVITE_NOT_FOUND -> "이미 답했거나 취소된 초대예요"
+        RoomErrorCodes.NEW_OWNER_REQUIRED -> "새 방장을 골라야 나갈 수 있어요"
         // 서버의 message는 개발자용이라 화면에 그대로 띄우지 않아요(api-dto ErrorResponse)
         else -> if (ex.code.startsWith("HTTP_5")) "잠시 후 다시 시도해 주세요" else "문제가 생겼어요. 잠시 후 다시 시도해 주세요"
     }
