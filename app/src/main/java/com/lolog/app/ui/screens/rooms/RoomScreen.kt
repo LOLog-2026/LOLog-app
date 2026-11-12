@@ -179,7 +179,8 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
     fun remove(post: RoomPost, onDone: () -> Unit) = act("방에서 내렸어요") { rooms.removePost(post.id); onDone() }
     fun toggleLike(post: RoomPost) = act { rooms.toggleLike(post.id) }
 
-    fun send(postId: Long?, text: String, onSent: () -> Unit) {
+    /** [onPostGone]: 댓글을 달 만화가 방에서 내려졌음(ROOM_POST_NOT_FOUND). 띠는 지금 문구 그대로 */
+    fun send(postId: Long?, text: String, onPostGone: () -> Unit = {}, onSent: () -> Unit) {
         if (text.isBlank() || _state.value.sending) return
         viewModelScope.launch {
             _state.update { it.copy(sending = true) }
@@ -189,6 +190,11 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
                 _state.update { it.copy(sending = false) }
                 onSent()
             } catch (e: Throwable) {
+                if ((e as? LologException)?.code == RoomErrorCodes.ROOM_POST_NOT_FOUND) {
+                    onPostGone()
+                    // 내려진 만화가 격자에 남지 않게 만화·대화를 다시 받아요
+                    runCatching { refresh() }
+                }
                 fail(e)
             }
         }
@@ -363,6 +369,9 @@ fun RoomScreen(
     var zoom by remember { mutableStateOf<RoomPost?>(null) }
     var pressed by remember { mutableStateOf<Pressed?>(null) }
     var replyTo by remember { mutableStateOf<RoomPost?>(null) }
+    // 댓글 창을 연 만화. 오류 띠는 창 위에 보이도록 창 안 띠로 띄워요
+    var commentPost by remember { mutableStateOf<RoomPost?>(null) }
+    val sheetSnackbar = remember { SnackbarHostState() }
     var menu by remember { mutableStateOf(false) }
     var members by remember { mutableStateOf(false) }
     var askLeave by remember { mutableStateOf(false) }
@@ -382,7 +391,9 @@ fun RoomScreen(
     LaunchedEffect(state.pickOwner) { if (state.pickOwner) { askLeave = false; pickOwner = true; vm.ownerPicked() } }
     // 초대를 보내고 돌아오면 기다리는 초대가 바뀌어서 방을 다시 받아요
     LaunchedEffect(message) { message?.let { onMessageShown(); vm.reloadRoom(); snackbar.showSnackbar(it) } }
-    LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
+    LaunchedEffect(state.snackbar) {
+        state.snackbar?.let { (if (commentPost != null) sheetSnackbar else snackbar).showSnackbar(it); vm.toast(null) }
+    }
     LaunchedEffect(tab) { if (tab == 2) vm.chatSeen() }
     BackHandler(enabled = pressed != null) { pressed = null }
 
@@ -479,7 +490,8 @@ fun RoomScreen(
                     room = r, post = post, bounds = pr.bounds,
                     onDismiss = { pressed = null },
                     onLike = { pressed = null; vm.toggleLike(post) },
-                    onComment = { pressed = null; replyTo = post; tab = 2 },
+                    // 대화 탭으로 넘기지 않고 이 만화 댓글 창을 열어요
+                    onComment = { pressed = null; commentPost = post },
                     onSave = { pressed = null; save(post) },
                     onZoom = { pressed = null; zoom = post },
                     onRemove = { pressed = null; askRemove = post },
@@ -491,7 +503,29 @@ fun RoomScreen(
     // 22 누르면 크게
     zoom?.let { z ->
         val post = latest(z) ?: z
-        room?.let { r -> ComicPopup(r, post, onLike = { vm.toggleLike(post) }, onClose = { zoom = null }) }
+        room?.let { r -> ComicPopup(r, post, onLike = { vm.toggleLike(post) }, onComments = { commentPost = post }, onClose = { zoom = null }) }
+    }
+
+    // 만화 댓글 창(팝업 위). 받아 둔 방 대화에서 이 만화 댓글만 골라 보여 줘요
+    commentPost?.let { c ->
+        val post = latest(c) ?: c
+        room?.let { r ->
+            RoomCommentSheet(
+                room = r,
+                post = post,
+                messages = state.messages,
+                hasOlder = state.olderCursor != null,
+                loadingOlder = state.loadingOlder,
+                onLoadOlder = vm::loadOlder,
+                sending = state.sending,
+                onSend = { text, done ->
+                    // 만화가 내려졌으면 창과 팝업을 닫아요
+                    vm.send(post.id, text, onPostGone = { commentPost = null; zoom = null }) { done() }
+                },
+                snackbar = sheetSnackbar,
+                onDismiss = { commentPost = null },
+            )
+        }
     }
 
     if (picking) {

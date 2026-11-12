@@ -1,6 +1,7 @@
 package com.lolog.app.ui.screens.rooms
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -56,11 +57,11 @@ private fun Modifier.swallowClicks(): Modifier =
 // ── 22 누르면 크게 ──────────────────────────────────
 
 /**
- * 어두운 바탕 위 흰 카드: 올린 사람·제목·시간, 4컷 세로 그림(카드 안에서 스크롤), 하트·댓글 수.
- * 그림은 내 만화 화면과 같은 ComicImage. 바깥을 누르거나 ✕로 닫아요
+ * 어두운 바탕 위 흰 카드: 올린 사람·제목·시간, 4컷 세로 그림(카드 안에서 스크롤), 하트·"댓글 n" 알약.
+ * 그림은 내 만화 화면과 같은 ComicImage. "댓글 n"을 누르면 댓글 창([onComments]). 바깥을 누르거나 ✕로 닫아요
  */
 @Composable
-internal fun ComicPopup(room: Room, post: RoomPost, onLike: () -> Unit, onClose: () -> Unit) {
+internal fun ComicPopup(room: Room, post: RoomPost, onLike: () -> Unit, onComments: () -> Unit, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize()
@@ -95,10 +96,17 @@ internal fun ComicPopup(room: Room, post: RoomPost, onLike: () -> Unit, onClose:
                         Row(Modifier.clip(LologShape.pill).clickable(onClick = onLike).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                             LikeCount(post, 18, 14)
                         }
-                        Spacer(Modifier.width(10.dp))
-                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = LologColors.Muted, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("${post.commentCount}", fontSize = 14.sp, color = LologColors.Muted)
+                        Spacer(Modifier.width(8.dp))
+                        // 누를 수 있는 "댓글 n" 알약 → 이 만화 댓글 창
+                        Row(
+                            Modifier.clip(LologShape.pill).border(1.dp, LologColors.Line, LologShape.pill)
+                                .clickable(onClick = onComments).padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.ChatBubbleOutline, null, tint = LologColors.Ink, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("댓글 ${post.commentCount}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
+                        }
                         Spacer(Modifier.weight(1f))
                         Text("아래로 내려 4컷 보기", fontSize = 12.sp, color = LologColors.Muted)
                     }
