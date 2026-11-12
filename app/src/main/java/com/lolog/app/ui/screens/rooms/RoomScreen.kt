@@ -452,7 +452,7 @@ fun RoomScreen(
                                 )
                             }
                             // 쇼츠 API는 명세 대기라 지금은 안내만 있는 임시 탭
-                            1 -> ShortsComingSoon("쇼츠가 생기면 이 방에도 올릴 수 있어요.")
+                            1 -> ShortsComingSoon("쇼츠는 아직 방에 올릴 수 없어요. 컨텐츠 › 미디어에서 볼 수 있어요.")
                             else -> RoomChat(
                                 room = room,
                                 messages = state.messages,
