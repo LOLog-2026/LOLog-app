@@ -511,13 +511,23 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     }
     override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
+    override suspend fun requestByUserId(userId: Long): FriendRequest = lock.withLock { net(); friendBook.sendTo(userId, roomPeople(userId)) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =
         lock.withLock { net(150); friendBook.requests(direction) }
     override suspend fun acceptFriendRequest(id: Long): Friend = lock.withLock { net(); friendBook.accept(id) }
     override suspend fun deleteFriendRequest(id: Long) = lock.withLock { net(); friendBook.deleteRequest(id) }
     override suspend fun friends(): List<Friend> = lock.withLock { net(); friendBook.friends() }
     override suspend fun removeFriend(userId: Long) = lock.withLock { net(); friendBook.removeFriend(userId) }
-    override suspend fun block(userId: Long) = lock.withLock { net(); friendBook.block(userId) }
+    override suspend fun block(userId: Long, hideInRooms: Boolean) =
+        lock.withLock { net(); friendBook.block(userId, hideInRooms, roomPeople(userId)) }
+    override suspend fun setHideInRooms(userId: Long, hide: Boolean) = lock.withLock { net(); friendBook.setHideInRooms(userId, hide) }
+
+    /** 지금 나와 같은 방에 있는 사람의 닉네임(없으면 null). MockRooms.of가 채워요 */
+    internal var roomPeople: (Long) -> String? = { null }
+
+    /** 방 목업이 멤버의 friendState·숨긴 글을 맞추려고 불러요(네트워크 흉내 없음) */
+    internal suspend fun friendStateOf(userId: Long): String = lock.withLock { friendBook.friendState(userId) }
+    internal suspend fun hiddenInRooms(): Set<Long> = lock.withLock { friendBook.hiddenInRooms() }
     override suspend fun blocks(): List<BlockedUser> = lock.withLock { net(150); friendBook.blocks() }
     override suspend fun unblock(userId: Long) = lock.withLock { net(); friendBook.unblock(userId) }
 

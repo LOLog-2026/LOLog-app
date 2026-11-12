@@ -226,7 +226,7 @@ object ApiMapper {
 
     fun FriendItem.toModel() = Friend(userId, nickname, friendCode, friendsSince, character?.thumbnailUrl?.ifBlank { null })
 
-    fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt)
+    fun BlockItem.toModel() = BlockedUser(userId, nickname?.ifBlank { null }, friendCode, blockedAt, hideInRooms)
 
     // ── 알림함 ──
 

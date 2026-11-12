@@ -2,6 +2,7 @@ package com.lolog.app.ui.screens.rooms
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -88,5 +89,47 @@ internal fun AvatarStack(members: List<RoomMember>, size: Dp = 26.dp, max: Int =
                 contentAlignment = Alignment.Center,
             ) { MemberAvatar(m, index, size - 2.dp) }
         }
+    }
+}
+
+/** 멤버 시트 오른쪽 친구 버튼. [enabled]가 false면 꺼진 버튼, [accent]면 코랄 바탕 */
+internal data class FriendButton(val label: String, val enabled: Boolean, val accent: Boolean = false)
+
+/**
+ * friendState → 친구 버튼(rooms.md "방에서 친구 요청"). 차단한 사람(BLOCKED)·나(ME)·모르는 값은 버튼 없음
+ */
+internal fun friendButton(friendState: String?): FriendButton? = when (friendState) {
+    "FRIEND" -> FriendButton("친구", enabled = false)
+    "REQUESTED" -> FriendButton("요청 보냄", enabled = false)
+    "RECEIVED" -> FriendButton("수락", enabled = true, accent = true)
+    "NONE" -> FriendButton("친구 추가", enabled = true)
+    else -> null
+}
+
+/** 친구 버튼 그리기 */
+@Composable
+internal fun FriendStateButton(button: FriendButton, busy: Boolean, onClick: () -> Unit) {
+    val shape = com.lolog.app.ui.theme.LologShape.pill
+    Box(
+        Modifier.clip(shape)
+            .then(
+                when {
+                    !button.enabled -> Modifier.background(LologColors.Canvas)
+                    button.accent -> Modifier.background(LologColors.Accent)
+                    else -> Modifier.border(1.dp, LologColors.Line, shape)
+                },
+            )
+            .then(if (button.enabled && !busy) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            button.label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            color = when {
+                !button.enabled -> LologColors.Muted
+                button.accent -> LologColors.Paper
+                else -> LologColors.Ink
+            },
+        )
     }
 }

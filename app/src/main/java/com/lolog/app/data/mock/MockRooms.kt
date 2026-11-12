@@ -34,6 +34,8 @@ class MockRooms(
     private val netMs: Long = 300,
     /** 글을 숨길 사람(회원 ID). 기본은 목업 차단 목록의 태오님(MockFriends와 같음) */
     private val hiddenAuthors: suspend () -> Set<Long> = { setOf(TAEO_ID) },
+    /** 멤버와 나의 친구 관계. null이면 목업 방에 적어 둔 값 그대로 */
+    private val friendState: suspend (Long) -> String? = { null },
 ) : RoomRepository {
 
     /** 방에 올릴 내 만화 */
@@ -105,9 +107,13 @@ class MockRooms(
         if (i >= 0) posts[i] = p
     }
 
+    /** 멤버의 friendState를 지금 친구 관계로 맞춰요 */
+    private suspend fun Room.withFriendState(): Room =
+        copy(members = members.map { m -> friendState(m.userId)?.let { m.copy(friendState = it) } ?: m })
+
     override suspend fun rooms(): List<Room> = lock.withLock {
         net()
-        rooms.sortedByDescending { OffsetDateTime.parse(it.lastActivityAt) }.map { it.toRoom() }
+        rooms.sortedByDescending { OffsetDateTime.parse(it.lastActivityAt) }.map { it.toRoom().withFriendState() }
     }
 
     override suspend fun createRoom(name: String, memberIds: List<Long>): Room = lock.withLock {
@@ -127,7 +133,11 @@ class MockRooms(
         room.toRoom()
     }
 
-    override suspend fun room(id: Long): Room = lock.withLock { net(); findRoom(id).toRoom() }
+    override suspend fun room(id: Long): Room = lock.withLock { net(); findRoom(id).toRoom().withFriendState() }
+
+    /** 지금 나와 같은 방에 있는 사람의 닉네임(방 멤버에게 친구 요청·차단할 때 목업 친구 저장소가 찾아요) */
+    internal fun memberName(userId: Long): String? =
+        rooms.toList().firstNotNullOfOrNull { r -> r.members.toList().firstOrNull { it.userId == userId && !it.isMe }?.nickname }
 
     override suspend fun posts(roomId: Long): List<RoomPost> = lock.withLock { net(); findRoom(roomId).posts.toList() }
 
@@ -415,7 +425,7 @@ class MockRooms(
         /** 내가 차단하고 방에서 글을 숨기는 사람(MockFriends 차단 목록의 태오) */
         const val TAEO_ID = 31L
 
-        /** 앱에서 쓰는 목업: 내 만화와 친구 목록은 목업 저장소에서 찾아요 */
+        /** 앱에서 쓰는 목업: 내 만화·친구 목록·친구 관계·차단(숨긴 글)은 목업 저장소에서 찾아요 */
         fun of(repo: LologRepository) = MockRooms(
             myComic = { id ->
                 val c = repo.comic(id)
@@ -426,6 +436,8 @@ class MockRooms(
                 }
             },
             friends = { repo.friends() },
-        )
+            hiddenAuthors = { (repo as? MockLologRepository)?.hiddenInRooms() ?: setOf(TAEO_ID) },
+            friendState = { id -> (repo as? MockLologRepository)?.friendStateOf(id) },
+        ).also { rooms -> (repo as? MockLologRepository)?.roomPeople = rooms::memberName }
     }
 }

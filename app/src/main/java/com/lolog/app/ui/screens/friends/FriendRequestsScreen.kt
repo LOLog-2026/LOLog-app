@@ -27,6 +27,8 @@ import com.lolog.app.data.model.FriendRequest
 import com.lolog.app.data.model.FriendRequestDirection
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.ui.screens.rooms.RoomBlockHost
+import com.lolog.app.ui.screens.rooms.RoomBlockViewModel
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -46,7 +48,6 @@ class FriendRequestsViewModel(private val repo: LologRepository) : ViewModel() {
         val received: List<FriendRequest> = emptyList(),
         val sent: List<FriendRequest> = emptyList(),
         val busy: Set<Long> = emptySet(), // 처리 중인 요청 id
-        val blocking: Boolean = false,
         val snackbar: String? = null,
     )
 
@@ -96,25 +97,16 @@ class FriendRequestsViewModel(private val repo: LologRepository) : ViewModel() {
         }
     }
 
-    fun block(r: FriendRequest, onDone: () -> Unit) {
-        if (_state.value.blocking) return
-        viewModelScope.launch {
-            _state.update { it.copy(blocking = true) }
-            try {
-                repo.block(r.user.userId)
-                _state.update { s ->
-                    s.copy(
-                        blocking = false,
-                        received = s.received.filterNot { it.user.userId == r.user.userId },
-                        sent = s.sent.filterNot { it.user.userId == r.user.userId },
-                    )
-                }
-            } catch (e: Throwable) {
-                _state.update { it.copy(blocking = false, snackbar = errorText(e)) }
-            }
-            onDone()
-        }
+    /** 차단이 끝났어요. 그 사람과 오간 요청을 빼요 */
+    fun blocked(userId: Long, message: String?) = _state.update { s ->
+        s.copy(
+            received = s.received.filterNot { it.user.userId == userId },
+            sent = s.sent.filterNot { it.user.userId == userId },
+            snackbar = message ?: s.snackbar,
+        )
     }
+
+    fun toast(msg: String) = _state.update { it.copy(snackbar = msg) }
 
     fun snackbarShown() = _state.update { it.copy(snackbar = null) }
 }
@@ -125,6 +117,10 @@ class FriendRequestsViewModel(private val repo: LologRepository) : ViewModel() {
 fun FriendRequestsScreen(onBack: () -> Unit) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { FriendRequestsViewModel(repo) }
+    // 받은 요청 차단. 같은 방에 있으면 나가기·숨기기·그대로 보기를 물어요
+    val roomRepo = LocalContainer.current.rooms
+    val blockVm = viewModel(key = "requestBlock") { RoomBlockViewModel(roomRepo, repo) }
+    val blockState by blockVm.state.collectAsState()
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var direction by rememberSaveable { mutableStateOf(FriendRequestDirection.RECEIVED) }
@@ -194,11 +190,13 @@ fun FriendRequestsScreen(onBack: () -> Unit) {
             body = "요청이 지워지고, ${n}님은 내 코드로 요청을 보낼 수 없어요. 차단한 건 ${n}님에게 알리지 않아요.",
             confirmText = "차단하기",
             danger = true,
-            loading = state.blocking,
-            onConfirm = { vm.block(r) { confirmBlock = null } },
-            onDismiss = { if (!state.blocking) confirmBlock = null },
+            loading = blockState.busy,
+            onConfirm = { confirmBlock = null; blockVm.start(r.user.userId, r.user.nickname) },
+            onDismiss = { if (!blockState.busy) confirmBlock = null },
         )
     } }
+
+    RoomBlockHost(blockVm, onDone = { vm.blocked(it.userId, it.message) }, onSnackbar = vm::toast)
 }
 
 /** 받은 요청: 그림 · 닉네임 · "코드 · 3분 전" · [수락][거절] ⋯ / 보낸 요청: ... · [취소] */

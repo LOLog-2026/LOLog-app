@@ -92,6 +92,8 @@ interface MainApi {
     @DELETE("api/friends/{userId}") suspend fun removeFriend(@Path("userId") userId: Long)
     /** 204 */
     @POST("api/blocks") suspend fun block(@Body body: BlockCreate)
+    // 방에서 그 사람 글 숨기기 바꾸기(friends.md 2장, 초안 · 서버 lolog-api #61)
+    @PATCH("api/blocks/{userId}") suspend fun updateBlock(@Path("userId") userId: Long, @Body body: BlockUpdate)
     @GET("api/blocks") suspend fun blocks(): BlockListResponse
     /** 204. 차단한 적 없어도 204 */
     @DELETE("api/blocks/{userId}") suspend fun unblock(@Path("userId") userId: Long)

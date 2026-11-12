@@ -44,6 +44,7 @@ object ErrorCodes {
     const val FRIEND_REQUEST_EXISTS = "FRIEND_REQUEST_EXISTS"       // 409 이미 보낸 요청이 있음
     const val FRIEND_LIMIT = "FRIEND_LIMIT"                         // 409 나나 상대의 친구가 이미 100명
     const val USER_BLOCKED = "USER_BLOCKED"                         // 409 내가 차단한 사람에게 요청
+    const val UNFRIEND_FIRST = "UNFRIEND_FIRST"                     // 409 차단: 친구인 사람. 먼저 친구를 끊어요(초안)
     // 화자 그림 (LOLog-docs spec/characters.md 4장)
     const val UNKNOWN_CHARACTER = "UNKNOWN_CHARACTER"     // 400 없는 기본 화자 id, 나도 친구도 아닌 회원 ID
     const val DUPLICATE_CHARACTER = "DUPLICATE_CHARACTER" // 400 한 카드에서 같은 그림을 두 화자에 붙임
@@ -373,8 +374,14 @@ data class FriendRequest(
     val createdAt: String,
 )
 
-/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null */
-data class BlockedUser(val userId: Long, val nickname: String?, val friendCode: String, val blockedAt: String)
+/** 차단한 사람. 탈퇴 등으로 닉네임이 없으면 null. hideInRooms는 같은 방에서 그 사람 글을 "숨긴 글"로 보일지(초안) */
+data class BlockedUser(
+    val userId: Long,
+    val nickname: String?,
+    val friendCode: String,
+    val blockedAt: String,
+    val hideInRooms: Boolean = false,
+)
 
 // ── 푸시 (api-spec.md 푸시) ────────────────────────────
 

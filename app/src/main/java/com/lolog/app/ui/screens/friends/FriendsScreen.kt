@@ -42,6 +42,8 @@ import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.screens.rooms.Features
+import com.lolog.app.ui.screens.rooms.RoomBlockHost
+import com.lolog.app.ui.screens.rooms.RoomBlockViewModel
 import com.lolog.app.ui.screens.rooms.RoomListScreen
 import com.lolog.app.ui.screens.start.LabeledField
 import com.lolog.app.ui.theme.LologColors
@@ -106,13 +108,13 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
         }
     }
 
-    /** 친구 끊기·차단하기. 끝나면 목록에서 빼요 */
-    fun remove(friend: Friend, block: Boolean, onDone: () -> Unit) {
+    /** 친구 끊기. 끝나면 목록에서 빼요(차단은 RoomBlockViewModel이 끊기 → 차단 순서로 해요) */
+    fun unfriend(friend: Friend, onDone: () -> Unit) {
         if (_state.value.busy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                if (block) repo.block(friend.userId) else repo.removeFriend(friend.userId)
+                repo.removeFriend(friend.userId)
                 _state.update { s -> s.copy(busy = false, friends = s.friends.filterNot { it.userId == friend.userId }) }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, snackbar = errorText(e)) }
@@ -120,6 +122,12 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
             onDone()
         }
     }
+
+    /** 차단이 끝났어요. 목록에서 빼고, 띄울 문구가 있으면 띄워요 */
+    fun blocked(userId: Long, message: String?) =
+        _state.update { s -> s.copy(friends = s.friends.filterNot { it.userId == userId }, snackbar = message ?: s.snackbar) }
+
+    fun toast(msg: String) = _state.update { it.copy(snackbar = msg) }
 
     fun snackbarShown() = _state.update { it.copy(snackbar = null) }
 }
@@ -153,6 +161,10 @@ fun FriendsScreen(
     val repo = LocalContainer.current.repository
     val vm = viewModel { FriendsViewModel(repo) }
     val state by vm.state.collectAsState()
+    // 친구 끊기 → 차단. 같은 방에 있으면 나가기·숨기기·그대로 보기를 물어요
+    val roomRepo = LocalContainer.current.rooms
+    val blockVm = viewModel(key = "friendBlock") { RoomBlockViewModel(roomRepo, repo) }
+    val blockState by blockVm.state.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbar = remember { SnackbarHostState() }
@@ -341,11 +353,21 @@ fun FriendsScreen(
             },
             confirmText = if (block) "차단하기" else "친구 끊기",
             danger = true,
-            loading = state.busy,
-            onConfirm = { vm.remove(f, block) { confirm = null } },
-            onDismiss = { if (!state.busy) confirm = null },
+            loading = state.busy || blockState.busy,
+            onConfirm = {
+                if (block) {
+                    // 친구는 끊어야 차단할 수 있어요(UNFRIEND_FIRST). 같은 방이 있으면 고른 뒤에 끊고 차단해요
+                    confirm = null
+                    blockVm.start(f.userId, f.nickname) { repo.removeFriend(f.userId) }
+                } else {
+                    vm.unfriend(f) { confirm = null }
+                }
+            },
+            onDismiss = { if (!state.busy && !blockState.busy) confirm = null },
         )
     } }
+
+    RoomBlockHost(blockVm, onDone = { vm.blocked(it.userId, it.message) }, onSnackbar = vm::toast)
 }
 
 /** 맨 위 상자: 닉네임이 없으면 입력 칸, 있으면 내 닉네임과 친구 코드 */

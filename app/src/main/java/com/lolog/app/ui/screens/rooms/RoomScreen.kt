@@ -48,6 +48,7 @@ import com.lolog.app.data.repo.RoomRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.screens.friends.SheetRow
+import com.lolog.app.ui.screens.friends.USER_BLOCKED_TEXT
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.util.ComicExport
@@ -247,6 +248,47 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         onDone()
     }
 
+    // ── 방에서 친구 요청 ──
+
+    /**
+     * "친구 추가"·"수락" 둘 다 userId로 요청을 보내요(상대가 먼저 보냈으면 바로 친구).
+     * 버튼부터 "요청 보냄"·"친구"로 바꾸고 방을 다시 받아요
+     */
+    fun addFriend(member: RoomMember) = busy {
+        try {
+            val r = repo.requestByUserId(member.userId)
+            val friends = r.status == FriendRequestStatus.ACCEPTED
+            val next = if (friends) "FRIEND" else "REQUESTED"
+            _state.update { s ->
+                s.copy(
+                    busy = false,
+                    room = s.room?.let { room -> room.copy(members = room.members.map { if (it.userId == member.userId) it.copy(friendState = next) else it }) },
+                    snackbar = if (friends) "친구가 됐어요" else "친구 요청을 보냈어요",
+                )
+            }
+        } catch (e: Throwable) {
+            when ((e as? LologException)?.code) {
+                ErrorCodes.USER_BLOCKED -> _state.update { it.copy(busy = false, snackbar = USER_BLOCKED_TEXT) }
+                // 방을 나간 사람
+                ErrorCodes.FRIEND_CODE_NOT_FOUND -> _state.update { it.copy(busy = false, snackbar = "지금 이 방에 없는 사람이에요") }
+                ErrorCodes.PROFILE_REQUIRED -> _state.update { it.copy(busy = false, snackbar = "닉네임을 먼저 정해 주세요") }
+                else -> fail(e)
+            }
+        }
+        reloadRoom()
+    }
+
+    /** 차단 뒤 이 방에 남았으면 멤버와 대화(숨긴 글)를 다시 받아요 */
+    fun afterBlock(message: String?) = viewModelScope.launch {
+        try {
+            val room = rooms.room(roomId)
+            refresh()
+            _state.update { it.copy(room = room, snackbar = message) }
+        } catch (e: Throwable) {
+            fail(e)
+        }
+    }
+
     fun toast(msg: String?) = _state.update { it.copy(snackbar = msg) }
 }
 
@@ -272,6 +314,8 @@ fun RoomScreen(
     val roomRepo = container.rooms ?: return
     val vm = viewModel { RoomViewModel(roomRepo, container.repository, roomId) }
     val state by vm.state.collectAsState()
+    val blockVm = viewModel(key = "roomBlock") { RoomBlockViewModel(roomRepo, container.repository) }
+    val blockState by blockVm.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -444,23 +488,43 @@ fun RoomScreen(
                 room,
                 busy = state.busy,
                 onMember = { members = false; memberFor = it },
+                onFriend = { vm.addFriend(it) },
                 onCancelInvite = { vm.cancelInvite(it) },
                 onInvite = { members = false; onInvite() },
             )
         }
     }
 
-    // 6 멤버 누르기: 방장이고 남이면 "방에서 내보내기"
-    memberFor?.let { m ->
+    // 6 멤버 누르기: 친구 버튼, 방장이고 남이면 "방에서 내보내기", 나·차단한 사람이 아니면 "차단하기"
+    memberFor?.let { picked ->
+        // 친구 요청 뒤 버튼이 바뀌도록 최신 멤버로 그려요
+        val m = room?.members?.firstOrNull { it.userId == picked.userId } ?: picked
         LologSheet(onDismiss = { memberFor = null }) {
             MemberActionSheet(
                 member = m,
                 index = room?.memberIndex(m) ?: 0,
+                busy = state.busy || blockState.busy,
                 canKick = room?.isMineOwner == true && !m.isMe,
+                onFriend = { vm.addFriend(m) },
                 onKick = { memberFor = null; askKick = m },
+                onBlock = {
+                    if (m.friendState == "FRIEND") {
+                        vm.toast("친구를 먼저 끊어야 차단할 수 있어요")
+                    } else {
+                        memberFor = null
+                        blockVm.start(m.userId, m.nickname)
+                    }
+                },
             )
         }
     }
+
+    // 11 같은 방 사람 차단: 나가기·숨기기·그대로 보기. 이 방에서 나왔으면 방 목록으로
+    RoomBlockHost(
+        blockVm,
+        onDone = { done -> if (roomId in done.leftRooms) onLeft(done.message ?: "방에서 나왔어요") else vm.afterBlock(done.message) },
+        onSnackbar = { vm.toast(it) },
+    )
 
     askKick?.let { m ->
         LologDialog(
@@ -543,6 +607,7 @@ private fun MemberSheet(
     room: Room,
     busy: Boolean,
     onMember: (RoomMember) -> Unit,
+    onFriend: (RoomMember) -> Unit,
     onCancelInvite: (RoomInvite) -> Unit,
     onInvite: () -> Unit,
 ) {
@@ -573,6 +638,7 @@ private fun MemberSheet(
                     }
                     if (m.suspended) Text(SUSPENDED, fontSize = 12.sp, color = LologColors.Muted)
                 }
+                friendButton(m.friendState)?.let { FriendStateButton(it, busy) { onFriend(m) } }
             }
         }
         if (owner) {
@@ -602,7 +668,15 @@ private const val KICK_NOTE = "올린 만화와 글은 \"나간 멤버\"로 남�
 
 /** 6 멤버 누르기: 얼굴·닉네임, 방장이고 남이면 빨간 "방에서 내보내기" */
 @Composable
-private fun MemberActionSheet(member: RoomMember, index: Int, canKick: Boolean, onKick: () -> Unit) {
+private fun MemberActionSheet(
+    member: RoomMember,
+    index: Int,
+    busy: Boolean,
+    canKick: Boolean,
+    onFriend: () -> Unit,
+    onKick: () -> Unit,
+    onBlock: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MemberAvatar(member, index, 52.dp)
@@ -612,6 +686,9 @@ private fun MemberActionSheet(member: RoomMember, index: Int, canKick: Boolean, 
                 if (member.suspended) Text(SUSPENDED, fontSize = 13.sp, color = LologColors.Muted)
             }
         }
+        friendButton(member.friendState)?.let { b ->
+            Row(Modifier.padding(top = 12.dp)) { FriendStateButton(b, busy, onFriend) }
+        }
         if (canKick) {
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
@@ -619,6 +696,14 @@ private fun MemberActionSheet(member: RoomMember, index: Int, canKick: Boolean, 
                 Text("방에서 내보내기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Rec)
                 Text(KICK_NOTE, fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 3.dp))
             }
+        }
+        // 나와 이미 차단한 사람에게는 안 보여요
+        if (!member.isMe && member.friendState != "BLOCKED") {
+            if (!canKick) {
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+            }
+            SheetRow("차단하기", LologColors.Rec, onBlock)
         }
     }
 }
@@ -655,7 +740,7 @@ private fun RenameDialog(current: String, loading: Boolean, onSave: (String) -> 
 
 /** 8 새 방장 고르기: 남은 멤버 중 한 명(첫 사람을 골라 둠). [취소][{닉네임}님에게 넘기고 나가기] */
 @Composable
-private fun PickOwnerSheet(room: Room, loading: Boolean, onLeave: (RoomMember) -> Unit, onDismiss: () -> Unit) {
+internal fun PickOwnerSheet(room: Room, loading: Boolean, onLeave: (RoomMember) -> Unit, onDismiss: () -> Unit) {
     val others = room.members.filter { !it.isMe }
     var picked by remember(room.id) { mutableStateOf(others.firstOrNull()?.userId) }
     val who = others.firstOrNull { it.userId == picked } ?: others.firstOrNull()

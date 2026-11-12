@@ -281,5 +281,23 @@ class MockRoomsTest {
         assertNull(hidden.post)
         assertTrue(r.room(school).members.first { it.userId == 14L }.suspended)
     }
+
+    @Test
+    fun 숨기기를_끄면_그_사람_글이_다시_보인다() = runBlocking {
+        val hidden = mutableSetOf(MockRooms.TAEO_ID)
+        val r = MockRooms(netMs = 0, hiddenAuthors = { hidden.toSet() })
+        assertTrue(r.messages(school).any { it.hidden })
+        hidden.clear()
+        assertFalse(r.messages(school).any { it.hidden })
+    }
+
+    @Test
+    fun 멤버_friendState는_친구_관계를_따른다() = runBlocking {
+        val r = MockRooms(netMs = 0, friendState = { id -> if (id == 51L) "FRIEND" else null })
+        val members = r.room(team).members
+        assertEquals("FRIEND", members.first { it.userId == 51L }.friendState)
+        assertEquals("RECEIVED", members.first { it.userId == 52L }.friendState) // 목업 값 그대로
+        assertEquals("ME", members.first { it.isMe }.friendState)
+    }
 }
 

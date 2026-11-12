@@ -93,14 +93,17 @@ class RemoteLologRepository(
     override suspend fun setProfileCharacterVoice(voice: String?) =
         call { api.setProfileCharacterVoice(ApiMapper.voiceBody(voice)) }
     override suspend fun sendFriendRequest(code: String) =
-        call { api.sendFriendRequest(FriendRequestCreate(code.trim().uppercase(Locale.ROOT))).toModel() }
+        call { api.sendFriendRequest(FriendRequestCreate(friendCode = code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =
         call { api.friendRequests(direction.query).requests.map { it.toModel() } }
     override suspend fun acceptFriendRequest(id: Long) = call { api.acceptFriendRequest(id).toModel() }
     override suspend fun deleteFriendRequest(id: Long) = call { api.deleteFriendRequest(id) }
     override suspend fun friends() = call { api.friends().friends.map { it.toModel() } }
     override suspend fun removeFriend(userId: Long) = call { api.removeFriend(userId) }
-    override suspend fun block(userId: Long) = call { api.block(BlockCreate(userId)) }
+    override suspend fun requestByUserId(userId: Long) =
+        call { api.sendFriendRequest(FriendRequestCreate(userId = userId)).toModel() }
+    override suspend fun block(userId: Long, hideInRooms: Boolean) = call { api.block(BlockCreate(userId, hideInRooms)) }
+    override suspend fun setHideInRooms(userId: Long, hide: Boolean) = call { api.updateBlock(userId, BlockUpdate(hide)) }
     override suspend fun blocks() = call { api.blocks().blocks.map { it.toModel() } }
     override suspend fun unblock(userId: Long) = call { api.unblock(userId) }
 
