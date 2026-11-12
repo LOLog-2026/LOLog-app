@@ -100,7 +100,10 @@ data class RoomInvite(
     val memberCount: Int? = null,
 )
 
-/** 방에 올린 만화 하나. mockLines는 목업 그림(mock://)을 그릴 대사라 실서버에서는 비어 있어요 */
+/**
+ * 방에 올린 만화 하나. mockLines는 목업 그림(mock://)을 그릴 대사라 실서버에서는 비어 있어요.
+ * hidden은 내가 숨기기로 한 차단한 사람이 올린 만화예요. 서버는 title·imageUrl을 null로 줘서 title은 빈 글자예요
+ */
 data class RoomPost(
     val id: Long,
     val roomId: Long,
@@ -113,6 +116,7 @@ data class RoomPost(
     val likedByMe: Boolean,
     val commentCount: Int,
     val mockLines: List<String> = emptyList(),
+    val hidden: Boolean = false,
 )
 
 /**

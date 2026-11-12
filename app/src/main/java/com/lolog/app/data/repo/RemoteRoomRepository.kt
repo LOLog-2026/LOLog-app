@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 import retrofit2.HttpException
 
 /**
- * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51 · 방장과 초대는 #59 · 방 관리와 나간 멤버는 #60, 둘 다 병합 전).
+ * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51 · 방장과 초대는 #59 · 방 관리와 나간 멤버는 #60).
  * 서버 주소에는 방 ID가 필요한데 [RoomRepository]의 내리기·좋아요는 만화 ID만 받아서,
  * 받은 만화를 기억해 두고(어느 방인지, 내가 좋아요를 눌렀는지) 그걸로 주소와 PUT·DELETE를 골라요.
  */

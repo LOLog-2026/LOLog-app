@@ -2,6 +2,7 @@ package com.lolog.app.data
 
 import com.lolog.app.data.model.RoomMessage
 import com.lolog.app.data.remote.LologJson
+import com.lolog.app.data.remote.RoomActivityDto
 import com.lolog.app.data.remote.RoomItemDto
 import com.lolog.app.data.remote.RoomMapper
 import com.lolog.app.data.remote.RoomMapper.toModel
@@ -111,6 +112,45 @@ class RoomMapperTest {
         val unknown = list[4] as RoomMessage.Comment
         assertEquals("모르는 만화", unknown.post?.title) // 목록에 없으면 서버 요약으로
         assertNull((list[5] as RoomMessage.Comment).post)
+    }
+
+    @Test
+    fun `나간 멤버는 userId·nickname·thumbnailUrl이 null이어도 읽히고 친구 버튼이 없다`() {
+        val post = LologJson.decodeFromString(
+            RoomPostDto.serializer(),
+            """{"id":10,"roomId":1,"comicId":3,"title":"민트초코","imageUrl":"u",
+             "author":{"userId":null,"nickname":null,"thumbnailUrl":null,"isMe":false,"isOwner":false,"suspended":false,"friendState":null,"left":true},
+             "postedAt":"t","likeCount":0,"likedByMe":false,"commentCount":0}""",
+        ).toModel()
+        assertTrue(post.author.left)
+        assertEquals("나간 멤버", post.author.displayName)
+        assertNull(post.author.friendState)
+    }
+
+    @Test
+    fun `마지막 소식의 사람이 나갔으면 나간 멤버가`() {
+        assertEquals("나간 멤버가 만화를 올렸어요", RoomMapper.activityText(RoomActivityDto("POSTED", null, false, "t")))
+        assertEquals("나간 멤버가 만화를 좋아해요", RoomMapper.activityText(RoomActivityDto("LIKED", null, false, "t")))
+        assertEquals("나간 멤버 \"ㅋㅋ\"", RoomMapper.activityText(RoomActivityDto("COMMENTED", null, false, "t", "ㅋㅋ")))
+    }
+
+    @Test
+    fun `숨긴 만화는 title·imageUrl이 null이어도 읽히고 hidden`() {
+        val post = LologJson.decodeFromString(
+            RoomPostDto.serializer(),
+            """{"id":11,"roomId":1,"comicId":4,"title":null,"imageUrl":null,"author":{"userId":31,"nickname":"태오","isMe":false},
+             "postedAt":"t","likeCount":0,"likedByMe":false,"commentCount":0,"hidden":true}""",
+        ).toModel()
+        assertTrue(post.hidden)
+        assertEquals("", post.title)
+        assertNull(post.imageUrl)
+        // hidden이 없는 응답은 false
+        assertFalse(
+            LologJson.decodeFromString(
+                RoomPostDto.serializer(),
+                """{"id":12,"roomId":1,"comicId":5,"author":{"userId":2,"nickname":"준","isMe":false}}""",
+            ).toModel().hidden,
+        )
     }
 
     @Test

@@ -201,22 +201,21 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
     }
 
     /**
-     * 차단하면 요청에서 빠지고 차단 목록 맨 위로. 친구인 사람은 먼저 끊어야 해요(UNFRIEND_FIRST, 초안).
-     * 요청이 오간 사람, 끊은 친구, 같은 방 멤버([roomNickname])를 차단할 수 있어요. hideInRooms는 방에서 그 사람 글을 숨길지
+     * 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로(친구도 바로 차단돼요, friends.md 차단).
+     * 친구, 요청이 오간 사람, 끊은 친구, 같은 방 멤버([roomNickname])를 차단할 수 있어요. hideInRooms는 방에서 그 사람 글을 숨길지.
+     * 이미 차단한 사람이면 그대로 두고 hideInRooms도 바꾸지 않아요(friends.md 4장)
      */
     fun block(userId: Long, hideInRooms: Boolean = false, roomNickname: String? = null) {
         if (userId == MY_USER_ID) fail(ErrorCodes.CANNOT_FRIEND_SELF, "나는 차단할 수 없어요")
-        if (friendList.any { it.userId == userId }) fail(ErrorCodes.UNFRIEND_FIRST, "친구를 먼저 끊어 주세요")
-        val who = (received + sent).firstOrNull { it.user.userId == userId }?.let { it.user.nickname to it.user.friendCode }
+        if (blocked.any { it.userId == userId }) return
+        val who = friendList.firstOrNull { it.userId == userId }?.let { it.nickname to it.friendCode }
+            ?: (received + sent).firstOrNull { it.user.userId == userId }?.let { it.user.nickname to it.user.friendCode }
             ?: exFriends[userId]
             ?: roomNickname?.let { it to "R%07d".format(userId) }
-        if (who == null) {
-            if (blocked.any { it.userId == userId }) return
-            fail(ErrorCodes.USER_NOT_FOUND, "차단할 사람을 찾지 못했어요")
-        }
+        if (who == null) fail(ErrorCodes.USER_NOT_FOUND, "차단할 사람을 찾지 못했어요")
+        friendList.removeAll { it.userId == userId }
         received.removeAll { it.user.userId == userId }
         sent.removeAll { it.user.userId == userId }
-        blocked.removeAll { it.userId == userId }
         blocked.add(0, BlockedUser(userId, who.first, who.second, now(), hideInRooms))
     }
 

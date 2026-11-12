@@ -36,9 +36,12 @@ data class RoomMemberDto(
 @Serializable
 data class RoomRenameDto(val name: String)
 
-/** 마지막 소식. type CREATED·POSTED·LIKED·COMMENTED, text는 COMMENTED일 때 댓글 내용. 문장은 앱이 만들어요 */
+/**
+ * 마지막 소식. type CREATED·POSTED·LIKED·COMMENTED, text는 COMMENTED일 때 댓글 내용. 문장은 앱이 만들어요.
+ * 그 사람이 방을 나갔으면 nickname이 null이에요(rooms.md 6장)
+ */
 @Serializable
-data class RoomActivityDto(val type: String = "", val nickname: String = "", val isMe: Boolean = false, val at: String = "", val text: String? = null)
+data class RoomActivityDto(val type: String = "", val nickname: String? = null, val isMe: Boolean = false, val at: String = "", val text: String? = null)
 
 /** RoomItem. ownerId·invites는 초안이라 없으면 null·빈 배열. invites는 방장이 아니면 빈 배열 */
 @Serializable
@@ -81,19 +84,20 @@ data class RoomInviteListDto(val invites: List<RoomInviteDto> = emptyList())
 @Serializable
 data class RoomListDto(val rooms: List<RoomItemDto> = emptyList())
 
-/** RoomPost. imageUrl은 완성 이미지의 10분 서명 주소 */
+/** RoomPost. imageUrl은 완성 이미지의 10분 서명 주소. hidden(숨긴 사람이 올린 만화)이면 title·imageUrl이 null(rooms.md 6장) */
 @Serializable
 data class RoomPostDto(
     val id: Long,
     val roomId: Long,
     val comicId: Long,
-    val title: String = "",
+    val title: String? = null,
     val imageUrl: String? = null,
     val author: RoomMemberDto,
     val postedAt: String = "",
     val likeCount: Int = 0,
     val likedByMe: Boolean = false,
     val commentCount: Int = 0,
+    val hidden: Boolean = false,
 )
 
 @Serializable

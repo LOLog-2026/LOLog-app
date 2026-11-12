@@ -90,7 +90,8 @@ internal fun RoomChat(
                         content = {
                             Column {
                                 m.post?.let { p ->
-                                    Caption(p, Modifier.clickable { onCaption(p) }.padding(bottom = 6.dp))
+                                    // 숨긴 만화 캡션은 눌러도 크게 보지 않아요
+                                    Caption(p, Modifier.then(if (p.hidden) Modifier else Modifier.clickable { onCaption(p) }).padding(bottom = 6.dp))
                                 }
                                 Text(m.text, fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Ink)
                             }
@@ -160,11 +161,11 @@ private fun Caption(post: RoomPost, modifier: Modifier = Modifier) {
         modifier.widthIn(max = 200.dp).clip(RoundedCornerShape(10.dp)).background(LologColors.Paper).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ComicImage(post.imageUrl, post.mockLines, Modifier.size(36.dp), small = true)
+        if (post.hidden) GrayDot("·", 36.dp) else ComicImage(post.imageUrl, post.mockLines, Modifier.size(36.dp), small = true)
         Spacer(Modifier.width(8.dp))
         Column {
-            Text(ownerLabel(post), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
-            Text(post.title, fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (post.hidden) "숨긴 글" else ownerLabel(post), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+            if (!post.hidden) Text(post.title, fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

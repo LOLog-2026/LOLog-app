@@ -139,7 +139,14 @@ class MockRooms(
     internal fun memberName(userId: Long): String? =
         rooms.toList().firstNotNullOfOrNull { r -> r.members.toList().firstOrNull { it.userId == userId && !it.isMe }?.nickname }
 
-    override suspend fun posts(roomId: Long): List<RoomPost> = lock.withLock { net(); findRoom(roomId).posts.toList() }
+    override suspend fun posts(roomId: Long): List<RoomPost> = lock.withLock {
+        net()
+        val hide = hiddenAuthors()
+        // 숨긴 사람이 올린 만화는 제목·그림 없이(서버처럼)
+        findRoom(roomId).posts.map { p ->
+            if (p.author.userId in hide && !p.author.left) p.copy(title = "", imageUrl = null, mockLines = emptyList(), hidden = true) else p
+        }
+    }
 
     override suspend fun postComic(roomId: Long, comicId: Long): RoomPost = lock.withLock {
         net()
@@ -387,7 +394,8 @@ class MockRooms(
         // 고등학교 동창(시안 10): 정지된 계정(도윤), 숨긴 글(태오), 나간 멤버의 말풍선
         val school = RoomData(2, "고등학교 동창", mutableListOf(ME, haeun, doyun, taeo, jia), "하은님 \"ㅋㅋㅋ 이거 나잖아\"", ago(60), 5, ownerId = haeun.userId)
         val taxi = RoomPost(111, 2, 9_011, "택시 기사님의 인생 상담", "mock://comic/9011", doyun, ago(90), 1, false, 1, lines[7].orEmpty())
-        school.posts += taxi
+        // 태오님(숨김)이 올린 만화: 격자에서 "숨긴 글" 칸
+        school.posts += listOf(taxi, RoomPost(112, 2, 9_012, "편의점 1+1의 비밀", "mock://comic/9012", taeo, ago(60 * 4), 0, false, 0, lines[8].orEmpty()))
         school.likes[111] = mutableSetOf(15L)
         school.messages += listOf(
             RoomMessage.Comment(209, ago(60 * 3), LEFT, "다들 잘 지내? 나 이번 달에 이사 가", null),

@@ -176,7 +176,7 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *    내 코드 → 400 CANNOT_FRIEND_SELF / 친구 코드 → 409 ALREADY_FRIENDS / 보낸 요청 코드 → 409 FRIEND_REQUEST_EXISTS
  *    H6NE2PQD → 409 USER_BLOCKED / 그 밖 8자 중 N으로 시작 → 새 보낸 요청(PENDING), 나머지 → 404 FRIEND_CODE_NOT_FOUND
  *    60초 안 11번째 → 429 TOO_MANY_REQUESTS / 닉네임 없이 보내기·수락 → 409 PROFILE_REQUIRED
- *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로
+ *  - 수락하면 친구 목록 맨 위로. 차단하면 친구·요청에서 빠지고 차단 목록 맨 위로(친구도 바로 차단돼요)
  *
  * 화자 그림 규칙(MockCharacters.kt, LOLog-docs spec/characters.md)
  *  - 기본 화자 24명(kid-f-01~middle-m-04). label은 명세 레포 characters.json 값 그대로,

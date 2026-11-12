@@ -38,12 +38,18 @@ object RoomMapper {
     /** 방 목록의 마지막 소식 문장. 예: "준님이 만화를 올렸어요", 내 댓글이면 나 "민트초코 최고" */
     fun activityText(a: RoomActivityDto?): String {
         if (a == null) return ""
-        val subject = if (a.isMe) "내가" else "${a.nickname}님이"
+        // 나간 멤버면 nickname이 null: "나간 멤버가 …"
+        val name = a.nickname?.ifBlank { null }
+        val subject = when {
+            a.isMe -> "내가"
+            name == null -> "${RoomMember.LEFT_NAME}가"
+            else -> "${name}님이"
+        }
         return when (a.type.uppercase()) {
-            "CREATED" -> createdText(a.isMe, a.nickname)
+            "CREATED" -> if (!a.isMe && name == null) "$subject 방을 만들었어요" else createdText(a.isMe, name.orEmpty())
             "POSTED" -> "$subject 만화를 올렸어요"
             "LIKED" -> "$subject 만화를 좋아해요"
-            "COMMENTED" -> "${if (a.isMe) "나" else a.nickname} \"${a.text.orEmpty()}\""
+            "COMMENTED" -> "${if (a.isMe) "나" else name ?: RoomMember.LEFT_NAME} \"${a.text.orEmpty()}\""
             else -> ""
         }
     }
@@ -62,9 +68,9 @@ object RoomMapper {
     )
 
     fun RoomPostDto.toModel() = RoomPost(
-        id = id, roomId = roomId, comicId = comicId, title = title, imageUrl = imageUrl?.ifBlank { null },
+        id = id, roomId = roomId, comicId = comicId, title = title.orEmpty(), imageUrl = imageUrl?.ifBlank { null },
         author = author.toModel(), postedAt = postedAt, likeCount = likeCount, likedByMe = likedByMe,
-        commentCount = commentCount,
+        commentCount = commentCount, hidden = hidden,
     )
 
     /**

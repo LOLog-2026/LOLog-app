@@ -81,7 +81,10 @@ interface LologRepository {
     /** 최근에 친구가 된 사람이 위 */
     suspend fun friends(): List<Friend>
     suspend fun removeFriend(userId: Long)
-    /** 친구인 사람은 UNFRIEND_FIRST(먼저 친구 끊기). [hideInRooms]면 같은 방에서 그 사람 글을 "숨긴 글"로 보여요(초안) */
+    /**
+     * 회원이면 누구나 차단할 수 있어요. 친구면 친구 관계도 같이 끊겨요(friends.md 차단).
+     * [hideInRooms]면 같은 방에서 그 사람 글을 "숨긴 글"로 보여요. 이미 차단한 사람이면 hideInRooms는 바뀌지 않아요(바꾸는 건 [setHideInRooms])
+     */
     suspend fun block(userId: Long, hideInRooms: Boolean = false)
     /** 최신순 */
     suspend fun blocks(): List<BlockedUser>

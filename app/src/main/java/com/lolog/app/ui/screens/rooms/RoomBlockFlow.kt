@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
  * 같은 방 사람 차단(시안 11, rooms.md "차단한 사람이 있는 방").
  * 내 방 목록에 그 사람이 들어 있는 방이 있으면 바로 차단하지 않고 나가기·숨기기·그대로 보기를 물어요. 없으면 지금처럼 바로 차단해요.
  * 나가기는 차단(hideInRooms = false) 뒤 그 방들에서 차례로 나가요(서버 한 번 호출이 아니에요). 내가 방장인 방은 방마다 새 방장을 골라요.
- * 멤버 시트, 친구 화면(친구 끊기 → 차단), 받은 요청 차단이 같이 써요.
+ * 친구도 바로 차단할 수 있고 POST /api/blocks 한 번에 친구 관계도 끊겨요(friends.md 차단).
+ * 멤버 시트, 친구 화면(끊기 → 차단), 받은 요청 차단이 같이 써요.
  */
 class RoomBlockViewModel(private val rooms: RoomRepository?, private val repo: LologRepository) : ViewModel() {
 
@@ -56,13 +57,11 @@ class RoomBlockViewModel(private val rooms: RoomRepository?, private val repo: L
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    /** 차단 전에 할 일(친구면 먼저 끊기). 고른 뒤에 불러서, 시트를 닫으면 아무것도 바뀌지 않아요 */
-    private var prepare: suspend () -> Unit = {}
     private val left = mutableSetOf<Long>()
 
-    fun start(userId: Long, nickname: String, prepare: suspend () -> Unit = {}) {
+    /** 차단 시작. 시트를 닫으면 아무것도 바뀌지 않아요 */
+    fun start(userId: Long, nickname: String) {
         if (_state.value.busy) return
-        this.prepare = prepare
         left.clear()
         viewModelScope.launch {
             _state.update { it.copy(busy = true, target = Target(userId, nickname)) }
@@ -78,7 +77,6 @@ class RoomBlockViewModel(private val rooms: RoomRepository?, private val repo: L
             }
             // 같이 있는 방이 없으면 지금처럼 바로 차단
             try {
-                prepare()
                 repo.block(userId)
                 _state.update { State(done = Done(userId, emptySet(), null)) }
             } catch (e: Throwable) {
@@ -93,7 +91,6 @@ class RoomBlockViewModel(private val rooms: RoomRepository?, private val repo: L
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                prepare()
                 repo.block(t.userId, hideInRooms = choice == Choice.HIDE)
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, snackbar = errorText(e)) }

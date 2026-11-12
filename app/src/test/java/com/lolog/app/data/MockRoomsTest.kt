@@ -280,6 +280,10 @@ class MockRoomsTest {
         assertEquals("", hidden.text)
         assertNull(hidden.post)
         assertTrue(r.room(school).members.first { it.userId == 14L }.suspended)
+        // 숨긴 사람이 올린 만화는 제목·그림 없이
+        val hiddenPost = r.posts(school).single { it.hidden }
+        assertEquals("", hiddenPost.title)
+        assertNull(hiddenPost.imageUrl)
     }
 
     @Test

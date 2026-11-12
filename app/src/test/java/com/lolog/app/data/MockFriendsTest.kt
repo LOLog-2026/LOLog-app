@@ -108,11 +108,10 @@ class MockFriendsTest {
     }
 
     @Test
-    fun 끊은_친구를_차단하면_요청에서_빠지고_차단_목록_맨_위로() {
+    fun 차단하면_친구와_요청에서_빠지고_차단_목록_맨_위로() {
         val f = ready()
         val friend = f.friends().first { it.friendCode == "K2PH7RTA" }
-        // 친구는 먼저 끊고 차단해요(UNFRIEND_FIRST)
-        f.removeFriend(friend.userId)
+        // 친구도 바로 차단돼요. 친구 관계도 같이 끊겨요
         f.block(friend.userId)
         assertFalse(f.friends().any { it.userId == friend.userId })
         assertEquals("K2PH7RTA", f.blocks().first().friendCode)
@@ -136,10 +135,18 @@ class MockFriendsTest {
     // ── 방 멤버 친구 요청·차단(rooms.md "방에서 친구 요청", friends.md "차단") ──
 
     @Test
-    fun 친구를_바로_차단하면_UNFRIEND_FIRST() {
+    fun 친구를_차단하면_친구_목록에서_빠지고_BLOCKED() {
         val f = ready()
-        assertError(ErrorCodes.UNFRIEND_FIRST) { f.block(11) }
-        assertTrue(f.friends().any { it.userId == 11L })
+        f.block(11)
+        assertFalse(f.friends().any { it.userId == 11L })
+        assertEquals("BLOCKED", f.friendState(11))
+    }
+
+    @Test
+    fun 이미_차단한_사람을_또_차단해도_숨기기는_그대로() {
+        val f = ready()
+        f.block(31, hideInRooms = false) // 태오님은 숨기기로 차단돼 있어요
+        assertTrue(f.blocks().first { it.userId == 31L }.hideInRooms)
     }
 
     @Test

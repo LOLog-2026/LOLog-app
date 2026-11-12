@@ -335,6 +335,7 @@ fun RoomScreen(
     var askDisband by remember { mutableStateOf(false) }
     var memberFor by remember { mutableStateOf<RoomMember?>(null) }
     var askKick by remember { mutableStateOf<RoomMember?>(null) }
+    var askBlockFriend by remember { mutableStateOf<RoomMember?>(null) }
     var askRemove by remember { mutableStateOf<RoomPost?>(null) }
     var picking by remember { mutableStateOf(false) }
     // 칸마다 화면 위치(꾹 누르면 그 자리에 칸을 다시 그려요). 그릴 때 쓰지 않아서 상태로 두지 않아요
@@ -510,15 +511,24 @@ fun RoomScreen(
                 onFriend = { vm.addFriend(m) },
                 onKick = { memberFor = null; askKick = m },
                 onBlock = {
-                    if (m.friendState == "FRIEND") {
-                        vm.toast("친구를 먼저 끊어야 차단할 수 있어요")
-                    } else {
-                        memberFor = null
-                        blockVm.start(m.userId, m.nickname)
-                    }
+                    memberFor = null
+                    // 친구면 친구 관계도 끊긴다고 먼저 물어요
+                    if (m.friendState == "FRIEND") askBlockFriend = m else blockVm.start(m.userId, m.nickname)
                 },
             )
         }
+    }
+
+    askBlockFriend?.let { m ->
+        LologDialog(
+            title = "${m.nickname}님을 차단할까요?",
+            body = "친구 관계도 끊겨요.",
+            confirmText = "차단하기",
+            danger = true,
+            loading = blockState.busy,
+            onConfirm = { askBlockFriend = null; blockVm.start(m.userId, m.nickname) },
+            onDismiss = { if (!blockState.busy) askBlockFriend = null },
+        )
     }
 
     // 11 같은 방 사람 차단: 나가기·숨기기·그대로 보기. 이 방에서 나왔으면 방 목록으로
@@ -814,6 +824,11 @@ private fun ComicGrid(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(posts, key = { it.id }) { p ->
+            // 숨긴 사람이 올린 만화는 회색 칸. 눌러도 크게 보기·꾹 누르기가 열리지 않아요
+            if (p.hidden) {
+                HiddenCell()
+                return@items
+            }
             ComicCell(
                 room, p,
                 modifier = Modifier.onGloballyPositioned { onPlaced(p.id, it.boundsInWindow()) },
@@ -856,6 +871,21 @@ internal fun ComicCell(
             Icon(Icons.Outlined.ChatBubbleOutline, null, tint = LologColors.Muted, modifier = Modifier.size(13.dp))
             Spacer(Modifier.width(2.dp))
             Text("${post.commentCount}", fontSize = 11.sp, color = LologColors.Muted)
+        }
+    }
+}
+
+/** 숨긴 만화 칸: 회색 바탕에 "숨긴 글" */
+@Composable
+private fun HiddenCell() {
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(0.72f).clip(RoundedCornerShape(14.dp)).background(LologColors.Canvas),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            GrayDot("·", 26.dp)
+            Spacer(Modifier.height(6.dp))
+            Text("숨긴 글", fontSize = 12.sp, color = LologColors.Muted)
         }
     }
 }

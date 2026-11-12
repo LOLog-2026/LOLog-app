@@ -108,7 +108,7 @@ class FriendsViewModel(private val repo: LologRepository) : ViewModel() {
         }
     }
 
-    /** 친구 끊기. 끝나면 목록에서 빼요(차단은 RoomBlockViewModel이 끊기 → 차단 순서로 해요) */
+    /** 친구 끊기. 끝나면 목록에서 빼요(차단은 RoomBlockViewModel이 POST /api/blocks 한 번으로 해요) */
     fun unfriend(friend: Friend, onDone: () -> Unit) {
         if (_state.value.busy) return
         viewModelScope.launch {
@@ -161,7 +161,7 @@ fun FriendsScreen(
     val repo = LocalContainer.current.repository
     val vm = viewModel { FriendsViewModel(repo) }
     val state by vm.state.collectAsState()
-    // 친구 끊기 → 차단. 같은 방에 있으면 나가기·숨기기·그대로 보기를 물어요
+    // 차단(친구 관계도 같이 끊겨요). 같은 방에 있으면 나가기·숨기기·그대로 보기를 물어요
     val roomRepo = LocalContainer.current.rooms
     val blockVm = viewModel(key = "friendBlock") { RoomBlockViewModel(roomRepo, repo) }
     val blockState by blockVm.state.collectAsState()
@@ -356,9 +356,9 @@ fun FriendsScreen(
             loading = state.busy || blockState.busy,
             onConfirm = {
                 if (block) {
-                    // 친구는 끊어야 차단할 수 있어요(UNFRIEND_FIRST). 같은 방이 있으면 고른 뒤에 끊고 차단해요
+                    // DELETE friends 없이 POST /api/blocks 한 번으로 끊기와 차단이 같이 돼요
                     confirm = null
-                    blockVm.start(f.userId, f.nickname) { repo.removeFriend(f.userId) }
+                    blockVm.start(f.userId, f.nickname)
                 } else {
                     vm.unfriend(f) { confirm = null }
                 }
