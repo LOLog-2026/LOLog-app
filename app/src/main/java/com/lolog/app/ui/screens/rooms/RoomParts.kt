@@ -1,13 +1,25 @@
 package com.lolog.app.ui.screens.rooms
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lolog.app.data.model.CharacterType
 import com.lolog.app.data.model.RoomMember
 import com.lolog.app.data.model.SpeakerCharacter
@@ -28,11 +40,38 @@ object Features {
 internal fun RoomMember.character(): SpeakerCharacter? =
     thumbnailUrl?.let { SpeakerCharacter(CharacterType.PROFILE, userId.toString(), nickname, it) }
 
-/** 방 멤버 동그라미. 색은 방 안 멤버 순서([index])대로 */
+/**
+ * 방 멤버 동그라미. 색은 방 안 멤버 순서([index])대로.
+ * 나간 멤버는 회색 동그라미에 "?", 정지된 계정은 얼굴을 회색으로
+ */
 @Composable
 internal fun MemberAvatar(member: RoomMember, index: Int, size: Dp = 22.dp) {
+    if (member.left) {
+        GrayDot("?", size)
+        return
+    }
     val c = member.character()
-    SpeakerAvatar(member.nickname, index, size = size, thumbnailUrl = c?.thumbnailUrl, cacheKey = c?.cacheKey)
+    Box(if (member.suspended) Modifier.grayscale() else Modifier) {
+        SpeakerAvatar(member.nickname, index, size = size, thumbnailUrl = c?.thumbnailUrl, cacheKey = c?.cacheKey)
+    }
+}
+
+/** 회색 동그라미에 글자 하나(나간 멤버 "?", 숨긴 글 "·") */
+@Composable
+internal fun GrayDot(label: String, size: Dp) {
+    Box(Modifier.size(size).clip(CircleShape).background(LologColors.Canvas), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = (size.value * 0.45f).sp, fontWeight = FontWeight.Bold, color = LologColors.Muted)
+    }
+}
+
+/** 흑백으로 그려요(정지된 계정의 얼굴) */
+internal fun Modifier.grayscale(): Modifier = drawWithContent {
+    val paint = Paint().apply { colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }
+    drawIntoCanvas { canvas ->
+        canvas.saveLayer(Rect(Offset.Zero, size), paint)
+        drawContent()
+        canvas.restore()
+    }
 }
 
 /** 멤버 얼굴을 겹쳐서(최대 [max]개). 나는 빼고 다른 멤버부터 보여요 */

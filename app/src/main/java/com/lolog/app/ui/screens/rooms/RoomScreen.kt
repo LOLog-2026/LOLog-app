@@ -559,14 +559,19 @@ private fun MemberSheet(
             ) {
                 MemberAvatar(m, i, 36.dp)
                 Spacer(Modifier.width(12.dp))
-                Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
-                if (m.isOwner || m.userId == room.ownerId) {
-                    Spacer(Modifier.width(6.dp))
-                    OwnerPill()
-                }
-                if (m.isMe) {
-                    Spacer(Modifier.width(6.dp))
-                    Text("나", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
+                        if (m.isOwner || m.userId == room.ownerId) {
+                            Spacer(Modifier.width(6.dp))
+                            OwnerPill()
+                        }
+                        if (m.isMe) {
+                            Spacer(Modifier.width(6.dp))
+                            Text("나", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent)
+                        }
+                    }
+                    if (m.suspended) Text(SUSPENDED, fontSize = 12.sp, color = LologColors.Muted)
                 }
             }
         }
@@ -589,6 +594,9 @@ private fun MemberSheet(
     }
 }
 
+/** 정지된 계정 표시(멤버 시트) */
+private const val SUSPENDED = "정지된 계정"
+
 /** 내보내기 안내(멤버 누르기 시트·확인 창) */
 private const val KICK_NOTE = "올린 만화와 글은 \"나간 멤버\"로 남아요. 다시 초대할 수 있어요."
 
@@ -599,7 +607,10 @@ private fun MemberActionSheet(member: RoomMember, index: Int, canKick: Boolean, 
         Row(verticalAlignment = Alignment.CenterVertically) {
             MemberAvatar(member, index, 52.dp)
             Spacer(Modifier.width(14.dp))
-            Text(member.nickname, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+            Column {
+                Text(member.nickname, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                if (member.suspended) Text(SUSPENDED, fontSize = 13.sp, color = LologColors.Muted)
+            }
         }
         if (canKick) {
             Spacer(Modifier.height(14.dp))
@@ -750,7 +761,7 @@ internal fun ComicCell(
             MemberAvatar(post.author, room.memberIndex(post.author), 18.dp)
             Spacer(Modifier.width(5.dp))
             Text(
-                if (post.author.isMe) "내 만화" else post.author.nickname, fontSize = 11.sp, color = LologColors.Muted,
+                if (post.author.isMe) "내 만화" else post.author.displayName, fontSize = 11.sp, color = LologColors.Muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             LikeCount(post, 13)

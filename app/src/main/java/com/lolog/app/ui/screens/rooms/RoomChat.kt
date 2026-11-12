@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lolog.app.data.model.Room
+import com.lolog.app.data.model.RoomMember
 import com.lolog.app.data.model.RoomMessage
 import com.lolog.app.data.model.RoomPost
 import com.lolog.app.data.model.RoomRules
@@ -36,7 +37,9 @@ import com.lolog.app.ui.theme.LologShape
 
 /**
  * 가운데 회색 알약(만화를 올렸어요·좋아해요)과 댓글 말풍선. 댓글 위에는 그 만화 캡션을 붙이고, 캡션을 누르면 크게.
- * "댓글 달기"로 들어오면 입력 칸 위에 그 만화 띠([replyTo])가 붙어요. ✕를 누르면 그냥 대화
+ * "댓글 달기"로 들어오면 입력 칸 위에 그 만화 띠([replyTo])가 붙어요. ✕를 누르면 그냥 대화.
+ * 시안 10: 나간 멤버는 "?" 동그라미와 "나간 멤버", 숨긴 글은 "·" 동그라미와 "숨긴 글"(알림 줄은 그리지 않음),
+ * 정지된 계정은 회색 얼굴과 이름 뒤 " · 정지된 계정"
  */
 @Composable
 internal fun RoomChat(
@@ -50,8 +53,10 @@ internal fun RoomChat(
 ) {
     val list = rememberLazyListState()
     var text by remember { mutableStateOf("") }
+    // 숨긴 사람의 알림 줄(올림·좋아요)은 그리지 않아요. 댓글은 "숨긴 글" 자리로 남겨요
+    val shown = remember(messages) { messages.filterNot { it.hidden && it !is RoomMessage.Comment } }
     // 새 줄이 생기면 맨 아래로
-    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) list.animateScrollToItem(messages.lastIndex) }
+    LaunchedEffect(shown.size) { if (shown.isNotEmpty()) list.animateScrollToItem(shown.lastIndex) }
 
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -60,16 +65,28 @@ internal fun RoomChat(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(messages, key = { it.id }) { m ->
+            items(shown, key = { it.id }) { m ->
                 when (m) {
                     is RoomMessage.System -> NoticePill(m.text, heart = false)
                     is RoomMessage.Like -> NoticePill("${m.member.subject} 이 만화를 좋아해요", heart = true)
-                    is RoomMessage.Comment -> ChatBubble(
-                        name = m.author.nickname,
+                    is RoomMessage.Comment -> if (m.hidden) ChatBubble(
+                        name = "숨긴 글",
+                        speakerIndex = 0,
+                        text = "",
+                        left = true,
+                        avatar = { GrayDot("·", 26.dp) },
+                        content = { Text("차단한 사람의 글이에요", fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Muted) },
+                    ) else ChatBubble(
+                        name = when {
+                            m.author.left -> RoomMember.LEFT_NAME
+                            m.author.suspended -> "${m.author.nickname} · 정지된 계정"
+                            else -> m.author.nickname
+                        },
                         speakerIndex = room.memberIndex(m.author),
                         text = m.text,
                         left = !m.author.isMe,
                         character = m.author.character(),
+                        avatar = { MemberAvatar(m.author, room.memberIndex(m.author), 26.dp) },
                         content = {
                             Column {
                                 m.post?.let { p ->
@@ -129,8 +146,12 @@ internal fun RoomChat(
     }
 }
 
-/** "준님 만화" / "내 만화" */
-private fun ownerLabel(p: RoomPost) = if (p.author.isMe) "내 만화" else "${p.author.nickname}님 만화"
+/** "준님 만화" / "내 만화" / "나간 멤버 만화" */
+private fun ownerLabel(p: RoomPost) = when {
+    p.author.isMe -> "내 만화"
+    p.author.left -> "${RoomMember.LEFT_NAME} 만화"
+    else -> "${p.author.nickname}님 만화"
+}
 
 /** 말풍선 위 작은 만화 캡션: 그림 + "준님 만화" + 제목 한 줄 */
 @Composable
