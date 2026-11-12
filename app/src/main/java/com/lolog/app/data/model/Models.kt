@@ -89,10 +89,14 @@ const val PASSWORD_MIN = 8
 const val PASSWORD_MAX = 64
 const val PASSWORD_MAX_BYTES = 72
 fun isValidPassword(pw: String): Boolean =
-    pw.length in PASSWORD_MIN..PASSWORD_MAX &&
-        pw.toByteArray(Charsets.UTF_8).size <= PASSWORD_MAX_BYTES &&
-        pw.any { it in 'a'..'z' || it in 'A'..'Z' } && // isLetter()는 한글도 문자로 쳐서 영문만 봐요
-        pw.any { it in '0'..'9' }
+    pw.length in PASSWORD_MIN..PASSWORD_MAX && passwordFitsBytes(pw) && passwordHasLetterAndDigit(pw)
+
+/** 영문(a~z, A~Z)과 숫자(0~9)를 모두 넣었는지. isLetter()·isDigit()는 한글·다른 나라 숫자도 쳐서 쓰지 않아요. 화면 규칙 줄도 이 값으로 그려요 */
+fun passwordHasLetterAndDigit(pw: String): Boolean =
+    pw.any { it in 'a'..'z' || it in 'A'..'Z' } && pw.any { it in '0'..'9' }
+
+/** UTF-8로 72바이트 이하인지. 한글은 한 글자가 3바이트라 64자 안이어도 넘을 수 있어요 */
+fun passwordFitsBytes(pw: String): Boolean = pw.toByteArray(Charsets.UTF_8).size <= PASSWORD_MAX_BYTES
 
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }

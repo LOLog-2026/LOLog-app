@@ -75,9 +75,10 @@ fun InboxItem.line(): InboxLine = when (this) {
                 ?: "\"${roomName()}\" 방에 초대받았어요",
             "눌러서 수락하거나 거절해요",
         )
+        // 서버 푸시는 roomId·postId·nickname만 보내요(rooms.md 3장 푸시 표). 방 이름이 없어서 알림창 문구(Notifier)와 같게 써요
         "ROOM_COMMENT" -> InboxLine(
             data["nickname"]?.takeIf { it.isNotBlank() }?.let { "${it}님이 내 만화에 댓글을 달았어요" } ?: "내 만화에 댓글이 달렸어요",
-            data["roomName"].orEmpty(),
+            "방에서 확인해 보세요",
         )
         "ROOM_DISBANDED" -> InboxLine("\"${roomName()}\" 방이 해산됐어요", "방의 만화와 대화가 지워졌어요")
         // 앞으로 생길 종류. 목록에서 빼지 않아요

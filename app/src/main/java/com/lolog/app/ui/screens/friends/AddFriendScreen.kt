@@ -66,7 +66,7 @@ class AddFriendViewModel(private val repo: LologRepository) : ViewModel() {
                         ErrorCodes.ALREADY_FRIENDS -> s.copy(error = "이미 친구예요")
                         ErrorCodes.FRIEND_REQUEST_EXISTS -> s.copy(error = "이미 요청을 보냈어요")
                         ErrorCodes.USER_BLOCKED -> s.copy(error = USER_BLOCKED_TEXT)
-                        ErrorCodes.FRIEND_LIMIT -> s.copy(error = "친구는 ${FriendRules.FRIEND_MAX}명까지예요")
+                        ErrorCodes.FRIEND_LIMIT -> s.copy(error = FRIEND_LIMIT_TEXT)
                         ErrorCodes.TOO_MANY_REQUESTS, "HTTP_429" -> s.copy(error = "잠시 뒤에 다시 넣어 주세요")
                         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> s.copy(error = "친구 코드 8자리를 넣어 주세요")
                         // 닉네임 없이 들어온 경우. 친구 화면으로 돌아가 닉네임 칸을 보여 줘요

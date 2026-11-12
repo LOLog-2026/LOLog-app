@@ -578,7 +578,7 @@ private fun ShareSheet(
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("만화 내보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             ShareRow(Icons.Outlined.Download, "갤러리에 저장 (PNG)") {
-                withBytes { if (ComicExport.saveToGallery(context, it, name)) "갤러리에 저장했어요" else "저장하지 못했어요" }
+                withBytes { if (ComicExport.saveToGallery(context, it, name)) "저장했어요" else "저장하지 못했어요" }
             }
             ShareRow(Icons.Outlined.ChatBubbleOutline, "카카오톡으로 보내기") {
                 withBytes { ComicExport.share(context, ComicExport.shareUri(context, it, name), ComicExport.KAKAO); null }

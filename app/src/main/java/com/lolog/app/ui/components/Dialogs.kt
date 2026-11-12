@@ -26,6 +26,8 @@ fun LologDialog(
     eyebrow: (@Composable () -> Unit)? = null,
     /** 뒤로가기·창 밖 누르기로 닫을 때. 안 주면 [onDismiss](보조 버튼)와 같아요 */
     onDismissRequest: () -> Unit = onDismiss,
+    /** 본문 아래, 버튼 위에 넣을 것(체크 한 줄 등). [LologNoticeDialog]의 content와 같아요 */
+    content: (@Composable () -> Unit)? = null,
 ) {
     Dialog(onDismissRequest = onDismissRequest) {
         Column(
@@ -38,6 +40,7 @@ fun LologDialog(
             eyebrow?.invoke()
             Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
             Text(body, fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp)
+            content?.invoke()
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 확정 디자인: [취소]는 흰 바탕 + 테두리 보조 버튼

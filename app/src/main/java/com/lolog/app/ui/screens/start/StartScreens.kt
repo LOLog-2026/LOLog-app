@@ -54,6 +54,8 @@ import com.lolog.app.data.model.SocialProvider
 import com.lolog.app.data.model.PASSWORD_MAX
 import com.lolog.app.data.model.PASSWORD_MIN
 import com.lolog.app.data.model.isValidPassword
+import com.lolog.app.data.model.passwordFitsBytes
+import com.lolog.app.data.model.passwordHasLetterAndDigit
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
@@ -342,7 +344,8 @@ fun LoginScreen(
     state.accountExists?.let { provider ->
         LologDialog(
             title = "이미 가입된 계정이에요",
-            body = "이 ${provider.label} 계정의 이메일로 가입한 계정이 있어요. 처음 가입한 방법으로 로그인해 주세요.",
+            // 제목과 본문 둘째 문장은 functional-spec FR-AUTH-02 "같은 이메일" 문장 그대로
+            body = "이 ${provider.label} 계정의 이메일로 가입한 계정이 있어요. 처음 가입한 방법으로 로그인한 뒤 설정에서 연결해 주세요",
             confirmText = "확인",
             dismissText = "닫기",
             onConfirm = vm::dismiss,
@@ -369,11 +372,11 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
 
     // ④ 규칙은 입력하는 동안 바로 보여 주고, 다 맞아야 가입 버튼이 켜져요 (FR-AUTH-01)
     val emailOk = isEmail(email.trim())
-    val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
-    val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
+    // 규칙 줄과 같은 기준(isValidPassword)이라 줄이 다 맞으면 버튼도 켜져요
+    val passwordOk = isValidPassword(password)
     val confirmOk = confirm.isNotEmpty() && confirm == password
     val codeOk = state.codeEmail == normalizeEmail(email) && code.length == EMAIL_CODE_LENGTH
-    val allOk = emailOk && lengthOk && mixOk && confirmOk && codeOk
+    val allOk = emailOk && passwordOk && confirmOk && codeOk
     val emailFormatError = if (emailTouched && email.isNotBlank() && !emailOk) "이메일 형식을 확인해 주세요" else null
     val codeButton = when {
         state.sendingCode -> "보내는 중"
@@ -424,8 +427,7 @@ fun SignupScreen(onBack: () -> Unit, onDone: () -> Unit) {
                     icon = Icons.Outlined.Key, placeholder = "비밀번호", type = KeyboardType.Password, secret = true,
                     enabled = !state.loading, counter = if (password.isNotEmpty()) "${password.length} / $PASSWORD_MAX" else null,
                 )
-                RuleLine(if (password.isEmpty() || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, password.isNotEmpty())
-                RuleLine("영문과 숫자 모두 포함", mixOk, password.isNotEmpty())
+                PasswordRuleLines(password)
                 Spacer(Modifier.height(2.dp))
                 LabeledField(
                     "비밀번호 확인", confirm, { confirm = it.take(PASSWORD_MAX) },
@@ -479,11 +481,11 @@ fun PasswordResetScreen(initialEmail: String, onBack: () -> Unit, onDone: (email
 
     // 규칙과 버튼 조건은 가입 화면과 같아요
     val emailOk = isEmail(email.trim())
-    val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
-    val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
+    // 규칙 줄과 같은 기준(isValidPassword)이라 줄이 다 맞으면 버튼도 켜져요
+    val passwordOk = isValidPassword(password)
     val confirmOk = confirm.isNotEmpty() && confirm == password
     val codeOk = state.codeEmail == normalizeEmail(email) && code.length == EMAIL_CODE_LENGTH
-    val allOk = emailOk && lengthOk && mixOk && confirmOk && codeOk
+    val allOk = emailOk && passwordOk && confirmOk && codeOk
     val emailFormatError = if (emailTouched && email.isNotBlank() && !emailOk) "이메일 형식을 확인해 주세요" else null
     val codeButton = when {
         state.sendingCode -> "보내는 중"
@@ -542,8 +544,7 @@ fun PasswordResetScreen(initialEmail: String, onBack: () -> Unit, onDone: (email
                         error = state.passwordError, enabled = !state.loading,
                         counter = if (password.isNotEmpty()) "${password.length} / $PASSWORD_MAX" else null,
                     )
-                    RuleLine(if (password.isEmpty() || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, password.isNotEmpty())
-                    RuleLine("영문과 숫자 모두 포함", mixOk, password.isNotEmpty())
+                    PasswordRuleLines(password)
                     Spacer(Modifier.height(2.dp))
                     LabeledField(
                         "새 비밀번호 확인", confirm, { confirm = it.take(PASSWORD_MAX) },
@@ -558,6 +559,22 @@ fun PasswordResetScreen(initialEmail: String, onBack: () -> Unit, onDone: (email
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+/** 72바이트를 넘었을 때 규칙 줄(api-dto 가입 password). 사용자는 바이트를 모르니 한글로 풀어 써요 */
+internal const val PASSWORD_TOO_LONG_TEXT = "너무 길어요. 한글은 한 글자를 3자로 세요"
+
+/**
+ * 비밀번호 규칙 줄(api-dto 가입 password: 8~64자, 영문·숫자 포함, UTF-8로 72바이트 이하).
+ * 버튼 조건 [isValidPassword]와 같은 기준이라 "줄은 다 맞는데 버튼이 안 켜짐"이 없어요. 72바이트 줄은 넘었을 때만 보여요
+ */
+@Composable
+internal fun PasswordRuleLines(password: String) {
+    val touched = password.isNotEmpty()
+    val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
+    RuleLine(if (!touched || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, touched)
+    RuleLine("영문과 숫자 모두 포함", passwordHasLetterAndDigit(password), touched)
+    if (!passwordFitsBytes(password)) RuleLine(PASSWORD_TOO_LONG_TEXT, ok = false, touched = true)
 }
 
 /** 비밀번호 규칙 한 줄: 맞으면 파란 체크, 틀리면 빨간 ✕, 아직 입력 전이면 회색 */
