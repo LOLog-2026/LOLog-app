@@ -97,6 +97,8 @@ object MockData {
             // 3번 다 그린 카드 (24번 화면 확인용)
             comics = listOf(ComicRef(22, ComicStatus.DONE), ComicRef(24, ComicStatus.DONE), ComicRef(26, ComicStatus.DONE)),
             createdAt = "2026-10-29T23:30:00+09:00", recordedAt = "2026-10-29T23:10:00+09:00",
+            // 직접 쓴 글 카드(에피소드 "글" 꼬리표·원문 보기 확인용). 원문은 MockTexts의 text 1
+            source = CardSource.WRITTEN, textId = MockTexts.SEED_TEXT_ID,
         ),
     )
 
