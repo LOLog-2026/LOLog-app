@@ -398,7 +398,11 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private fun CardDetail.withLiveComics(): CardDetail {
         val refs = comicStore.filter { it.cardId == id }.map { ComicRef(it.id, it.status) }
         // 서버처럼 남은 횟수를 세서 내려 줘요: 실패는 빼고, 그리는 중은 셈
-        return copy(comics = refs, comicRemaining = (COMIC_LIMIT_PER_CARD - refs.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0))
+        return copy(
+            comics = refs,
+            comicRemaining = (COMIC_LIMIT_PER_CARD - refs.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0),
+            videos = videoStore.filter { it.cardId == id }.map { VideoRef(it.id, it.status) },
+        )
     }
 
     private fun CardDetail.toSummary() = CardSummary(
@@ -478,6 +482,59 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun deleteComic(id: Long) = lock.withLock {
         net()
         if (!comicStore.removeAll { it.id == id }) throw LologException(ErrorCodes.COMIC_NOT_FOUND, "만화를 찾지 못했어요")
+    }
+
+    // ── 쇼츠(video.md) ──
+    // 최근 것이 앞. 카드별 만든 횟수(지워도 안 돌아옴, 실패하면 돌아옴)는 서버처럼 따로 세요
+    private val videoStore = mutableListOf<VideoSummary>()
+    private val videoCount = mutableMapOf<Long, Int>()
+
+    override suspend fun requestVideo(cardId: Long): VideoAccepted = lock.withLock {
+        net()
+        val card = findCard(cardId)
+        if (videoStore.any { it.cardId == cardId && it.status.inProgress }) {
+            throw LologException(ErrorCodes.VIDEO_IN_PROGRESS, "이 카드로 만드는 중인 쇼츠가 있어요")
+        }
+        if ((videoCount[cardId] ?: 0) >= VIDEO_LIMIT_PER_CARD) throw LologException(ErrorCodes.VIDEO_LIMIT, "이 카드로는 쇼츠를 더 만들 수 없어요")
+        videoCount[cardId] = (videoCount[cardId] ?: 0) + 1
+        val video = VideoSummary(nextId++, cardId, card.summary, VideoStatus.QUEUED, createdAt = now())
+        videoStore.add(0, video)
+        runVideo(video.id)
+        VideoAccepted(video.id, VideoStatus.QUEUED)
+    }
+
+    /** 목업 진행: 대기 → 목소리 → 그림 → 완성. 목업에는 영상 파일이 없어 완성돼도 재생은 실패 안내가 떠요 */
+    private fun runVideo(videoId: Long) = scope.launch {
+        suspend fun set(status: VideoStatus) = lock.withLock {
+            val i = videoStore.indexOfFirst { it.id == videoId }
+            if (i >= 0) videoStore[i] = videoStore[i].copy(
+                status = status,
+                videoUrl = if (status == VideoStatus.DONE) "mock://video/$videoId" else null,
+                durationMs = if (status == VideoStatus.DONE) 28_400 else null,
+            )
+            videoStore.getOrNull(i)
+        }
+        delay(2_000); set(VideoStatus.VOICE)
+        delay(3_000); set(VideoStatus.DRAWING)
+        delay(4_000)
+        val done = set(VideoStatus.DONE) ?: return@launch
+        _push.emit(PushPayload(PushType.VIDEO_DONE, cardId = done.cardId, videoId = videoId))
+    }
+
+    override suspend fun videos(cursor: String?, size: Int, sort: SortOrder): VideoPage = lock.withLock {
+        net()
+        val (items, next) = mockPage(videoStore.toList(), cursor, size, sort)
+        VideoPage(items, next)
+    }
+
+    override suspend fun video(id: Long): VideoSummary = lock.withLock {
+        net(150)
+        videoStore.firstOrNull { it.id == id } ?: throw LologException(ErrorCodes.VIDEO_NOT_FOUND, "쇼츠를 찾지 못했어요")
+    }
+
+    override suspend fun deleteVideo(id: Long) = lock.withLock {
+        net()
+        if (!videoStore.removeAll { it.id == id }) throw LologException(ErrorCodes.VIDEO_NOT_FOUND, "쇼츠를 찾지 못했어요")
     }
 
     // ── 친구 ──

@@ -52,6 +52,15 @@ interface LologRepository {
     suspend fun comic(id: Long): ComicDetail
     suspend fun deleteComic(id: Long)
 
+    // 쇼츠 (LOLog-docs spec/video.md 2장)
+    /** 202 QUEUED. 만드는 중이면 409 VIDEO_IN_PROGRESS, 한 카드 2개를 넘으면 409 VIDEO_LIMIT */
+    suspend fun requestVideo(cardId: Long): VideoAccepted
+    /** 다음 쪽도 처음과 같은 sort로 불러요(만화 목록과 같음) */
+    suspend fun videos(cursor: String? = null, size: Int = 20, sort: SortOrder = SortOrder.NEWEST): VideoPage
+    suspend fun video(id: Long): VideoSummary
+    /** 만드는 중에도 지울 수 있어요. 지워도 횟수는 돌아오지 않아요 */
+    suspend fun deleteVideo(id: Long)
+
     // 친구·프로필·차단 (LOLog-docs spec/friends.md)
     /** 처음 부르면 서버가 프로필을 만들어요. 닉네임을 정하기 전에는 friendCode가 null */
     suspend fun profile(): Profile

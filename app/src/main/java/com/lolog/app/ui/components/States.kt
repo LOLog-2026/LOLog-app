@@ -35,6 +35,7 @@ import com.lolog.app.data.model.COMIC_LIMIT_PER_CARD
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.RoomErrorCodes
 import com.lolog.app.data.model.RoomRules
+import com.lolog.app.data.model.VIDEO_LIMIT_PER_CARD
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.ui.theme.LologColors
 
@@ -68,6 +69,9 @@ fun errorText(e: Throwable): String {
         ErrorCodes.INTERNAL_ERROR -> "잠시 후 다시 시도해 주세요"
         ErrorCodes.CARD_LOCKED -> "만화를 만드는 중이에요"
         ErrorCodes.COMIC_IN_PROGRESS -> "지금 그리는 만화가 끝나면 다시 그릴 수 있어요"
+        ErrorCodes.VIDEO_IN_PROGRESS -> "지금 만드는 쇼츠가 끝나면 다시 만들 수 있어요"
+        ErrorCodes.VIDEO_LIMIT -> "이 카드로는 쇼츠를 ${VIDEO_LIMIT_PER_CARD}번까지 만들 수 있어요"
+        ErrorCodes.VIDEO_NOT_FOUND -> "지워졌거나 찾을 수 없는 쇼츠예요"
         ErrorCodes.TOKEN_EXPIRED -> "다시 로그인해 주세요"
         ErrorCodes.NETWORK -> "인터넷 연결을 확인하고 다시 시도해 주세요"
         // 화자 그림 (문구는 명세에 없어서 프론트가 정함)

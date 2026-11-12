@@ -127,6 +127,7 @@ object ApiMapper {
         createdAt = createdAt, recordedAt = recordedAt, comicRemaining = comicRemaining,
         recordingId = recordingId,
         audio = audio.toModel(),
+        videos = videos.map { VideoRef(it.id, videoStatus(it.status)) },
     )
 
     /**
@@ -180,6 +181,15 @@ object ApiMapper {
     // ── 만화 ──
 
     fun ComicAcceptedDto.toModel() = ComicAccepted(comicId, comicStatus(status))
+
+    /** 모르는 상태는 UNKNOWN(만드는 중도, 끝난 것도 아님) */
+    fun videoStatus(raw: String?) = runCatching { VideoStatus.valueOf(raw!!.trim().uppercase()) }.getOrDefault(VideoStatus.UNKNOWN)
+    fun VideoAcceptedDto.toModel() = VideoAccepted(videoId, videoStatus(status))
+    fun VideoDto.toModel() = VideoSummary(
+        id = id, cardId = cardId, cardSummary = cardSummary.orEmpty(), status = videoStatus(status),
+        videoUrl = videoUrl?.ifBlank { null }, thumbnailUrl = thumbnailUrl?.ifBlank { null }, durationMs = durationMs, createdAt = createdAt,
+    )
+    fun VideoPageDto.toModel() = VideoPage(videos.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
 
     /** cardId가 null이면 카드가 지워진 만화예요 */
     fun ComicDto.toSummary() = ComicSummary(

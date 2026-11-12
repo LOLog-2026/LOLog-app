@@ -180,6 +180,7 @@ data class CardDetailDto(
     val createdAt: String = "",
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
     val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
+    val videos: List<VideoRefDto> = emptyList(), // 이 카드로 만든 쇼츠(video.md 2장), 최근 것이 앞
 )
 
 /** CardAudio — CardDetail.audio. url·durationMs는 READY일 때만 와요 */
@@ -237,6 +238,32 @@ data class ComicDto(
 
 @Serializable
 data class ComicPageDto(val comics: List<ComicDto> = emptyList(), val nextCursor: String? = null)
+
+// ── 쇼츠 (LOLog-docs spec/video.md 2장, 서버 lolog-api #68) ──
+
+/** 202 POST /api/cards/{id}/videos */
+@Serializable
+data class VideoAcceptedDto(val videoId: Long, val status: String? = null)
+
+/** VideoResponse. videoUrl·thumbnailUrl·durationMs는 DONE일 때만, cardId는 카드를 지웠으면 null */
+@Serializable
+data class VideoDto(
+    val id: Long,
+    val cardId: Long? = null,
+    val cardSummary: String? = null,
+    val status: String? = null,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationMs: Long? = null,
+    val createdAt: String = "",
+)
+
+@Serializable
+data class VideoPageDto(val videos: List<VideoDto> = emptyList(), val nextCursor: String? = null)
+
+/** CardDetail.videos[] */
+@Serializable
+data class VideoRefDto(val id: Long, val status: String? = null)
 
 // ── 친구·프로필 (LOLog-docs spec/friends.md 2장) ──
 

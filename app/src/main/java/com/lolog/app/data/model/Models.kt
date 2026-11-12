@@ -29,6 +29,9 @@ object ErrorCodes {
     const val CARD_LOCKED = "CARD_LOCKED"               // 409 만화 만드는 중 고치기·지우기
     const val COMIC_IN_PROGRESS = "COMIC_IN_PROGRESS"   // 409 만드는 중에 또 요청
     const val COMIC_LIMIT = "COMIC_LIMIT"               // 409 한 카드 3번 (실패는 안 셈)
+    const val VIDEO_IN_PROGRESS = "VIDEO_IN_PROGRESS"   // 409 그 카드로 만드는 중인 쇼츠가 있음(video.md 2장)
+    const val VIDEO_LIMIT = "VIDEO_LIMIT"               // 409 한 카드에 실패가 아닌 쇼츠 2개(지워도 안 돌아옴)
+    const val VIDEO_NOT_FOUND = "VIDEO_NOT_FOUND"       // 404 없는 쇼츠
     const val PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"   // 413 녹음 올리기
     const val INTERNAL_ERROR = "INTERNAL_ERROR"         // 500
     const val INVALID_CODE = "INVALID_CODE"             // 400 가입 인증번호가 틀림
@@ -164,6 +167,38 @@ data class Line(val id: Long, val speaker: String, val text: String)
 
 data class ComicRef(val id: Long, val status: ComicStatus)
 
+// ── 쇼츠(카드 영상, LOLog-docs video.md) ─────────────────
+
+/** 한 카드로 쇼츠는 실패가 아닌 것 2개까지(video.md 2장, FR-EXT-02). 넘으면 409 VIDEO_LIMIT */
+const val VIDEO_LIMIT_PER_CARD = 2
+
+/** QUEUED 대기 → VOICE 콘티·목소리 → DRAWING 그림·합치기 → DONE·FAILED (video.md 1장). 모르는 값은 UNKNOWN */
+enum class VideoStatus { QUEUED, VOICE, DRAWING, DONE, FAILED, UNKNOWN }
+
+val VideoStatus.inProgress: Boolean get() = this == VideoStatus.QUEUED || this == VideoStatus.VOICE || this == VideoStatus.DRAWING
+
+/** 카드 자세히의 videos[] 한 항목 */
+data class VideoRef(val id: Long, val status: VideoStatus)
+
+/**
+ * 쇼츠 하나(GET /api/videos, /api/videos/{id}). videoUrl·thumbnailUrl·durationMs는 DONE일 때만이고 주소는 10분짜리.
+ * cardId는 카드를 지웠으면 null, cardSummary는 요청할 때의 카드 요약(목록 제목)
+ */
+data class VideoSummary(
+    val id: Long,
+    val cardId: Long?,
+    val cardSummary: String,
+    val status: VideoStatus,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationMs: Long? = null,
+    val createdAt: String,
+)
+
+data class VideoPage(val videos: List<VideoSummary>, val nextCursor: String?)
+
+data class VideoAccepted(val videoId: Long, val status: VideoStatus)
+
 data class CardSummary(
     val id: Long,
     val kind: CardKind,
@@ -219,7 +254,20 @@ data class CardDetail(
     val recordingId: Long? = null,
     /** 카드 구간 음성(순간 다시 듣기) */
     val audio: CardAudio = CardAudio(),
+    /** 이 카드로 만든 쇼츠(최근 것이 앞). 지운 쇼츠는 없어요 */
+    val videos: List<VideoRef> = emptyList(),
 ) {
+    /**
+     * 쇼츠를 더 만들 수 있는 횟수(앱 계산). 서버는 지운 쇼츠도 세지만 앱은 모르니, 넘치면 서버의 409 VIDEO_LIMIT로 알려요
+     */
+    val videoRemaining: Int get() = (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
+
+    /** 그 카드로 만드는 중인 쇼츠가 있음(409 VIDEO_IN_PROGRESS) */
+    val videoInProgress: Boolean get() = videos.any { it.status.inProgress }
+
+    /** 쇼츠가 카드 내용을 쓰는 동안(대기·목소리)은 서버가 카드 고치기·지우기를 막아요(409 CARD_LOCKED, video.md 8장) */
+    val videoLocked: Boolean get() = videos.any { it.status == VideoStatus.QUEUED || it.status == VideoStatus.VOICE }
+
     /** 서버 값이 없으면 실패를 뺀 개수로 앱이 계산 */
     val remaining: Int
         get() = comicRemaining ?: (COMIC_LIMIT_PER_CARD - comics.count { it.status != ComicStatus.FAILED }).coerceAtLeast(0)
@@ -389,6 +437,8 @@ enum class PushType {
     CARDS_CREATED, COMIC_DONE, COMIC_FAILED, PROFILE_CHARACTER_READY, PROFILE_CHARACTER_FAILED, FRIEND_REQUEST,
     // 친구 방(rooms.md 3장 푸시): 초대받음, 내 만화에 댓글, 방장이 해산
     ROOM_INVITE, ROOM_COMMENT, ROOM_DISBANDED,
+    // 쇼츠(video.md 2장): 완성·실패
+    VIDEO_DONE, VIDEO_FAILED,
 }
 
 data class PushPayload(
@@ -406,4 +456,6 @@ data class PushPayload(
     val roomId: Long? = null,
     val roomName: String? = null,
     val nickname: String? = null,
+    /** VIDEO_DONE·VIDEO_FAILED: 쇼츠 ID. 카드 ID는 cardId(카드를 지웠으면 null) */
+    val videoId: Long? = null,
 )

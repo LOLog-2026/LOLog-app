@@ -83,6 +83,11 @@ class RemoteLologRepository(
     override suspend fun comic(id: Long) = call { api.comic(id).toDetail(id) }
     override suspend fun deleteComic(id: Long) = call { api.deleteComic(id) }
 
+    override suspend fun requestVideo(cardId: Long) = call { api.requestVideo(cardId).toModel() }
+    override suspend fun videos(cursor: String?, size: Int, sort: SortOrder) = call { api.videos(cursor, size, sort.query).toModel() }
+    override suspend fun video(id: Long) = call { api.video(id).toModel() }
+    override suspend fun deleteVideo(id: Long) = call { api.deleteVideo(id) }
+
     override suspend fun profile() = call { api.profile().toModel() }
     override suspend fun updateNickname(nickname: String) = call { api.updateProfile(ProfileUpdateRequest(nickname.trim())).toModel() }
     override suspend fun uploadProfileCharacter(photo: ByteArray) = call {
