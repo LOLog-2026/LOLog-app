@@ -175,7 +175,7 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
         scope.launch {
             try {
                 val r = VideoExport.saveToMovies(context, url, "lolog_shorts_$videoId", container.network, vm::freshVideoUrl)
-                vm.toast(VideoExport.message(r))
+                VideoExport.message(r)?.let(vm::toast)
             } finally {
                 saving = false
             }
