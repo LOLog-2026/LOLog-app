@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
 /*
  * 카드 상세 (mockups/카드-결정사항-시안.png ②③⑤, 보관함-만화-시안.png ③④⑥)
  *  - 제목 아래 "녹음 날짜·시간 · 장소". 이름 없는 화자는 화자1·2·3
- *  - 이 카드로 만든 만화: "1 / 3번 · 실패는 안 셈". 실패한 만화는 그 자리에서 다시 시도
+ *  - 이 카드로 만든 컨텐츠: "4컷 n / 3번 · 쇼츠 m / 2번". 만화 줄 다음에 쇼츠 줄. 실패한 만화는 그 자리에서 다시 시도
  *  - 만화 그리는 중: 고치기·지우기·다시 그리기 모두 꺼짐 (서버도 409 CARD_LOCKED / COMIC_IN_PROGRESS)
  *  - 아래 버튼 "컨텐츠 만들기" → 4컷 만화 / 쇼츠 고르는 시트 (컨텐츠 시안 v3 ①②)
  *  - 3번 다 씀: 회색 버튼 "4컷은 3번 다 만들었어요"
@@ -239,6 +239,7 @@ fun CardDetailScreen(
             card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
             else -> CardBody(
                 card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
+                onVideo = onVideo,
                 freshAudioUrl = vm::freshAudioUrl,
                 // 만화 그리는 중에는 고칠 수 없어서(409 CARD_LOCKED) 화자를 눌러도 팝업을 열지 않아요
                 // 쇼츠가 카드 내용을 쓰는 동안(대기·목소리)도 같아요(video.md 8장)
@@ -350,6 +351,7 @@ private fun CardBody(
     onComic: (Long) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier,
+    onVideo: (Long) -> Unit = {},
     onSpeakerClick: ((String) -> Unit)? = null,
     freshAudioUrl: suspend () -> String? = { null },
 ) {
@@ -364,21 +366,22 @@ private fun CardBody(
         // 대사는 처음부터 전부 말풍선으로(재생 없음)
         CardLines(card, onSpeakerClick = onSpeakerClick)
 
-        if (card.comics.isNotEmpty()) {
+        // 만화·쇼츠가 둘 다 없으면 이 칸을 그리지 않아요
+        if (card.comics.isNotEmpty() || card.videos.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("이 카드로 만든 만화", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                val full = card.remaining <= 0
+                Text("이 카드로 만든 컨텐츠", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
-                    "${card.used} / ${COMIC_LIMIT_PER_CARD}번" + if (!full && card.comics.any { it.status == ComicStatus.FAILED }) " · 실패는 안 셈" else "",
-                    fontSize = 12.sp, fontWeight = if (full) FontWeight.Bold else FontWeight.Normal,
-                    color = if (full) LologColors.Rec else LologColors.Muted,
+                    "4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번 · 쇼츠 ${VIDEO_LIMIT_PER_CARD - card.videoRemaining} / ${VIDEO_LIMIT_PER_CARD}번",
+                    fontSize = 12.sp, color = LologColors.Muted,
                 )
             }
             // 만든 순서대로 1번째, 2번째…
             card.comics.sortedBy { it.id }.forEachIndexed { i, ref ->
                 ComicRow(i + 1, ref, comics[ref.id], card, busy, onOpen = { onComic(ref.id) }, onRetry = onRetry)
             }
+            // 만화 줄 다음에 쇼츠 줄. 누르면 쇼츠 화면
+            shortsRows(card.videos).forEach { row -> ShortsRow(row, onOpen = { onVideo(row.id) }) }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -391,10 +394,7 @@ private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDet
         Modifier.fillMaxWidth().softCard(LologShape.sm).clickable(onClick = onOpen).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(52.dp).clip(LologShape.sm).background(LologColors.Canvas)) {
-            // 만화 화면과 같은 원본(imageUrl)이라 같은 캐시 이름을 써요(#35)
-            if (stage == ComicStage.DONE) ComicImage(detail?.imageUrl, card.lines.map { it.text }, Modifier.fillMaxSize(), small = true, cacheKey = comicCacheKey(ref.id))
-        }
+        KindBox("4컷", LologColors.AccentSoft, LologColors.Laugh)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("${no}번째 만화", fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -418,6 +418,56 @@ private fun ComicRow(no: Int, ref: ComicRef, detail: ComicDetail?, card: CardDet
             ) { Text("다시 시도", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (card.locked) LologColors.Muted else LologColors.Rec) }
             else -> StageBadge(stage)
         }
+    }
+}
+
+/** 왼쪽 작은 칸: 만화 줄은 "4컷"(연한 노랑), 쇼츠 줄은 "쇼츠"(연한 코랄) */
+@Composable
+private fun KindBox(label: String, bg: Color, fg: Color) {
+    Box(Modifier.size(40.dp).clip(LologShape.sm).background(bg), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg)
+    }
+}
+
+/** 쇼츠 줄 오른쪽 표시: 완료(초록) / 만드는 중(코랄) / 실패(빨강) */
+internal enum class ShortsMark(val label: String) { DONE("완료"), MAKING("만드는 중"), FAILED("실패") }
+
+/** 카드 자세히의 쇼츠 한 줄. [title]은 "n번째 쇼츠" */
+internal data class ShortsRowText(val id: Long, val title: String, val sub: String, val mark: ShortsMark)
+
+/** 카드의 videos[] → 만든 순서(id 오름차순)대로 쇼츠 줄 문구 */
+internal fun shortsRows(videos: List<VideoRef>): List<ShortsRowText> =
+    videos.sortedBy { it.id }.mapIndexed { i, v ->
+        val (sub, mark) = when (v.status) {
+            VideoStatus.DONE -> "완료" to ShortsMark.DONE
+            VideoStatus.FAILED -> "실패 · 카드에서 다시 만들 수 있어요" to ShortsMark.FAILED
+            VideoStatus.VOICE -> "목소리 만드는 중 · 몇 분 걸려요" to ShortsMark.MAKING
+            VideoStatus.DRAWING -> "그림 만드는 중 · 몇 분 걸려요" to ShortsMark.MAKING
+            VideoStatus.QUEUED, VideoStatus.UNKNOWN -> "곧 만들기 시작해요" to ShortsMark.MAKING
+        }
+        ShortsRowText(v.id, "${i + 1}번째 쇼츠", sub, mark)
+    }
+
+@Composable
+private fun ShortsRow(row: ShortsRowText, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().softCard(LologShape.sm).clickable(onClick = onOpen).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KindBox("쇼츠", LologColors.RecSoft, LologColors.Accent)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(row.title, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(row.sub, fontSize = 12.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            row.mark.label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            color = when (row.mark) {
+                ShortsMark.DONE -> LologColors.MemoryText
+                ShortsMark.MAKING -> LologColors.Accent
+                ShortsMark.FAILED -> LologColors.Rec
+            },
+        )
     }
 }
 
