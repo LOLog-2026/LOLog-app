@@ -593,8 +593,9 @@ private fun ShareSheet(
     }
 }
 
+/** 내보내기 시트 한 줄. 쇼츠 내보내기 시트(VideoScreen)도 같은 줄을 써요 */
 @Composable
-private fun ShareRow(icon: ImageVector, title: String, onClick: () -> Unit) {
+internal fun ShareRow(icon: ImageVector, title: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),

@@ -16,7 +16,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -60,6 +67,7 @@ import com.lolog.app.ui.components.IndeterminateBar
 import com.lolog.app.ui.components.ListErrorState
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.LologNoticeDialog
+import com.lolog.app.ui.components.LologSheet
 import com.lolog.app.ui.components.LologSnackbarHost
 import com.lolog.app.ui.components.LologTopBar
 import com.lolog.app.ui.components.PrimaryButton
@@ -79,10 +87,10 @@ import kotlinx.coroutines.launch
  *  - 만드는 중(대기·목소리·그림): 4컷 만드는 중과 같은 판(단계 알약 · 그동안 대화 다시 보기). 5초마다 다시 받아요
  *  - 완성: 세로 영상(9:16) 재생. 주소는 10분짜리라 재생에 실패하면 한 번 새 주소를 받아 다시 틀어요
  *  - 실패: 안내. 카드에서 다시 만들 수 있어요(실패는 횟수에 안 세요)
- *  - 아래 "쇼츠 지우기"는 만드는 중에도 돼요(지워도 횟수는 돌아오지 않아요)
- *  - 완성이면 "인스타그램 릴스에 공유": mp4를 받아 인스타 공유 화면으로 넘기고 릴스는 사용자가 골라요(#92).
- *    받는 중에는 창(진행 막대 · [취소]), 인스타가 없으면 창, 못 받으면 띠. 올렸는지는 알 수 없어서 돌아와도 띠는 없어요
- *  - 완성이면 "폰에 저장": 동영상(Movies/LOLog)에 mp4로 넣어요
+ *  - 만화 보기 화면에 맞춰요(video.md 9장, #95): 지우기는 위 오른쪽 ⋮ 메뉴 "쇼츠 지우기"(만드는 중·실패도. 지워도 횟수는 안 돌아와요)
+ *  - 완성이면 아래 "내보내기" 하나 → 만화와 같은 줄의 시트: 폰에 저장(Movies/LOLog) · 카카오톡으로 보내기 · 인스타그램 · 다른 앱으로 공유
+ *    공유는 mp4를 받아 그 앱의 공유 화면으로 넘겨요(공유용 임시 파일만, 갤러리에 안 남김). 받는 중에는 창(진행 막대 · [취소]),
+ *    그 앱이 없으면 창, 못 받으면 띠. 보냈는지는 알 수 없어서 돌아와도 띠는 없어요
  */
 
 class VideoViewModel(private val repo: LologRepository, private val videoId: Long) : ViewModel() {
@@ -186,17 +194,22 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
             }
         }
     }
-    // 인스타그램에 넘길 영상을 받는 동안의 작업. 있으면 받는 중 창을 띄우고 [취소]로 멈춰요
+    var menu by remember { mutableStateOf(false) }
+    var exportSheet by remember { mutableStateOf(false) }
+    // 공유할 영상을 받는 동안의 작업. 있으면 받는 중 창을 띄우고 [취소]로 멈춰요
     var shareJob by remember { mutableStateOf<Job?>(null) }
     val sharing = shareJob != null
-    var noInstagram by remember { mutableStateOf(false) }
-    fun share(url: String) {
+    // 고른 앱이 폰에 없을 때 창에 보여 줄 앱 이름
+    var missingApp by remember { mutableStateOf<String?>(null) }
+    var sharingTo by remember { mutableStateOf(VideoExport.Target.OTHER) }
+    fun share(url: String, target: VideoExport.Target) {
         if (saving || sharing) return
+        sharingTo = target
         shareJob = scope.launch {
             val me = coroutineContext[Job]
             try {
-                val r = VideoExport.shareToInstagram(context, url, videoId, container.network, vm::freshVideoUrl)
-                if (r == VideoExport.Result.NO_INSTAGRAM) noInstagram = true
+                val r = VideoExport.share(context, target, url, videoId, container.network, vm::freshVideoUrl)
+                if (r == VideoExport.Result.NO_APP) missingApp = target.appName
                 else VideoExport.message(r, sharing = true)?.let(vm::toast)
             } finally {
                 // 취소 뒤 바로 다시 누른 새 작업은 지우지 않아요
@@ -216,29 +229,29 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
     val video = state.video
     // 완성·실패가 아니면 만드는 중 화면(모르는 상태도 지금처럼 만드는 중으로)
     val making = video != null && video.status != VideoStatus.DONE && video.status != VideoStatus.FAILED
+    // 공유·저장·지우는 중에는 내보내기·지우기를 다시 못 눌러요
+    val idle = !state.busy && !saving && !sharing
     Scaffold(
-        topBar = { LologTopBar(video?.cardSummary?.ifBlank { null } ?: "쇼츠", onBack = onBack) },
+        topBar = {
+            LologTopBar(video?.cardSummary?.ifBlank { null } ?: "쇼츠", onBack = onBack) {
+                // 만화 화면처럼 ⋮ 메뉴에서 지워요. 만드는 중·실패도 지울 수 있어요
+                if (video != null) {
+                    Box {
+                        IconButton(onClick = { menu = true }, enabled = idle) { Icon(Icons.Default.MoreVert, "더 보기") }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem(text = { Text("쇼츠 지우기", color = LologColors.Rec) }, onClick = { menu = false; askDelete = true })
+                        }
+                    }
+                }
+            }
+        },
         snackbarHost = { LologSnackbarHost(snackbar) },
         bottomBar = {
-            if (making) {
-                MakingButtons(enabled = !state.busy, onDelete = { askDelete = true })
-            } else if (video != null) {
-                Column(
-                    Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val url = video.videoUrl
-                    // 공유·저장·지우는 중에는 세 버튼 모두 다시 못 눌러요
-                    val idle = !state.busy && !saving && !sharing
-                    if (video.status == VideoStatus.DONE && url != null) {
-                        PrimaryButton("인스타그램 릴스에 공유", { share(url) }, enabled = idle)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GhostButton(if (saving) "저장하는 중…" else "폰에 저장", { save(url) }, Modifier.weight(1f), enabled = idle)
-                            GhostButton("쇼츠 지우기", { askDelete = true }, Modifier.weight(1f), enabled = idle)
-                        }
-                    } else {
-                        GhostButton("쇼츠 지우기", { askDelete = true }, enabled = idle)
-                    }
+            val url = video?.videoUrl
+            if (video?.status == VideoStatus.DONE && url != null && !state.playFailed) {
+                // 만화 보기처럼 아래는 "내보내기" 하나
+                Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    PrimaryButton("내보내기", { if (idle) exportSheet = true }, loading = saving || sharing)
                 }
             }
         },
@@ -264,22 +277,37 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
         }
     }
 
+    val exportUrl = video?.videoUrl
+    if (exportSheet && exportUrl != null) {
+        // 만화 내보내기 시트와 같은 줄(video.md 9장, 줄 이름은 초안). 시트는 바로 닫고 받는 동안은 창으로 기다려요
+        LologSheet(onDismiss = { exportSheet = false }) {
+            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("쇼츠 내보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                ShareRow(Icons.Outlined.Download, "폰에 저장") { exportSheet = false; save(exportUrl) }
+                ShareRow(Icons.Outlined.ChatBubbleOutline, "카카오톡으로 보내기") { exportSheet = false; share(exportUrl, VideoExport.Target.KAKAO) }
+                ShareRow(Icons.Outlined.CameraAlt, "인스타그램") { exportSheet = false; share(exportUrl, VideoExport.Target.INSTAGRAM) }
+                ShareRow(Icons.Outlined.Share, "다른 앱으로 공유") { exportSheet = false; share(exportUrl, VideoExport.Target.OTHER) }
+            }
+        }
+    }
+
     if (sharing) {
         LologNoticeDialog(
             title = "영상을 준비하고 있어요",
-            body = "쇼츠 파일을 폰에 받는 중이에요. 다 받으면 인스타그램이 열려요.",
+            body = if (sharingTo.pkg == null) "쇼츠 파일을 폰에 받는 중이에요. 다 받으면 공유할 앱을 고를 수 있어요."
+            else "쇼츠 파일을 폰에 받는 중이에요. 다 받으면 ${sharingTo.appName}이 열려요.",
             buttonText = "취소",
             onButton = ::cancelShare,
             primary = false,
         ) { IndeterminateBar(Modifier.padding(top = 4.dp)) }
     }
 
-    if (noInstagram) {
+    missingApp?.let { app ->
         LologNoticeDialog(
-            title = "인스타그램 앱이 없어요",
-            body = "릴스에 공유하려면 인스타그램 앱이 필요해요. 설치한 뒤 다시 눌러 주세요.",
+            title = "$app 앱이 없어요",
+            body = "${app}으로 보내려면 $app 앱이 필요해요. 설치한 뒤 다시 눌러 주세요.",
             buttonText = "확인",
-            onButton = { noInstagram = false },
+            onButton = { missingApp = null },
         )
     }
 
@@ -356,25 +384,6 @@ private fun Making(status: VideoStatus, card: CardDetail?, modifier: Modifier) {
         if (card != null && card.lines.isNotEmpty()) {
             Spacer(Modifier.height(18.dp))
             ConversationReplay(card, running = status.inProgress)
-        }
-    }
-}
-
-/** 만드는 중 아래: 안내 + [쇼츠 지우기](켜짐) [만드는 중…](꺼짐). 4컷과 달리 만드는 중에도 지울 수 있어요 */
-@Composable
-private fun MakingButtons(enabled: Boolean, onDelete: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Lock, null, tint = LologColors.Muted, modifier = Modifier.size(13.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("만드는 중에도 지울 수 있어요(횟수는 안 돌아와요)", fontSize = 12.sp, color = LologColors.Muted)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GhostButton("쇼츠 지우기", onDelete, Modifier.weight(1f), enabled = enabled)
-            PrimaryButton("만드는 중…", {}, Modifier.weight(1f), enabled = false)
         }
     }
 }

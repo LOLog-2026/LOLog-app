@@ -14,15 +14,25 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 쇼츠 폰에 저장(LOLog-docs spec/video.md: 방에 올리기는 이번 범위가 아니고, 공유는 인스타그램 릴스만(앱이 mp4를 받아 인스타 공유 화면으로 넘김, 11/12 서현 결정)).
- * GET /api/videos/{id}의 videoUrl(mp4, 10분 서명 주소)을 받아 동영상(Movies/LOLog)에 넣거나 인스타그램으로 넘겨요.
+ * 쇼츠 내보내기(LOLog-docs video.md 9장): 폰에 저장, 카카오톡·인스타그램·다른 앱으로 공유.
+ * GET /api/videos/{id}의 videoUrl(mp4, 10분 서명 주소)을 받아 동영상(Movies/LOLog)에 넣거나 안드로이드 공유(ACTION_SEND, video/mp4)로 넘겨요.
+ * 카카오톡·인스타그램은 만화 공유처럼 그 앱을 고른 공유(setPackage)이고 카카오 SDK는 안 써요.
+ * 공유한 영상은 갤러리에 남기지 않고 공유용 임시 파일(cacheDir/shared)로만 둬요(정함 11-12).
  * 주소가 만료(403)됐으면 새 주소를 한 번 받아 다시 받아요(만화 저장과 같은 방식).
  */
 object VideoExport {
 
-    enum class Result { SAVED, SHARED, NO_INSTAGRAM, DOWNLOAD_FAILED, SAVE_FAILED, MOCK }
+    /** NO_APP: 고른 앱(카카오톡·인스타그램)이 폰에 없어요 */
+    enum class Result { SAVED, SHARED, NO_APP, DOWNLOAD_FAILED, SAVE_FAILED, MOCK }
 
-    const val INSTAGRAM = "com.instagram.android"
+    /** 공유할 곳. [pkg]가 null이면 안드로이드 공유 창(다른 앱으로 공유) */
+    enum class Target(val pkg: String?, val appName: String) {
+        KAKAO("com.kakao.talk", "카카오톡"),
+        INSTAGRAM("com.instagram.android", "인스타그램"),
+        OTHER(null, ""),
+    }
+
+    private const val SHARE_PREFIX = "lolog_shorts_"
 
     suspend fun saveToMovies(
         context: Context,
@@ -40,37 +50,39 @@ object VideoExport {
     }
 
     /**
-     * 인스타그램 공유 화면으로 넘기기. 릴스는 인스타 안에서 사용자가 골라요(릴스 편집 화면으로 바로 보내려면 메타 앱 ID가 필요해서 안 씀).
-     * 인스타그램이 없으면 영상을 받지 않고 바로 NO_INSTAGRAM이에요.
-     * 받은 파일은 cacheDir/shared/lolog_shorts_{id}.mp4에 두고 다음 공유 때 덮어써요.
-     * 받는 중에 코루틴이 취소되면 인스타그램을 열지 않아요.
+     * 공유 화면으로 넘기기. 인스타그램은 공유 화면에서 피드·스토리·릴스를 사용자가 골라요.
+     * 고른 앱이 없으면 영상을 받지 않고 바로 NO_APP이에요.
+     * 받은 파일은 cacheDir/shared/lolog_shorts_{id}.mp4에 두고, 예전에 공유한 다른 쇼츠 파일은 이때 지워요
+     * (보낸 뒤 바로 지우면 받는 앱이 아직 못 읽었을 수 있어서 다음 공유 때 지워요, 초안).
+     * 받는 중에 코루틴이 취소되면 공유 화면을 열지 않아요.
      */
-    suspend fun shareToInstagram(
+    suspend fun share(
         context: Context,
+        target: Target,
         videoUrl: String,
         videoId: Long,
         network: ApiClient?,
         freshUrl: suspend () -> String?,
     ): Result {
-        val send = Intent(Intent.ACTION_SEND).setType("video/mp4").setPackage(INSTAGRAM)
+        val send = Intent(Intent.ACTION_SEND).setType("video/mp4").apply { target.pkg?.let { setPackage(it) } }
         return shareFlow(
             videoUrl = videoUrl,
-            hasInstagram = { send.resolveActivity(context.packageManager) != null },
+            hasApp = { target.pkg == null || send.resolveActivity(context.packageManager) != null },
             download = network?.let { it::download },
             freshUrl = freshUrl,
-            open = { bytes -> open(context, send, bytes, "lolog_shorts_$videoId") },
+            open = { bytes -> open(context, send, target, bytes, "$SHARE_PREFIX$videoId") },
         )
     }
 
-    /** 인스타 확인 → (목업이면 MOCK) → 받기(403이면 새 주소로 한 번 더) → 열기. 테스트에서 가짜를 넣으려고 나눠 뒀어요 */
+    /** 앱 확인 → (목업이면 MOCK) → 받기(403이면 새 주소로 한 번 더) → 열기. 테스트에서 가짜를 넣으려고 나눠 뒀어요 */
     internal suspend fun shareFlow(
         videoUrl: String,
-        hasInstagram: () -> Boolean,
+        hasApp: () -> Boolean,
         download: ((String) -> ApiClient.Download)?,
         freshUrl: suspend () -> String?,
         open: suspend (ByteArray) -> Result,
     ): Result {
-        if (!hasInstagram()) return Result.NO_INSTAGRAM
+        if (!hasApp()) return Result.NO_APP
         // 목업 주소는 실제 파일이 없어요
         if (videoUrl.startsWith("mock://") || download == null) return Result.MOCK
         val bytes = withContext(Dispatchers.IO) {
@@ -80,25 +92,31 @@ object VideoExport {
         return open(bytes)
     }
 
-    /** 공유용 파일을 쓰고 content:// 주소로 인스타그램을 열어요 */
-    private suspend fun open(context: Context, send: Intent, bytes: ByteArray, name: String): Result {
+    /** 공유용 파일을 쓰고 content:// 주소로 고른 앱(없으면 공유 창)을 열어요 */
+    private suspend fun open(context: Context, send: Intent, target: Target, bytes: ByteArray, name: String): Result {
         val uri = withContext(Dispatchers.IO) {
             runCatching {
                 val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+                staleShares(dir.listFiles()?.map { it.name }.orEmpty(), keep = "$name.mp4").forEach { File(dir, it).delete() }
                 val file = File(dir, "$name.mp4").apply { writeBytes(bytes) }
                 FileProvider.getUriForFile(context, context.packageName + ".files", file)
             }.getOrNull()
         } ?: return Result.SAVE_FAILED
+        val intent = Intent(send).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return try {
             context.startActivity(
-                Intent(send).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                if (target.pkg == null) Intent.createChooser(intent, "쇼츠 공유").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) else intent,
             )
             Result.SHARED
         } catch (e: ActivityNotFoundException) {
-            // 받는 사이 인스타그램을 지웠을 때
-            Result.NO_INSTAGRAM
+            // 받는 사이 그 앱을 지웠을 때
+            Result.NO_APP
         }
     }
+
+    /** cacheDir/shared에서 지울 예전 쇼츠 공유 파일(만화 공유 파일은 그대로 둬요) */
+    internal fun staleShares(names: List<String>, keep: String): List<String> =
+        names.filter { it.startsWith(SHARE_PREFIX) && it.endsWith(".mp4") && it != keep }
 
     private suspend fun write(context: Context, bytes: ByteArray, name: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
@@ -124,12 +142,12 @@ object VideoExport {
 
     /**
      * 결과 띠 문구. 띠를 띄우지 않으면 null이에요.
-     * SHARED: 인스타에서 올렸는지는 알 수 없어서 띄우지 않아요. NO_INSTAGRAM: 띠 대신 창으로 알려요
-     * @param sharing 인스타그램 공유 결과면 true(목업 문구가 달라요)
+     * SHARED: 받는 앱에서 보냈는지는 알 수 없어서 띄우지 않아요. NO_APP: 띠 대신 창으로 알려요
+     * @param sharing 공유 결과면 true(목업 문구가 달라요)
      */
     fun message(r: Result, sharing: Boolean = false): String? = when (r) {
         Result.SAVED -> "동영상에 저장했어요"
-        Result.SHARED, Result.NO_INSTAGRAM -> null
+        Result.SHARED, Result.NO_APP -> null
         Result.DOWNLOAD_FAILED -> "영상을 받지 못했어요. 인터넷 연결을 확인해 주세요"
         Result.SAVE_FAILED -> "저장하지 못했어요"
         Result.MOCK -> if (sharing) "목업에서는 공유할 수 없어요" else "목업에서는 저장할 수 없어요"
