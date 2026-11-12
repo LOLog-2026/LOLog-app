@@ -39,6 +39,7 @@ import com.lolog.app.ui.screens.friends.FriendsScreen
 import com.lolog.app.ui.screens.home.HomeScreen
 import com.lolog.app.ui.screens.inbox.InboxScreen
 import com.lolog.app.ui.screens.inbox.NoticeScreen
+import com.lolog.app.ui.screens.inbox.RoomTarget
 import com.lolog.app.ui.screens.rooms.Features
 import com.lolog.app.ui.screens.rooms.RoomCreateScreen
 import com.lolog.app.ui.screens.rooms.RoomInviteScreen
@@ -118,7 +119,8 @@ object Routes {
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
     /** 친구 방(목업에서만) */
-    const val ROOM = "room/{id}"
+    /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
+    const val ROOM = "room/{id}?tab={tab}"
     const val ROOM_CREATE = "rooms/create"
     /** 방장: 친구 초대 */
     const val ROOM_INVITE = "rooms/{id}/invite"
@@ -128,6 +130,7 @@ object Routes {
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
     fun room(id: Long) = "room/$id"
+    fun roomChat(id: Long) = "room/$id?tab=2"
     fun roomInvite(id: Long) = "rooms/$id/invite"
     fun notice(id: Long) = "notice/$id"
 }
@@ -386,11 +389,18 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { popUpTo(Routes.FRIENDS); launchSingleTop = true } },
                     )
                 }
-                composable(Routes.ROOM, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                composable(
+                    Routes.ROOM,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.LongType },
+                        navArgument("tab") { type = NavType.IntType; defaultValue = 0 },
+                    ),
+                ) { entry ->
                     val id = entry.arguments!!.getLong("id")
                     val message by entry.savedStateHandle.getStateFlow<String?>(ROOM_MESSAGE, null).collectAsState()
                     RoomScreen(
                         roomId = id,
+                        initialTab = entry.arguments!!.getInt("tab"),
                         onBack = { nav.popBackStack() },
                         onLeft = { msg -> nav.openRoomList(msg) },
                         onInvite = { nav.navigate(Routes.roomInvite(id)) { launchSingleTop = true } },
@@ -494,6 +504,12 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         nav.navigate(Routes.notice(n.id)) { launchSingleTop = true }
                     },
                     onPush = { nav.openPush(it) },
+                    onRoom = { target ->
+                        when (target) {
+                            RoomTarget.List -> nav.openRoomList()
+                            is RoomTarget.Chat -> nav.navigate(Routes.roomChat(target.roomId)) { launchSingleTop = true }
+                        }
+                    },
                 )
             }
             composable(Routes.NOTICE, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->

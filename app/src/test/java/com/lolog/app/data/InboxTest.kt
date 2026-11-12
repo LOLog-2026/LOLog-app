@@ -59,14 +59,17 @@ class InboxTest {
     }
 
     @Test
-    fun `목업은 공지 2개 알림 4개이고 탭마다 걸러 준다`() {
+    fun `목업은 공지 2개 알림 7개이고 탭마다 걸러 준다`() {
         val m = MockInbox()
-        assertEquals(6, m.page(InboxTab.ALL, null).items.size)
+        assertEquals(9, m.page(InboxTab.ALL, null).items.size)
         assertEquals(2, m.page(InboxTab.NOTICE, null).items.size)
         val noti = m.page(InboxTab.NOTIFICATION, null).items.map { (it as InboxItem.Notification).type }
-        assertEquals(listOf("CARDS_CREATED", "COMIC_DONE", "FRIEND_REQUEST", "PROFILE_CHARACTER_READY"), noti)
-        // 안 읽은 건 공지 하나와 새 카드 알림
-        assertEquals(2, m.page(InboxTab.ALL, null).items.count { !it.read })
+        assertEquals(
+            listOf("ROOM_INVITE", "ROOM_COMMENT", "CARDS_CREATED", "COMIC_DONE", "ROOM_DISBANDED", "FRIEND_REQUEST", "PROFILE_CHARACTER_READY"),
+            noti,
+        )
+        // 안 읽은 건 공지 하나와 방 초대, 새 카드 알림
+        assertEquals(3, m.page(InboxTab.ALL, null).items.count { !it.read })
     }
 
     @Test
@@ -77,8 +80,10 @@ class InboxTest {
         val times = first.items.map { java.time.OffsetDateTime.parse(it.createdAt) }
         assertEquals(times.sortedDescending(), times)
         val second = m.page(InboxTab.ALL, first.nextCursor)
-        assertEquals(2, second.items.size)
-        assertNull(second.nextCursor)
+        assertEquals(4, second.items.size)
+        val third = m.page(InboxTab.ALL, second.nextCursor)
+        assertEquals(1, third.items.size)
+        assertNull(third.nextCursor)
     }
 
     @Test
@@ -88,6 +93,8 @@ class InboxTest {
         m.read(InboxKind.NOTICE, 2)
         assertTrue(m.hasUnread())
         m.read(InboxKind.NOTIFICATION, 14)
+        assertTrue(m.hasUnread())
+        m.read(InboxKind.NOTIFICATION, 17)
         assertFalse(m.hasUnread())
         assertTrue(m.page(InboxTab.ALL, null).items.all { it.read })
     }

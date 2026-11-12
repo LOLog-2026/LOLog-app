@@ -20,6 +20,17 @@ internal class MockInbox(now: OffsetDateTime = OffsetDateTime.now(), private val
             "점검 중엔 카드 만들기가 잠깐 멈춰요. 녹음은 폰에 남아요.\n점검이 끝나면 자동으로 다시 만들어요.",
             now.minusMinutes(1).toString(), read = false,
         ),
+        // 방 알림(rooms.md 3장 푸시). 초대 푸시에는 초대한 사람 닉네임이 명세에 없어 목업만 넣어 둬요
+        InboxItem.Notification(
+            17, "ROOM_INVITE",
+            mapOf("type" to "ROOM_INVITE", "inviteId" to "501", "roomId" to "5", "roomName" to "주말 카레팟", "nickname" to "준"),
+            now.minusMinutes(2).toString(), read = false,
+        ),
+        InboxItem.Notification(
+            16, "ROOM_COMMENT",
+            mapOf("type" to "ROOM_COMMENT", "roomId" to "1", "postId" to "103", "nickname" to "서연", "roomName" to "과팀플 4인방"),
+            now.minusMinutes(5).toString(), read = true,
+        ),
         // 카드 3장. 실서버 data처럼 값은 모두 문자열이고 type이 들어 있어요(앱이 다시 넣은 모양)
         InboxItem.Notification(
             14, "CARDS_CREATED", mapOf("type" to "CARDS_CREATED", "recordingId" to "7", "cardCount" to "3"),
@@ -28,6 +39,10 @@ internal class MockInbox(now: OffsetDateTime = OffsetDateTime.now(), private val
         InboxItem.Notification(
             13, "COMIC_DONE", mapOf("type" to "COMIC_DONE", "comicId" to "31", "cardId" to "12"),
             now.minusHours(1).toString(), read = true,
+        ),
+        InboxItem.Notification(
+            15, "ROOM_DISBANDED", mapOf("type" to "ROOM_DISBANDED", "roomName" to "고3 동창"),
+            now.minusHours(20).toString(), read = true,
         ),
         InboxItem.Notification(
             12, "FRIEND_REQUEST", mapOf("type" to "FRIEND_REQUEST", "requestId" to "202", "nickname" to "하은"),

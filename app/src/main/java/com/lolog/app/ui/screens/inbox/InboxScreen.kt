@@ -177,6 +177,7 @@ private fun InboxBadge.colors(): Pair<Color, Color> = when (this) {
     InboxBadge.CARDS -> LologColors.LaughSoft to Color(0xFFB7700B)
     InboxBadge.COMIC, InboxBadge.CHARACTER -> LologColors.RecSoft to LologColors.Accent
     InboxBadge.FRIEND -> LologColors.MemorySoft to LologColors.MemoryText
+    InboxBadge.ROOM -> Color(0xFFF0EBFD) to Color(0xFF7A5AF8)
     InboxBadge.OTHER -> LologColors.Canvas to LologColors.Muted
 }
 
@@ -188,7 +189,13 @@ private fun InboxBadge.colors(): Pair<Color, Color> = when (this) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InboxScreen(onBack: () -> Unit, onNotice: (InboxItem.Notice) -> Unit, onPush: (PushPayload) -> Unit) {
+fun InboxScreen(
+    onBack: () -> Unit,
+    onNotice: (InboxItem.Notice) -> Unit,
+    onPush: (PushPayload) -> Unit,
+    /** 방 알림: 방 목록이나 그 방 대화 탭 */
+    onRoom: (RoomTarget) -> Unit = {},
+) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { InboxViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -250,8 +257,9 @@ fun InboxScreen(onBack: () -> Unit, onNotice: (InboxItem.Notice) -> Unit, onPush
                                     vm.open(item)
                                     when (item) {
                                         is InboxItem.Notice -> onNotice(item)
-                                        // 모르는 type이면 payloadOf가 null: 이동 없이 읽음만
-                                        is InboxItem.Notification -> Notifier.payloadOf(item.data)?.let(onPush)
+                                        // 방 알림은 ui에서 갈 곳을 정해요. 모르는 type이면 payloadOf가 null: 이동 없이 읽음만
+                                        is InboxItem.Notification ->
+                                            item.roomTarget()?.let(onRoom) ?: Notifier.payloadOf(item.data)?.let(onPush)
                                     }
                                 }
                             }

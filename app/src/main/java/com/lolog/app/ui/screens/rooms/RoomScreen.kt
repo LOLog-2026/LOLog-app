@@ -301,6 +301,8 @@ internal data class Pressed(val post: RoomPost, val bounds: Rect)
 @Composable
 fun RoomScreen(
     roomId: Long,
+    /** 처음 열 탭(0 = 4컷, 2 = 대화). 알림함의 방 댓글 알림은 대화 탭으로 */
+    initialTab: Int = 0,
     onBack: () -> Unit,
     /** 방을 떠남(나가기·해산·방이 없어짐). 방 목록으로 돌아가 [message]를 스낵바로 띄워요 */
     onLeft: (message: String) -> Unit,
@@ -321,7 +323,7 @@ fun RoomScreen(
     val snackbar = remember { SnackbarHostState() }
 
     // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠), 2 = 대화
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
     var zoom by remember { mutableStateOf<RoomPost?>(null) }
     var pressed by remember { mutableStateOf<Pressed?>(null) }
     var replyTo by remember { mutableStateOf<RoomPost?>(null) }
