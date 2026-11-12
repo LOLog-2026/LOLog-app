@@ -24,8 +24,10 @@ fun LologDialog(
     danger: Boolean = false,
     loading: Boolean = false,
     eyebrow: (@Composable () -> Unit)? = null,
+    /** 뒤로가기·창 밖 누르기로 닫을 때. 안 주면 [onDismiss](보조 버튼)와 같아요 */
+    onDismissRequest: () -> Unit = onDismiss,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismissRequest) {
         Column(
             Modifier
                 .fillMaxWidth()

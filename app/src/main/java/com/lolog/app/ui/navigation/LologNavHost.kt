@@ -54,6 +54,7 @@ import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
 import com.lolog.app.ui.screens.recording.AnalyzingScreen
+import com.lolog.app.ui.screens.recording.RECORDING_NOT_STARTED
 import com.lolog.app.ui.screens.recording.RecordingScreen
 import com.lolog.app.ui.screens.settings.PasswordChangeScreen
 import com.lolog.app.ui.screens.settings.SettingsScreen
@@ -67,6 +68,8 @@ import com.lolog.app.ui.theme.LologColors
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer 없음") }
 
 private const val CARD_SAVED = "cardSaved"
+/** 녹음을 시작하지 않고 홈으로 돌아갈 때 홈 스낵바 문구 */
+private const val HOME_MESSAGE = "homeMessage"
 /** 녹음을 끝내고 홈으로 돌아갈 때 넘기는 녹음 번호 */
 private const val FINISHED_RECORDING = "finishedRecording"
 /** 로그인 → 비밀번호 찾기로 넘기는 이메일(찾기 화면 이메일 칸을 미리 채워요) */
@@ -305,6 +308,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             }
             composable(Routes.HOME) { entry ->
                 val finished by entry.savedStateHandle.getStateFlow<Long?>(FINISHED_RECORDING, null).collectAsState()
+                val message by entry.savedStateHandle.getStateFlow<String?>(HOME_MESSAGE, null).collectAsState()
                 HomeScreen(
                     onRecord = { nav.navigate(Routes.RECORDING) },
                     onCard = { nav.navigate(Routes.card(it)) },
@@ -313,11 +317,18 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onInbox = { nav.navigate(Routes.INBOX) { launchSingleTop = true } },
                     finishedRecordingId = finished,
                     onFinishedShown = { entry.savedStateHandle[FINISHED_RECORDING] = null },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[HOME_MESSAGE] = null },
                 )
             }
             composable(Routes.RECORDING) {
                 RecordingScreen(
                     onBack = { nav.popBackStack() },
+                    // 모바일 데이터 창에서 녹음 취소: 녹음을 시작하지 않은 채 홈으로(에피소드에서 들어왔어도)
+                    onNotStarted = {
+                        if (!nav.popBackStack(Routes.HOME, inclusive = false)) nav.resetTo(Routes.HOME)
+                        runCatching { nav.getBackStackEntry(Routes.HOME).savedStateHandle[HOME_MESSAGE] = RECORDING_NOT_STARTED }
+                    },
                     onFinished = { id ->
                         // 녹음이 끝나면 '분석 중' 화면 대신 홈으로 돌아가 위쪽 띠로 상태를 보여 줘요
                         val home = runCatching { nav.getBackStackEntry(Routes.HOME) }.getOrNull()

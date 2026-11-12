@@ -159,6 +159,9 @@ fun HomeScreen(
     /** 방금 끝낸 녹음 ID (녹음 화면에서 끝내고 돌아오면 들어와요) */
     finishedRecordingId: Long? = null,
     onFinishedShown: () -> Unit = {},
+    /** 다른 화면에서 돌아올 때 아래 띠에 한 번 보여 줄 문구(녹음 취소 등) */
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
 ) {
     val container = LocalContainer.current
     val repo = container.repository
@@ -189,6 +192,9 @@ fun HomeScreen(
         onFinishedShown()
         snackbar.showSnackbar("녹음을 끝냈어요. 정리되면 알려 드릴게요")
     }
+    // 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(message) { message?.let { onMessageShown(); scope.launch { snackbar.showSnackbar(it) } } }
     val status = analysis?.progress?.status
     // 올리는 중(아직 상태 없음)·받음·찾는 중이면 "정리하고 있어요"
     val searching = analysis != null && status != RecordingStatus.DONE && status != RecordingStatus.FAILED
