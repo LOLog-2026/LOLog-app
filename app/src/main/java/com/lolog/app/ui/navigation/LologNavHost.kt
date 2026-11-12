@@ -1,5 +1,8 @@
 package com.lolog.app.ui.navigation
 
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.data.model.PushType
+import com.lolog.app.data.model.Badges
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -197,14 +200,21 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     val current = backStack?.destination?.route
     val showTabs = current in tabs.map { it.route }
 
-    // 친구 탭의 빨간 숫자 = 받은 요청 수. 홈이나 친구 화면을 열 때마다 새로 받아요(푸시는 이번에 없음)
+    // 친구 탭의 빨간 숫자 = 받은 요청 수. 홈이나 친구 화면을 열 때마다, 친구 요청 푸시가 올 때 새로 받아요
     var receivedCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(current, loggedIn) {
+    var requestPushes by remember { mutableIntStateOf(0) }
+    OnPush(PushType.FRIEND_REQUEST) { requestPushes++ }
+    LaunchedEffect(current, loggedIn, requestPushes) {
         if (!loggedIn) { receivedCount = 0; return@LaunchedEffect }
-        if (current == Routes.HOME || current == Routes.FRIENDS) {
+        if (current == Routes.HOME || current == Routes.FRIENDS || requestPushes > 0) {
             runCatching { container.repository.friendRequests(FriendRequestDirection.RECEIVED).size }
                 .onSuccess { receivedCount = it }
         }
+    }
+    // 새 소식 점(inbox.md 4장): 탭을 오갈 때마다 서버 값으로 맞춰요
+    val badges by container.badges.badges.collectAsState()
+    LaunchedEffect(current, loggedIn) {
+        if (loggedIn && current in tabs.map { it.route }) container.badges.refresh()
     }
 
     // 알림을 눌렀을 때 갈 화면. 알림함의 알림 줄도 같은 함수(openPush)를 써요
@@ -233,7 +243,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     Scaffold(
         containerColor = LologColors.Canvas,
         topBar = { OfflineBar(visible = !online && current != Routes.SPLASH) },
-        bottomBar = { if (showTabs) BottomTabs(current, receivedCount) { nav.goTab(it) } },
+        bottomBar = { if (showTabs) BottomTabs(current, receivedCount, badges) { nav.goTab(it) } },
     ) { padding ->
         NavHost(
             nav, startDestination = Routes.SPLASH,
@@ -606,7 +616,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
 }
 
 @Composable
-private fun BottomTabs(current: String?, receivedCount: Int, onTab: (String) -> Unit) {
+private fun BottomTabs(current: String?, receivedCount: Int, badges: Badges, onTab: (String) -> Unit) {
     NavigationBar(containerColor = LologColors.Paper, tonalElevation = 0.dp) {
         tabs.forEach { tab ->
             NavigationBarItem(
@@ -614,8 +624,16 @@ private fun BottomTabs(current: String?, receivedCount: Int, onTab: (String) -> 
                 onClick = { onTab(tab.route) },
                 icon = {
                     val count = if (tab.route == Routes.FRIENDS) receivedCount else 0
+                    // 숫자가 없으면 새 소식 점(보관함: 새 카드, 컨텐츠: 만화·쇼츠, 친구: 캐릭터·방)
+                    val dot = when (tab.route) {
+                        Routes.LIBRARY -> badges.cards
+                        Routes.COMICS -> badges.comics
+                        Routes.FRIENDS -> badges.friendsTab
+                        else -> false
+                    }
                     BadgedBox(badge = {
                         if (count > 0) Badge(containerColor = LologColors.Rec, contentColor = LologColors.Paper) { Text(if (count > 99) "99+" else "$count") }
+                        else if (dot) Badge(containerColor = LologColors.Accent)
                     }) { Icon(tab.icon, contentDescription = null) }
                 },
                 label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) },

@@ -24,6 +24,9 @@ interface AuthApi {
     @GET("auth/me") suspend fun me(): MeDto
     @POST("auth/me/social/{provider}")
     suspend fun linkSocial(@Path("provider") provider: String, @Body body: SocialAuthDto): LinkedProvidersDto
+    /** 연결 끊기. 연결돼 있지 않아도 200. 비밀번호 없는 계정의 마지막 연결이면 409 LAST_LOGIN_METHOD(api-spec.md) */
+    @DELETE("auth/me/social/{provider}")
+    suspend fun unlinkSocial(@Path("provider") provider: String): LinkedProvidersDto
 
     // 비밀번호 찾기·바꾸기 (FR-AUTH-07, LOLog-docs #45)
     /** 204 본문 없음. 가입 여부와 관계없이 늘 204 */
@@ -142,6 +145,11 @@ interface MainApi {
     @POST("api/inbox/{kind}/{id}/read") suspend fun readInbox(@Path("kind") kind: String, @Path("id") id: Long)
     /** 204. 지금까지 온 것을 모두 읽음 */
     @POST("api/inbox/read") suspend fun readAllInbox()
+
+    // 앱 안 새 소식 점 (LOLog-docs spec/inbox.md 4·5장)
+    @GET("api/me/badges") suspend fun badges(): BadgesDto
+    /** 204 본문 없음. kind는 cards·comics·profileCharacter·friends·rooms·inbox */
+    @POST("api/me/badges/{kind}/read") suspend fun readBadge(@Path("kind") kind: String)
 
     // 관리자 공지 (LOLog-docs spec/admin.md 7장). 관리자가 아니면 403 FORBIDDEN, 없는 공지는 404 NOTICE_NOT_FOUND
     /** 201 Notice */

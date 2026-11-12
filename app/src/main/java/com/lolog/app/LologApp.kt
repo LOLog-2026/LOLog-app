@@ -26,11 +26,13 @@ class LologApp : Application() {
         appScope.launch {
             container.tokens.loggedIn.collect { loggedIn ->
                 if (loggedIn) launch(Dispatchers.IO) { PushTokens.register(this@LologApp, container.repository) }
+                // 새 소식 점: 로그인하면 받고, 로그아웃하면 다 꺼요
+                if (loggedIn) container.badges.refresh() else container.badges.clear()
             }
         }
 
-        // 목업에서는 저장소가 흘려보내는 이벤트를 알림으로 띄워요. (실제는 LologMessagingService가 같은 일을 해요)
-        appScope.launch {
+        // 목업에서는 저장소가 흘려보내는 이벤트를 알림으로 띄워요. (실제는 LologMessagingService가 띄우고 PushBus로 화면에 넘겨요)
+        if (container.repository is MockLologRepository) appScope.launch {
             container.repository.pushEvents.collect { p ->
                 val title = (container.repository as? MockLologRepository)
                     ?.takeIf { p.type == PushType.COMIC_DONE }

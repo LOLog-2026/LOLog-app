@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.CardSummary
 import com.lolog.app.BuildConfig
 import com.lolog.app.data.model.ComicStatus
+import com.lolog.app.data.model.PushType
 import com.lolog.app.data.model.RecordingProgress
 import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.repo.LologRepository
@@ -89,10 +90,6 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    /** 종 버튼의 코랄 점: 안 읽은 알림이나 공지사항이 있음 */
-    private val _hasUnread = MutableStateFlow(false)
-    val hasUnread: StateFlow<Boolean> = _hasUnread
-
     private val _analysis = MutableStateFlow<Analysis?>(null)
     val analysis: StateFlow<Analysis?> = _analysis
     private var watchJob: Job? = null
@@ -110,11 +107,6 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
                 recent = c.cards.take(RECENT_MAX),
             )
         } }.onSuccess { _state.value = it }
-    }
-
-    /** GET /api/inbox/unread. 실패하면(서버가 아직 지원하지 않을 때 포함) 점을 안 보여요 */
-    fun loadUnread() = viewModelScope.launch {
-        _hasUnread.value = runCatching { repo.inboxHasUnread() }.getOrDefault(false)
     }
 
     /**
@@ -172,13 +164,21 @@ fun HomeScreen(
     val vm = viewModel { HomeViewModel(repo) }
     val state by vm.state.collectAsState()
     val analysis by vm.analysis.collectAsState()
-    val hasUnread by vm.hasUnread.collectAsState()
+    // 종 버튼의 코랄 점: 안 읽은 알림이나 공지사항이 있음(GET /api/me/badges의 inbox, inbox.md 4장)
+    val badges by container.badges.badges.collectAsState()
+    val hasUnread = badges.inbox
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    // 앱이 켜져 있을 때 새 카드·만화 푸시가 오면 숫자와 최근 카드를 새로 받아요(#67 7번)
+    LaunchedEffect(Unit) {
+        repo.pushEvents.collect { p ->
+            if (p.type == PushType.CARDS_CREATED || p.type == PushType.COMIC_DONE) vm.load()
+        }
+    }
     LaunchedEffect(Unit) {
         vm.load()
         // 알림함 등 다른 화면에서 돌아올 때마다 점을 새로 받아요
-        vm.loadUnread()
+        container.badges.refresh()
         if (finishedRecordingId == null) vm.resumeAnalysis()
     }
     // 녹음 끝내고 돌아왔을 때: 정리 상태 보기 시작 + 아래 검은 띠 한 번

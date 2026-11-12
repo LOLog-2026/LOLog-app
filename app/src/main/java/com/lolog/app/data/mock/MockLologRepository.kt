@@ -227,6 +227,13 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     private val _push = MutableSharedFlow<PushPayload>(extraBufferCapacity = 8)
     override val pushEvents: Flow<PushPayload> = _push
 
+    /** 새 소식 점(inbox.md 4장): 푸시가 나간 기능을 적어 두고, 그 화면을 열면(readBadge) 지워요 */
+    private val newKinds = mutableSetOf(BadgeKind.CARDS)
+    private suspend fun push(p: PushPayload) {
+        newKinds += BadgeKind.of(p.type)
+        _push.emit(p)
+    }
+
     init {
         // 시작할 때 만드는 중인 만화가 있으면 계속 진행
         comicStore.filter { it.status.inProgress }.forEach { runComic(it.id) }
@@ -286,6 +293,16 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             throw LologException(ErrorCodes.SOCIAL_ALREADY_LINKED, "이미 다른 LOLog 계정에 연결된 Google 계정이에요")
         }
         linked += provider
+        return linked.toSet()
+    }
+
+    override suspend fun unlinkSocial(provider: SocialProvider): Set<SocialProvider> {
+        net()
+        // 비밀번호가 없는 계정(소셜로 로그인)의 마지막 연결은 못 끊어요(api-spec.md 409 LAST_LOGIN_METHOD)
+        if (!loggedInWithEmail && linked == setOf(provider)) {
+            throw LologException(ErrorCodes.LAST_LOGIN_METHOD, "마지막 로그인 수단은 끊을 수 없습니다.")
+        }
+        linked -= provider
         return linked.toSet()
     }
 
@@ -354,7 +371,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         }
         recordings[recordingId] = RecordingProgress(RecordingStatus.DONE, created.size)
         if (created.isNotEmpty()) { // 카드가 0개면 알림을 보내지 않아요 (협의 2-3)
-            _push.emit(PushPayload(PushType.CARDS_CREATED, recordingId = recordingId, cardCount = created.size, cardIds = created.map { it.id }))
+            push(PushPayload(PushType.CARDS_CREATED, recordingId = recordingId, cardCount = created.size, cardIds = created.map { it.id }))
         }
     }
 
@@ -447,13 +464,13 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         val card = lock.withLock { cardStore.firstOrNull { it.id == comic.cardId } }
         if (card != null && card.lines.any { it.text.length > 40 }) {
             set(ComicStatus.FAILED, reason = "대사가 말풍선에 들어가지 않아요")
-            _push.emit(PushPayload(PushType.COMIC_FAILED, comicId = comicId, cardId = comic.cardId))
+            push(PushPayload(PushType.COMIC_FAILED, comicId = comicId, cardId = comic.cardId))
             return@launch
         }
         set(ComicStatus.DRAWING)
         delay(5_000)
         set(ComicStatus.DONE, url = "mock://comic/$comicId")
-        _push.emit(PushPayload(PushType.COMIC_DONE, comicId = comicId, cardId = comic.cardId))
+        push(PushPayload(PushType.COMIC_DONE, comicId = comicId, cardId = comic.cardId))
     }
 
     override suspend fun comics(cursor: String?, size: Int, sort: SortOrder): ComicPage = lock.withLock {
@@ -518,7 +535,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         delay(3_000); set(VideoStatus.DRAWING)
         delay(4_000)
         val done = set(VideoStatus.DONE) ?: return@launch
-        _push.emit(PushPayload(PushType.VIDEO_DONE, cardId = done.cardId, videoId = videoId))
+        push(PushPayload(PushType.VIDEO_DONE, cardId = done.cardId, videoId = videoId))
     }
 
     override suspend fun videos(cursor: String?, size: Int, sort: SortOrder): VideoPage = lock.withLock {
@@ -550,7 +567,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             scope.launch {
                 delay(4_000)
                 val done = lock.withLock { friendBook.finishCharacter(failed, MockCharacters.thumb("young-f-02")) }
-                if (done) _push.emit(PushPayload(if (failed) PushType.PROFILE_CHARACTER_FAILED else PushType.PROFILE_CHARACTER_READY))
+                if (done) push(PushPayload(if (failed) PushType.PROFILE_CHARACTER_FAILED else PushType.PROFILE_CHARACTER_READY))
             }
         }
     }
@@ -598,6 +615,20 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun inboxHasUnread(): Boolean = lock.withLock { net(150); inboxBook.hasUnread() }
     override suspend fun readInbox(kind: InboxKind, id: Long) = lock.withLock { net(150); inboxBook.read(kind, id) }
     override suspend fun readAllInbox() = lock.withLock { net(); inboxBook.readAll() }
+
+    override suspend fun badges(): Badges = lock.withLock {
+        net(150)
+        Badges(
+            cards = BadgeKind.CARDS in newKinds,
+            comics = BadgeKind.COMICS in newKinds,
+            profileCharacter = BadgeKind.PROFILE_CHARACTER in newKinds,
+            // 친구 요청·종 버튼은 서버처럼 받은 요청 수·안 읽은 알림으로 정해요(inbox.md 7장)
+            friends = friendBook.requests(FriendRequestDirection.RECEIVED).isNotEmpty(),
+            rooms = BadgeKind.ROOMS in newKinds,
+            inbox = inboxBook.hasUnread(),
+        )
+    }
+    override suspend fun readBadge(kind: BadgeKind) = lock.withLock { net(100); newKinds -= kind; Unit }
 
     // 관리자 공지: 알림함 공지에 그대로 반영돼요. admin@lolog.app으로 로그인하지 않았으면 403 FORBIDDEN
     override suspend fun createNotice(title: String, body: String) =

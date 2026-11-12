@@ -1,5 +1,9 @@
 package com.lolog.app.ui.screens.friends
 
+import com.lolog.app.data.model.BadgeKind
+import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.SeenBadge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -128,6 +132,9 @@ fun FriendRequestsScreen(onBack: () -> Unit) {
     var confirmBlock by remember { mutableStateOf<FriendRequest?>(null) }
 
     LaunchedEffect(Unit) { vm.load() }
+    // 친구 점은 서버가 받은 요청 수로 정해요. 열었다고 알리고, 새 요청 푸시가 오면 목록 새로 받기
+    SeenBadge(BadgeKind.FRIENDS)
+    OnPush(PushType.FRIEND_REQUEST) { vm.load() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
 
     Scaffold(

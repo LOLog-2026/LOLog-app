@@ -6,7 +6,7 @@ import com.lolog.app.data.remote.ApiMapper.toModel
 import com.lolog.app.data.remote.ApiMapper.toDetail
 import com.lolog.app.data.model.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import com.lolog.app.notification.PushBus
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -21,7 +21,8 @@ class RemoteLologRepository(
 ) : LologRepository {
 
     override val isLoggedIn: Flow<Boolean> = tokens.loggedIn
-    override val pushEvents: Flow<PushPayload> = emptyFlow() // 실제 푸시는 FCM 서비스가 받아요
+    // 실제 푸시는 FCM 서비스가 받아 알림을 띄우고, 앱이 켜져 있으면 PushBus로 화면에 넘겨요(#67 7번)
+    override val pushEvents: Flow<PushPayload> = PushBus.events
 
     private val auth get() = network.auth
     private val api get() = network.main
@@ -60,6 +61,13 @@ class RemoteLologRepository(
     override suspend fun linkSocial(provider: SocialProvider, providerToken: String) = call {
         ApiMapper.providers(auth.linkSocial(ApiMapper.providerPath(provider), SocialAuthDto(providerToken)).linkedProviders)
     }
+    override suspend fun unlinkSocial(provider: SocialProvider) = call {
+        ApiMapper.providers(auth.unlinkSocial(ApiMapper.providerPath(provider)).linkedProviders)
+    }
+    override suspend fun badges() = call {
+        api.badges().let { Badges(it.cards, it.comics, it.profileCharacter, it.friends, it.rooms, it.inbox) }
+    }
+    override suspend fun readBadge(kind: BadgeKind) = call { api.readBadge(kind.path) }
 
     override suspend fun requestPasswordResetCode(email: String) = call { auth.requestPasswordResetCode(PasswordResetCodeDto(email)) }
     override suspend fun resetPassword(email: String, code: String, newPassword: String) =

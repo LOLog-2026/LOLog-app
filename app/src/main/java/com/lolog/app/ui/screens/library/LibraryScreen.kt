@@ -1,5 +1,9 @@
 package com.lolog.app.ui.screens.library
 
+import com.lolog.app.data.model.BadgeKind
+import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.SeenBadge
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -104,6 +108,9 @@ fun LibraryScreen(onCard: (Long) -> Unit, onRecord: () -> Unit, onBack: () -> Un
     val vm = viewModel { LibraryViewModel(repo) }
     val state by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.refresh() }
+    // 보관함 새 소식 점 끄기, 켜져 있을 때 새 카드 푸시가 오면 목록 새로 받기(inbox.md 4장, #67 7번)
+    SeenBadge(BadgeKind.CARDS)
+    OnPush(PushType.CARDS_CREATED) { vm.refresh() }
     // "새로!" 기준: 이번에 열기 전, 마지막으로 에피소드 탭을 연 시간. 여는 지금 시간을 저장해요
     val context = LocalContext.current
     val seenBefore = remember { EpisodeSeen.open(context) }

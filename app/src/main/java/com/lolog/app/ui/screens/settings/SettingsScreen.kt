@@ -57,6 +57,8 @@ class SettingsViewModel(
         val nickname: String? = null,   // 친구에게 보여질 별명. 없으면 "정하기"
         val blockedCount: Int? = null,
         val linking: SocialProvider? = null,
+        /** 연결 끊기 요청 중인 회사 */
+        val unlinking: SocialProvider? = null,
         val busy: Boolean = false,
         val loggedOut: Boolean = false,
         val toast: String? = null,
@@ -92,6 +94,20 @@ class SettingsViewModel(
             } catch (e: LologException) {
                 val msg = socialErrorText(e)
                 _state.update { it.copy(linking = null, toast = msg) }
+            }
+        }
+    }
+
+    /** DELETE /auth/me/social/{provider}. 마지막 로그인 방법이면 409 LAST_LOGIN_METHOD라 안내만 해요 */
+    fun unlink(provider: SocialProvider) {
+        if (_state.value.unlinking != null || _state.value.linking != null) return
+        viewModelScope.launch {
+            _state.update { it.copy(unlinking = provider) }
+            try {
+                val linked = repo.unlinkSocial(provider)
+                _state.update { s -> s.copy(unlinking = null, me = s.me?.copy(linkedProviders = linked), toast = "${provider.label} 연결을 끊었어요") }
+            } catch (e: LologException) {
+                _state.update { it.copy(unlinking = null, toast = errorText(e)) }
             }
         }
     }
@@ -142,6 +158,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var askLogout by remember { mutableStateOf(false) }
+    var askUnlink by remember { mutableStateOf<SocialProvider?>(null) }
     val recorderState by container.recorder.state.collectAsState()
     val recording = recorderState as? RecordingState.Recording
     // 녹음 중이 아닐 때 폰에 못 올린 글·음성이 남았는지. 로그아웃 창을 열 때 확인해요
@@ -215,7 +232,16 @@ fun SettingsScreen(
                     Spacer(Modifier.width(14.dp))
                     Text(p.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     when {
-                        linked -> Text("연결됨", fontSize = 13.sp, color = LologColors.Muted)
+                        state.unlinking == p -> TypingDots(dot = 6.dp)
+                        linked -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("연결됨", fontSize = 13.sp, color = LologColors.Muted)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "끊기", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Accent,
+                                modifier = Modifier.clickable(enabled = state.linking == null && state.unlinking == null) { askUnlink = p }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                            )
+                        }
                         state.linking == p -> TypingDots(dot = 6.dp)
                         // 그 회사 키가 local.properties에 없으면 로그인 화면처럼 "준비 중"으로 두고 눌리지 않게 해요(목업은 늘 켜짐)
                         !signIn.isReady(p) -> Text("준비 중", fontSize = 13.sp, color = LologColors.Muted)
@@ -246,6 +272,17 @@ fun SettingsScreen(
             SettingsRow("탈퇴하고 모든 카드 지우기", danger = true) { askWithdraw = true }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    askUnlink?.let { p ->
+        LologDialog(
+            title = "${p.label} 연결을 끊을까요?",
+            body = "다음부터 ${p.label}로는 이 계정에 로그인할 수 없어요. 카드와 만화는 그대로 있어요.",
+            confirmText = "끊기",
+            danger = true,
+            onConfirm = { askUnlink = null; vm.unlink(p) },
+            onDismiss = { askUnlink = null },
+        )
     }
 
     if (askLogout) {
