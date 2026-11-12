@@ -21,6 +21,8 @@ fun NavHostController.openPush(p: PushPayload) {
             navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
         // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
         PushType.FRIEND_REQUEST -> navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
+        // 쇼츠 완성·실패 → 그 쇼츠 화면(실패면 안내가 거기 있어요). 번호가 없으면 컨텐츠 화면
+        PushType.VIDEO_DONE, PushType.VIDEO_FAILED -> p.videoId?.let { navigate(Routes.video(it)) } ?: goTab(Routes.COMICS)
         // 방(rooms.md 3장 푸시 표의 앱 동작). 알림함에서 누를 때(RoomTarget)와 같은 곳으로 가요
         // 초대 → 방 목록(받은 초대가 맨 위), 해산 → 방 목록
         PushType.ROOM_INVITE, PushType.ROOM_DISBANDED -> openRoomList()

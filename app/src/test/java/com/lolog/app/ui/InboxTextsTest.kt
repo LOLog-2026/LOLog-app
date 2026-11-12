@@ -27,6 +27,8 @@ class InboxTextsTest {
         assertEquals(InboxLine("이야기 카드 3장이 생겼어요", "녹음에서 재밌는 순간을 찾았어요"), noti("CARDS_CREATED", "cardCount" to "3").line())
         assertEquals(InboxLine("4컷만화가 다 그려졌어요", "눌러서 볼 수 있어요"), noti("COMIC_DONE").line())
         assertEquals(InboxLine("4컷만화를 그리지 못했어요", "다시 그려 볼 수 있어요"), noti("COMIC_FAILED").line())
+        assertEquals(InboxLine("쇼츠가 완성됐어요", "눌러서 볼 수 있어요"), noti("VIDEO_DONE", "videoId" to "7").line())
+        assertEquals(InboxLine("쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요"), noti("VIDEO_FAILED", "videoId" to "7").line())
         assertEquals(InboxLine("내 캐릭터 그림이 생겼어요", "친구들이 화자 그림으로 쓸 수 있어요"), noti("PROFILE_CHARACTER_READY").line())
         assertEquals(InboxLine("내 캐릭터를 만들지 못했어요", "사진을 다시 골라 주세요"), noti("PROFILE_CHARACTER_FAILED").line())
         assertEquals(InboxLine("하은님이 친구 요청을 보냈어요", "받은 요청에서 수락할 수 있어요"), noti("FRIEND_REQUEST", "nickname" to "하은").line())
