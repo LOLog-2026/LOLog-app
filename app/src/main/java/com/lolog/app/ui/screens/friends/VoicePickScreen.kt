@@ -43,12 +43,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * 내 캐릭터 화면의 "내 목소리" 줄을 보여 줄지. 서버(PATCH /api/me/profile/character/voice, voiceUrl·voice)가
- * 아직 없어서 꺼 둬요. 서버를 배포한 뒤 true로 바꿔요
- */
-const val VOICE_PICK_ENABLED = false
-
 /** 저장하고 돌아갈 때 내 캐릭터 화면 스낵바 문구 */
 const val VOICE_PICKED = "목소리를 골랐어요"
 

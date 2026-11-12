@@ -123,7 +123,7 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
             containerColor = LologColors.Paper, contentColor = LologColors.Ink,
             disabledContainerColor = LologColors.Canvas, disabledContentColor = LologColors.Muted,
         ),
-    ) { Text(text, style = MaterialTheme.typography.labelLarge) }
+    ) { Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false) }
 }
 
 /** 작은 테두리 버튼 (시안의 link-btn) */

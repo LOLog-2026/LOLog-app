@@ -222,6 +222,8 @@ class AuthViewModel(private val repo: LologRepository) : ViewModel() {
                         code == ErrorCodes.ACCOUNT_SUSPENDED -> s.copy(passwordError = errorText(e))
                         provider != null -> s.copy(snackbar = socialErrorText(e))
                         code == ErrorCodes.ACCOUNT_EXISTS -> s.copy(emailError = "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요")
+                        // 관리자가 탈퇴시킨 이메일(admin.md 3장): 인증번호가 맞을 때만 와요. 이메일 칸 아래에 띄워요
+                        code == ErrorCodes.ACCOUNT_BANNED -> s.copy(emailError = errorText(e))
                         code == ErrorCodes.INVALID_CREDENTIALS -> s.copy(passwordError = "이메일 또는 비밀번호가 맞지 않아요")
                         code == ErrorCodes.INVALID_CODE -> s.copy(codeError = "인증번호가 맞지 않아요")
                         code == ErrorCodes.CODE_EXPIRED ->

@@ -25,6 +25,8 @@ class LologMessagingService : FirebaseMessagingService() {
             return
         }
         (application as LologApp).container.notifier.show(payload)
+        // 앱이 켜져 있으면 보고 있는 화면이 새로 받고, 새 소식 점도 켜요(#67 7번)
+        PushBus.emit(payload)
     }
 
     /** 토큰이 바뀌면 다시 등록해요(FR-NOTI). 로그인 전이면 로그인할 때 등록해요 */

@@ -24,6 +24,8 @@ object ErrorCodes {
     const val RECORDING_NOT_FOUND = "RECORDING_NOT_FOUND"
     const val ACCOUNT_EXISTS = "ACCOUNT_EXISTS"
     const val SOCIAL_ALREADY_LINKED = "SOCIAL_ALREADY_LINKED"
+    const val LAST_LOGIN_METHOD = "LAST_LOGIN_METHOD"   // 409 비밀번호가 없는 계정의 마지막 소셜 연결을 끊으려 함(api-spec.md)
+    const val ACCOUNT_BANNED = "ACCOUNT_BANNED"         // 409 관리자가 탈퇴시킨 계정의 이메일·소셜로 가입·소셜 로그인·연결(admin.md 3장)
     const val PART_OUT_OF_ORDER = "PART_OUT_OF_ORDER"   // 409 녹음 올리기
     const val RECORDING_CLOSED = "RECORDING_CLOSED"     // 409 녹음 올리기
     const val CARD_LOCKED = "CARD_LOCKED"               // 409 만화 만드는 중 고치기·지우기

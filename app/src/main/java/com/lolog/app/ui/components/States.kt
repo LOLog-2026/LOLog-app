@@ -61,6 +61,8 @@ fun errorText(e: Throwable): String {
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
         ErrorCodes.ACCOUNT_SUSPENDED -> "정지된 계정이에요."
+        ErrorCodes.ACCOUNT_BANNED -> "이 계정으로는 가입하거나 연결할 수 없어요"
+        ErrorCodes.LAST_LOGIN_METHOD -> "로그인할 방법이 이것 하나라 끊을 수 없어요"
         ErrorCodes.FORBIDDEN -> "관리자만 할 수 있어요"
         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> "입력한 내용을 확인해 주세요"
         ErrorCodes.UNKNOWN_SPEAKER -> "화자를 다시 골라 주세요"
@@ -175,8 +177,8 @@ fun EmptyState(
         Spacer(Modifier.height(14.dp))
         PenMemo(memo)
         Spacer(Modifier.height(14.dp))
-        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(max = 160.dp).height(44.dp))
-        else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(max = 140.dp).height(44.dp))
+        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
+        else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
     }
 }
 

@@ -154,4 +154,6 @@ dependencies {
     implementation(libs.mlkit.face.detection)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
+    // ViewModel 시험에서 Dispatchers.Main을 바꾸려고 써요(관리자 화면 시험)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
