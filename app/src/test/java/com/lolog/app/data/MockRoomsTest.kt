@@ -83,6 +83,20 @@ class MockRoomsTest {
     }
 
     @Test
+    fun 대화는_50줄씩_주고_커서로_그_앞_줄을_준다() = runBlocking {
+        val r = rooms()
+        repeat(60) { r.sendComment(team, null, "댓글 $it") }
+        val all = r.messages(team)
+        val first = r.messagePage(team)
+        assertEquals(MockRooms.PAGE, first.messages.size)
+        assertEquals(all.takeLast(MockRooms.PAGE).map { it.id }, first.messages.map { it.id })
+        assertNotNull(first.nextCursor)
+        val older = r.messagePage(team, first.nextCursor)
+        assertEquals(all.dropLast(MockRooms.PAGE).takeLast(MockRooms.PAGE).map { it.id }, older.messages.map { it.id })
+        assertTrue(older.messages.all { it.id < first.messages.first().id })
+    }
+
+    @Test
     fun 댓글을_보내면_대화에_캡션_달린_줄이_생긴다() = runBlocking {
         val r = rooms()
         val post = r.posts(team).first()

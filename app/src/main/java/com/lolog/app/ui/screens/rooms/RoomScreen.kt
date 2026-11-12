@@ -63,6 +63,10 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         val room: Room? = null,
         val posts: List<RoomPost> = emptyList(),
         val messages: List<RoomMessage> = emptyList(),
+        /** 그 앞 대화가 더 있으면 다음 요청에 넘길 커서(rooms.md 2장). null이면 처음까지 다 받음 */
+        val olderCursor: String? = null,
+        /** 앞 대화를 받는 중 */
+        val loadingOlder: Boolean = false,
         val error: String? = null,
         /** 들어올 때 받지 않은 글이 있었으면 "대화" 탭에 코랄 점 */
         val chatDot: Boolean = false,
@@ -86,8 +90,10 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         try {
             val room = rooms.room(roomId)
             val posts = rooms.posts(roomId)
-            val messages = rooms.messages(roomId) // 불러오면 받지 않은 글이 0이 돼요
-            _state.update { it.copy(room = room, posts = posts, messages = messages, error = null, chatDot = room.unread > 0) }
+            val page = rooms.messagePage(roomId) // 불러오면 받지 않은 글이 0이 돼요
+            _state.update {
+                it.copy(room = room, posts = posts, messages = page.messages, olderCursor = page.nextCursor, error = null, chatDot = room.unread > 0)
+            }
         } catch (e: Throwable) {
             if (gone(e)) return@launch
             _state.update { it.copy(error = errorText(e)) }
@@ -106,11 +112,41 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         if (!gone(e)) _state.update { it.copy(busy = false, sending = false, snackbar = errorText(e)) }
     }
 
-    /** 만화·대화를 다시 받아요(올리기·좋아요·댓글 뒤) */
+    /**
+     * 만화·대화를 다시 받아요(올리기·좋아요·댓글 뒤). 대화는 최근 묶음만 다시 받고,
+     * 앞에서 더 불러온 줄(최근 묶음보다 오래된 줄)은 그대로 이어 붙여요. 그래서 위로 올려 본 대화가 사라지지 않아요
+     */
     private suspend fun refresh() {
         val posts = rooms.posts(roomId)
-        val messages = rooms.messages(roomId)
-        _state.update { it.copy(posts = posts, messages = messages) }
+        val page = rooms.messagePage(roomId)
+        _state.update { s ->
+            val oldestNew = page.messages.firstOrNull()?.id
+            val older = if (oldestNew == null) emptyList() else s.messages.filter { it.id < oldestNew }
+            s.copy(
+                posts = posts,
+                messages = older + page.messages,
+                olderCursor = if (older.isEmpty()) page.nextCursor else s.olderCursor,
+            )
+        }
+    }
+
+    /** 대화를 맨 위까지 올렸을 때 그 앞 묶음을 받아요. 받을 게 없거나 받는 중이면 아무것도 안 해요 */
+    fun loadOlder() {
+        val cursor = _state.value.olderCursor ?: return
+        if (_state.value.loadingOlder) return
+        viewModelScope.launch {
+            _state.update { it.copy(loadingOlder = true) }
+            try {
+                val page = rooms.messagePage(roomId, cursor)
+                _state.update { s ->
+                    val known = s.messages.map { it.id }.toSet()
+                    s.copy(messages = page.messages.filterNot { it.id in known } + s.messages, olderCursor = page.nextCursor, loadingOlder = false)
+                }
+            } catch (e: Throwable) {
+                _state.update { it.copy(loadingOlder = false) }
+                fail(e)
+            }
+        }
     }
 
     private fun act(success: String? = null, block: suspend () -> Unit) {
@@ -420,6 +456,9 @@ fun RoomScreen(
                             else -> RoomChat(
                                 room = room,
                                 messages = state.messages,
+                                hasOlder = state.olderCursor != null,
+                                loadingOlder = state.loadingOlder,
+                                onLoadOlder = vm::loadOlder,
                                 replyTo = replyTo?.let { latest(it) ?: it },
                                 sending = state.sending,
                                 onClearReply = { replyTo = null },
