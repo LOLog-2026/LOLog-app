@@ -172,7 +172,8 @@ class SocialSignIn(private val activity: Activity) {
 fun socialErrorText(e: Throwable): String {
     val code = (e as? LologException)?.code
     return when {
-        code == ErrorCodes.INVALID_TOKEN -> "로그인할 수 없는 계정이에요. 다른 방법으로 로그인해 주세요"
+        // 서버가 그 회사 확인에 실패함. 흔한 이유는 이메일 동의를 뺐거나 이메일이 인증되지 않은 것이라 다시 시도해도 같아요(functional-spec FR-AUTH-02, 11-13)
+        code == ErrorCodes.INVALID_TOKEN -> "이 계정으로는 로그인할 수 없어요. 이메일 제공에 동의했는지 확인하거나 다른 방법으로 로그인해 주세요"
         // 회사 SDK에서 토큰을 받지 못함(functional-spec FR-AUTH-02 예외 문장 그대로)
         code == SocialSignIn.SOCIAL_SDK_ERROR -> "로그인하지 못했어요. 다시 시도해 주세요"
         code == ErrorCodes.INTERNAL_ERROR || code?.startsWith("HTTP_5") == true -> "잠시 뒤 다시 시도해 주세요"

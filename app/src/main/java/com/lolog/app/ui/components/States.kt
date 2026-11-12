@@ -57,7 +57,8 @@ fun errorText(e: Throwable): String {
     return when (ex.code) {
         ErrorCodes.COMIC_LIMIT -> "이 카드는 ${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
         ErrorCodes.ACCOUNT_EXISTS -> "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요"
-        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 계정에 연결된 소셜 계정이에요"
+        // 계정 합치기가 없어서 방법(탈퇴 뒤 연결)까지 알려요(requirements FR-AUTH-06, 11-13)
+        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 LOLog 계정에 연결된 소셜 계정이에요. 그 계정을 탈퇴한 뒤 연결할 수 있어요"
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
         ErrorCodes.ACCOUNT_SUSPENDED -> "정지된 계정이에요."
