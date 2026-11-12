@@ -60,8 +60,16 @@ import kotlinx.coroutines.launch
 
 // ── 05 녹음 중 · 파형 ──────────────────────────────
 
+/** 모바일 데이터 창에서 녹음을 취소하고 홈으로 돌아갈 때 홈 스낵바 문구 */
+const val RECORDING_NOT_STARTED = "녹음을 시작하지 않았어요"
+
 @Composable
-fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
+fun RecordingScreen(
+    onBack: () -> Unit,
+    onFinished: (Long) -> Unit,
+    /** 모바일 데이터 창을 뒤로 가기·창 밖 누르기로 닫음 = 녹음 취소. 홈으로 돌아가 "녹음을 시작하지 않았어요" */
+    onNotStarted: () -> Unit = onBack,
+) {
     val container = LocalContainer.current
     val recorder = container.recorder
     val state by recorder.state.collectAsState()
@@ -215,7 +223,8 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
     }
 
     if (askNetwork) {
-        // 문구·버튼은 audio.md 1장 "모바일 데이터 창" 그대로. 창 밖을 눌러 닫으면 데이터를 쓰지 않는 "Wi-Fi에서 올리기"로 봐요
+        // 문구·버튼은 audio.md 1장 "모바일 데이터 창" 그대로.
+        // 뒤로가기·창 밖을 눌러 닫으면 녹음 취소로 보고 녹음을 시작하지 않은 채 돌아가요
         LologDialog(
             title = "모바일 데이터를 쓰고 있어요.",
             body = "녹음한 음성을 지금 올릴까요, Wi-Fi에 연결되면 올릴까요?",
@@ -223,6 +232,7 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
             dismissText = "Wi-Fi에서 올리기",
             onConfirm = { askNetwork = false; recorder.start(AudioSave.ANY_NETWORK) },
             onDismiss = { askNetwork = false; recorder.start(AudioSave.WIFI_ONLY) },
+            onDismissRequest = { askNetwork = false; onNotStarted() },
         )
     }
 

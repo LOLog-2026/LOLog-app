@@ -121,7 +121,15 @@ class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
 // ── 15 컨텐츠(내 만화) 목록 (보관함·만화 시안 ②, 공용 ⑥) ──
 
 @Composable
-fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -> Unit = {}, onVideo: (Long) -> Unit = {}) {
+fun ComicListScreen(
+    onComic: (Long) -> Unit,
+    onBack: () -> Unit,
+    onLibrary: () -> Unit = {},
+    onVideo: (Long) -> Unit = {},
+    /** true면 위 탭을 "4컷"으로 열어요(홈 4컷만화 칸) */
+    openFourCut: Boolean = false,
+    onFourCutOpened: () -> Unit = {},
+) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { ComicListViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -149,8 +157,9 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }
     // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
     BackHandler(onBack = onBack)
-    // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠). 처음엔 4컷
+    // 위 탭: 0 = 쇼츠, 1 = 4컷. 처음엔 쇼츠
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(openFourCut) { if (openFourCut) { tab = 1; onFourCutOpened() } }
 
     // 정렬을 바꾸면 첫 편부터 보여 줘요
     val pager = key(state.sort) { rememberPagerState { state.comics.size } }
@@ -161,19 +170,19 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // 위 칸: 흰 바탕 제목 줄 + "4컷 / 미디어" 탭(아래 1dp 선은 탭이 그려요). 맨 위에 고정, 아래만 넘어가요
+            // 위 칸: 흰 바탕 제목 줄 + "쇼츠 / 4컷" 탭(아래 1dp 선은 탭이 그려요). 맨 위에 고정, 아래만 넘어가요
             Column(Modifier.fillMaxWidth().background(LologColors.Paper)) {
                 // 정렬은 탭마다 따로(4컷·쇼츠 목록 모두 latest·oldest)
-                LologTopBar("컨텐츠", onBack = onBack, actions = {
-                    if (tab == 0) SortMenu(state.sort, vm::setSort) else SortMenu(videoState.sort, videoVm::setSort)
+                LologTopBar("쇼츠", onBack = onBack, actions = {
+                    if (tab == 0) SortMenu(videoState.sort, videoVm::setSort) else SortMenu(state.sort, vm::setSort)
                 })
-                ContentTabs(listOf("4컷", "미디어"), tab, { tab = it })
+                ContentTabs(listOf("쇼츠", "4컷"), tab, { tab = it })
             }
             // 아래 칸: 연한 회색, 노트 줄 없음
             Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
                 when {
-                    // 미디어 탭: 내 쇼츠(video.md 2장)
-                    tab == 1 -> VideoTab(videoVm, videoState, onVideo, onLibrary)
+                    // 쇼츠 탭: 내 쇼츠(video.md 2장)
+                    tab == 0 -> VideoTab(videoVm, videoState, onVideo, onLibrary)
                     state.loading -> SkeletonList(count = 4)
                     state.error != null && state.comics.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
                     state.comics.isEmpty() -> EmptyState(

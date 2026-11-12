@@ -22,7 +22,6 @@ import com.lolog.app.AppContainer
 import com.lolog.app.data.model.InboxItem
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.FriendRequestDirection
-import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
@@ -55,6 +54,7 @@ import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
 import com.lolog.app.ui.screens.recording.AnalyzingScreen
+import com.lolog.app.ui.screens.recording.RECORDING_NOT_STARTED
 import com.lolog.app.ui.screens.recording.RecordingScreen
 import com.lolog.app.ui.screens.settings.PasswordChangeScreen
 import com.lolog.app.ui.screens.settings.SettingsScreen
@@ -68,6 +68,8 @@ import com.lolog.app.ui.theme.LologColors
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer 없음") }
 
 private const val CARD_SAVED = "cardSaved"
+/** 녹음을 시작하지 않고 홈으로 돌아갈 때 홈 스낵바 문구 */
+private const val HOME_MESSAGE = "homeMessage"
 /** 녹음을 끝내고 홈으로 돌아갈 때 넘기는 녹음 번호 */
 private const val FINISHED_RECORDING = "finishedRecording"
 /** 로그인 → 비밀번호 찾기로 넘기는 이메일(찾기 화면 이메일 칸을 미리 채워요) */
@@ -89,6 +91,8 @@ private const val NOTICE_ID = "noticeId"
 private const val NOTICE_TITLE = "noticeTitle"
 private const val NOTICE_BODY = "noticeBody"
 private const val NOTICE_DATE = "noticeDate"
+/** 쇼츠 탭을 "4컷" 위 탭으로 열기(홈 컨텐츠 칸, 만화 푸시) */
+private const val COMICS_FOUR_CUT = "comicsFourCut"
 /** 방 만들기·친구 초대 화면 → 방 화면 스낵바 문구 */
 private const val ROOM_MESSAGE = "roomMessage"
 /** 공지 쓰기·고치기 화면 → 관리자 공지 목록 스낵바 문구 */
@@ -152,13 +156,19 @@ object Routes {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-// 아래 탭 4개: 보관함 · 홈 · 컨텐츠 · 친구. 설정은 홈 위쪽 톱니 버튼으로 들어가요
+// 아래 탭 4개: 쇼츠 · 홈 · 친구 · 설정. 에피소드는 홈 "에피소드" 숫자 칸으로 들어가요
 private val tabs = listOf(
-    Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
+    Tab(Routes.COMICS, "쇼츠", Icons.Outlined.SmartDisplay),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
-    Tab(Routes.COMICS, "컨텐츠", Icons.Outlined.GridView),
     Tab(Routes.FRIENDS, "친구", Icons.Outlined.People),
+    Tab(Routes.SETTINGS, "설정", Icons.Outlined.Settings),
 )
+
+/** 에피소드 화면은 아래 탭에 없지만 탭을 보여 주고 홈이 켜진 것으로 그려요 */
+private val tabBarRoutes = tabs.map { it.route } + Routes.LIBRARY
+
+/** 아래 탭에서 켜 보일 탭. 에피소드 화면이면 홈 */
+internal fun selectedTab(current: String?): String? = if (current == Routes.LIBRARY) Routes.HOME else current
 
 /** 탭 사이 이동: 스택을 쌓지 않고 상태를 남겨 둬요 */
 fun NavHostController.goTab(route: String) {
@@ -173,6 +183,12 @@ fun NavHostController.goTab(route: String) {
         launchSingleTop = true
         restoreState = true
     }
+}
+
+/** 쇼츠 탭으로 가요. [fourCut]이면 위 탭을 "4컷"으로 열어요 */
+fun NavHostController.openShorts(fourCut: Boolean = false) {
+    goTab(Routes.COMICS)
+    if (fourCut) currentBackStackEntry?.savedStateHandle?.set(COMICS_FOUR_CUT, true)
 }
 
 /** 방 목록(친구 탭의 "방" 알약)으로 돌아가요. [message]는 거기서 띄울 스낵바 문구 */
@@ -198,7 +214,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     val loggedIn by container.repository.isLoggedIn.collectAsState(initial = container.tokens.loggedIn.value)
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
-    val showTabs = current in tabs.map { it.route }
+    val showTabs = current in tabBarRoutes
 
     // 친구 탭의 빨간 숫자 = 받은 요청 수. 홈이나 친구 화면을 열 때마다, 친구 요청 푸시가 올 때 새로 받아요
     var receivedCount by remember { mutableIntStateOf(0) }
@@ -214,7 +230,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     // 새 소식 점(inbox.md 4장): 탭을 오갈 때마다 서버 값으로 맞춰요
     val badges by container.badges.badges.collectAsState()
     LaunchedEffect(current, loggedIn) {
-        if (loggedIn && current in tabs.map { it.route }) container.badges.refresh()
+        if (loggedIn && current in tabBarRoutes) container.badges.refresh()
     }
 
     // 알림을 눌렀을 때 갈 화면. 알림함의 알림 줄도 같은 함수(openPush)를 써요
@@ -292,20 +308,27 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             }
             composable(Routes.HOME) { entry ->
                 val finished by entry.savedStateHandle.getStateFlow<Long?>(FINISHED_RECORDING, null).collectAsState()
+                val message by entry.savedStateHandle.getStateFlow<String?>(HOME_MESSAGE, null).collectAsState()
                 HomeScreen(
                     onRecord = { nav.navigate(Routes.RECORDING) },
                     onCard = { nav.navigate(Routes.card(it)) },
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
-                    onComics = { nav.goTab(Routes.COMICS) },
-                    onSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onComics = { nav.openShorts(fourCut = true) },
                     onInbox = { nav.navigate(Routes.INBOX) { launchSingleTop = true } },
                     finishedRecordingId = finished,
                     onFinishedShown = { entry.savedStateHandle[FINISHED_RECORDING] = null },
+                    message = message,
+                    onMessageShown = { entry.savedStateHandle[HOME_MESSAGE] = null },
                 )
             }
             composable(Routes.RECORDING) {
                 RecordingScreen(
                     onBack = { nav.popBackStack() },
+                    // 모바일 데이터 창에서 녹음 취소: 녹음을 시작하지 않은 채 홈으로(에피소드에서 들어왔어도)
+                    onNotStarted = {
+                        if (!nav.popBackStack(Routes.HOME, inclusive = false)) nav.resetTo(Routes.HOME)
+                        runCatching { nav.getBackStackEntry(Routes.HOME).savedStateHandle[HOME_MESSAGE] = RECORDING_NOT_STARTED }
+                    },
                     onFinished = { id ->
                         // 녹음이 끝나면 '분석 중' 화면 대신 홈으로 돌아가 위쪽 띠로 상태를 보여 줘요
                         val home = runCatching { nav.getBackStackEntry(Routes.HOME) }.getOrNull()
@@ -361,8 +384,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onMakeCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                 )
             }
-            composable(Routes.COMICS) {
+            composable(Routes.COMICS) { entry ->
+                val fourCut by entry.savedStateHandle.getStateFlow(COMICS_FOUR_CUT, false).collectAsState()
                 ComicListScreen(
+                    openFourCut = fourCut,
+                    onFourCutOpened = { entry.savedStateHandle[COMICS_FOUR_CUT] = false },
                     onComic = { nav.navigate(Routes.comic(it)) },
                     onVideo = { nav.navigate(Routes.video(it)) },
                     onBack = { nav.goTab(Routes.HOME) },
@@ -468,8 +494,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             }
             composable(Routes.SETTINGS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(SETTINGS_MESSAGE, null).collectAsState()
+                // 아래 탭으로 여는 화면이라 ← 없음. 휴대폰 뒤로 가기는 홈으로 돌아가요
                 SettingsScreen(
-                    onBack = { nav.popBackStack() },
                     onLoggedOut = { nav.resetTo(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
@@ -620,13 +646,12 @@ private fun BottomTabs(current: String?, receivedCount: Int, badges: Badges, onT
     NavigationBar(containerColor = LologColors.Paper, tonalElevation = 0.dp) {
         tabs.forEach { tab ->
             NavigationBarItem(
-                selected = current == tab.route,
+                selected = selectedTab(current) == tab.route,
                 onClick = { onTab(tab.route) },
                 icon = {
                     val count = if (tab.route == Routes.FRIENDS) receivedCount else 0
-                    // 숫자가 없으면 새 소식 점(보관함: 새 카드, 컨텐츠: 만화·쇼츠, 친구: 캐릭터·방)
+                    // 숫자가 없으면 새 소식 점(쇼츠: 만화·쇼츠, 친구: 캐릭터·방). 새 카드 점은 홈 "에피소드" 칸에
                     val dot = when (tab.route) {
-                        Routes.LIBRARY -> badges.cards
                         Routes.COMICS -> badges.comics
                         Routes.FRIENDS -> badges.friendsTab
                         else -> false
