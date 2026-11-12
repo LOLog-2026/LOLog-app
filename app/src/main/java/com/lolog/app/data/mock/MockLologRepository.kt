@@ -378,6 +378,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     // ── 카드 ──
     override suspend fun cards(cursor: String?, size: Int, sort: SortOrder): CardPage = lock.withLock {
         net()
+        settleTexts()
         val (page, next) = mockPage(cardStore, cursor, size, sort)
         CardPage(page.map { it.toSummary() }, next)
     }
@@ -429,6 +430,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         preview = lines.getOrNull(1)?.text ?: lines.firstOrNull()?.text,
         lineCount = lines.size,
         hasAudio = audio.status == AudioStatus.READY,
+        source = source, textId = textId,
     )
 
     // ── 만화 ──
@@ -636,6 +638,35 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun updateNotice(id: Long, title: String?, body: String?) =
         lock.withLock { net(); inboxBook.updateNotice(loggedInAsAdmin, id, title, body) }
     override suspend fun deleteNotice(id: Long) = lock.withLock { net(); inboxBook.deleteNotice(loggedInAsAdmin, id) }
+
+    // ── 글로 카드 만들기 (MockTexts, texts.md 초안) ──
+    private val texts = MockTexts(newId = { nextId++ }, addCard = { cardStore.add(0, it) })
+
+    /** 글 카드가 생기면 서버처럼 에피소드 새 소식 점을 켜요. 푸시는 안 보내요(블로그 글은 명세상 푸시 없음) */
+    private fun settleTexts() {
+        if (texts.settle() > 0) newKinds += BadgeKind.CARDS
+    }
+
+    override suspend fun createText(input: TextInput): Long = lock.withLock {
+        net(500)
+        texts.create(input)
+    }.also {
+        scope.launch {
+            delay(MockTexts.MAKE_MS)
+            lock.withLock { settleTexts() }
+        }
+    }
+
+    override suspend fun text(id: Long): TextDetail = lock.withLock { net(150); settleTexts(); texts.get(id) }
+    override suspend fun checkBlog(url: String): BlogCheck = lock.withLock { net(600); texts.check(url) }
+    override suspend fun addBlog(url: String, categories: List<String>): Blog = lock.withLock {
+        net(600)
+        texts.add(url, categories).also { newKinds += BadgeKind.CARDS }
+    }
+    override suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog = lock.withLock { net(); texts.update(id, categories) }
+    override suspend fun blogs(): List<Blog> = lock.withLock { net(250); texts.list() }
+    override suspend fun deleteBlog(id: Long) = lock.withLock { net(); texts.delete(id) }
+    override suspend fun blogPosts(id: Long, cursor: String?): BlogPostPage = lock.withLock { net(250); texts.posts(id, cursor) }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }

@@ -63,6 +63,24 @@ interface LologRepository {
     /** 만드는 중에도 지울 수 있어요. 지워도 횟수는 돌아오지 않아요 */
     suspend fun deleteVideo(id: Long)
 
+    // 글로 카드 만들기 (texts.md 초안, 서버 아직 없음 → 실서버는 NOT_READY)
+    /** POST /api/texts → textId. 제목·본문이 비면 400 INVALID_REQUEST, 본문이 상한을 넘으면 400 TEXT_TOO_LONG(초안) */
+    suspend fun createText(input: TextInput): Long
+    /** GET /api/texts/{id}: 상태와 원문 */
+    suspend fun text(id: Long): TextDetail
+    /** POST /api/blogs/check: RSS를 못 찾거나 내부 주소면 400 INVALID_BLOG(초안) */
+    suspend fun checkBlog(url: String): BlogCheck
+    /** POST /api/blogs. categories가 비면 전부 가져와요 */
+    suspend fun addBlog(url: String, categories: List<String>): Blog
+    /** PATCH /api/blogs/{id} */
+    suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog
+    /** 연결한 블로그 목록. 명세에 주소가 없어요(앱이 함수만 만들어 둠) */
+    suspend fun blogs(): List<Blog>
+    /** 블로그 연결 끊기. 명세에 주소가 없어요(앱이 함수만 만들어 둠). 이미 만든 카드는 남아요 */
+    suspend fun deleteBlog(id: Long)
+    /** GET /api/blogs/{id}/posts. cursor는 받은 nextCursor 그대로 */
+    suspend fun blogPosts(id: Long, cursor: String? = null): BlogPostPage
+
     // 친구·프로필·차단 (LOLog-docs spec/friends.md)
     /** 처음 부르면 서버가 프로필을 만들어요. 닉네임을 정하기 전에는 friendCode가 null */
     suspend fun profile(): Profile

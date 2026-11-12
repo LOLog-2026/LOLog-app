@@ -162,6 +162,9 @@ fun EmptyState(
     onButton: () -> Unit,
     modifier: Modifier = Modifier,
     primary: Boolean = true,
+    /** 있으면 버튼 두 개: 왼쪽 흰 보조 버튼(이 글자) + 오른쪽 코랄 [buttonText] */
+    secondaryText: String? = null,
+    onSecondary: () -> Unit = {},
 ) {
     Column(
         modifier.fillMaxSize().padding(24.dp),
@@ -177,7 +180,12 @@ fun EmptyState(
         Spacer(Modifier.height(14.dp))
         PenMemo(memo)
         Spacer(Modifier.height(14.dp))
-        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
+        if (secondaryText != null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GhostButton(secondaryText, onSecondary, modifier = Modifier.weight(1f).height(44.dp))
+                PrimaryButton(buttonText, onButton, modifier = Modifier.weight(1f).height(44.dp))
+            }
+        } else if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
         else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
     }
 }

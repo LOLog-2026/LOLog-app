@@ -64,6 +64,10 @@ object ErrorCodes {
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
     // 관리자 (LOLog-docs spec/admin.md 7장)
     const val FORBIDDEN = "FORBIDDEN" // 403 관리자가 아닌데 관리자 주소를 부름
+    // 글로 카드 만들기 (LOLog-docs PR #62 texts.md 초안. 코드 이름도 초안)
+    const val TEXT_TOO_LONG = "TEXT_TOO_LONG" // 400 직접 쓴 글 본문이 길이 상한을 넘음
+    const val INVALID_BLOG = "INVALID_BLOG"   // 400 블로그 주소로 RSS를 찾지 못함, 내부 주소
+    const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -215,6 +219,10 @@ data class CardSummary(
     val lineCount: Int? = null,
     /** 들을 수 있는 음성이 있으면 목록에 작은 표시(replay.md 2장) */
     val hasAudio: Boolean = false,
+    /** 카드 출처(texts.md 6장). 서버가 아직 안 채우면 녹음 */
+    val source: CardSource = CardSource.RECORDING,
+    /** 글 카드(WRITTEN·BLOG)만 있어요 */
+    val textId: Long? = null,
 )
 
 /** 카드 구간 음성의 상태(replay.md 1장) */
@@ -258,6 +266,12 @@ data class CardDetail(
     val audio: CardAudio = CardAudio(),
     /** 이 카드로 만든 쇼츠(최근 것이 앞). 지운 쇼츠는 없어요 */
     val videos: List<VideoRef> = emptyList(),
+    /** 카드 출처(texts.md 6장). 서버가 아직 안 채우면 녹음 */
+    val source: CardSource = CardSource.RECORDING,
+    /** 글 카드(WRITTEN·BLOG)만 있어요. 원문 보기는 GET /api/texts/{textId} */
+    val textId: Long? = null,
+    /** 블로그 글이 길어 앞부분으로 만들었으면 true(texts.md 2장, 초안) */
+    val truncated: Boolean = false,
 ) {
     /**
      * 쇼츠를 더 만들 수 있는 횟수(앱 계산). 서버는 지운 쇼츠도 세지만 앱은 모르니, 넘치면 서버의 409 VIDEO_LIMIT로 알려요
@@ -308,6 +322,62 @@ data class CardEdit(
         get() = speakers == null && lines == null && place == null && characters == null &&
             newSpeakers == null && removeSpeakers == null
 }
+
+// ── 글로 카드 만들기 (LOLog-docs PR #62 spec/texts.md 초안, 서버 아직 없음) ──
+
+/** 카드 출처(texts.md 6장 source): 녹음 · 직접 쓴 글 · 블로그 글 */
+enum class CardSource { RECORDING, WRITTEN, BLOG }
+
+/**
+ * 직접 쓴 글 본문 길이 상한. 명세에 숫자가 없어요(AI 담당이 정함).
+ * 2,000은 앱이 정한 임시값이라 숫자가 정해지면 바꿔요
+ */
+const val TEXT_BODY_MAX = 2000
+
+/** 블로그 카테고리를 직접 적을 때 글자 수(명세에 없어 앱이 정함) */
+const val BLOG_CATEGORY_MAX = 30
+
+/** POST /api/texts 보내는 것. place·situation은 선택이라 비면 null */
+data class TextInput(val title: String, val body: String, val place: String?, val situation: String?)
+
+/** 글 → 카드 상태(texts.md 2장 "상태 보기") */
+enum class TextStatus { QUEUED, DONE, FAILED }
+
+/**
+ * GET /api/texts/{id}. 블로그 글이면 body 대신 link(카드가 생기면 서버가 본문을 지워요).
+ * cardId는 DONE일 때만 있어요
+ */
+data class TextDetail(
+    val textId: Long,
+    val source: CardSource,
+    val status: TextStatus,
+    val cardId: Long?,
+    val title: String,
+    val body: String?,
+    val place: String?,
+    val situation: String?,
+    val link: String?,
+    val truncated: Boolean,
+    val createdAt: String,
+)
+
+/** POST /api/blogs/check: 링크로 찾은 RSS 주소와 피드에 나온 카테고리(저장 안 함) */
+data class BlogCheck(val feedUrl: String, val platform: String, val categories: List<String>)
+
+/** 연결한 블로그. categories가 비면 전부 가져와요 */
+data class Blog(val id: Long, val platform: String, val siteUrl: String, val title: String?, val categories: List<String>)
+
+/** GET /api/blogs/{id}/posts 한 줄. 글마다 바로 카드로 만들어져요 */
+data class BlogPost(
+    val title: String,
+    val link: String,
+    val category: String?,
+    val publishedAt: String?,
+    val cardId: Long?,
+    val status: TextStatus,
+)
+
+data class BlogPostPage(val posts: List<BlogPost>, val nextCursor: String?)
 
 // ── 만화 ──────────────────────────────────────────────
 

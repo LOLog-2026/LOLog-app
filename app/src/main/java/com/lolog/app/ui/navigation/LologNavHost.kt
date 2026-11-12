@@ -53,6 +53,8 @@ import com.lolog.app.ui.screens.rooms.RoomScreen
 import com.lolog.app.ui.screens.library.CardDetailScreen
 import com.lolog.app.ui.screens.library.CardEditScreen
 import com.lolog.app.ui.screens.library.LibraryScreen
+import com.lolog.app.ui.screens.text.TextMakingScreen
+import com.lolog.app.ui.screens.text.TextWriteScreen
 import com.lolog.app.ui.screens.recording.AnalyzingScreen
 import com.lolog.app.ui.screens.recording.RECORDING_NOT_STARTED
 import com.lolog.app.ui.screens.recording.RecordingScreen
@@ -136,6 +138,10 @@ object Routes {
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
     const val VIDEO = "video/{videoId}"
+    /** 글로 만들기. tab은 처음 열 탭(0 = 직접 쓰기, 1 = 블로그) */
+    const val TEXT_WRITE = "text/write?tab={tab}"
+    /** 글로 카드 만드는 중 */
+    const val TEXT_MAKING = "text/{textId}"
     /** 친구 방(목업에서만) */
     /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
     const val ROOM = "room/{id}?tab={tab}"
@@ -148,6 +154,8 @@ object Routes {
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
     fun video(id: Long) = "video/$id"
+    fun textWrite(tab: Int = 0) = "text/write?tab=$tab"
+    fun textMaking(id: Long) = "text/$id"
     fun room(id: Long) = "room/$id"
     fun roomChat(id: Long) = "room/$id?tab=2"
     fun roomInvite(id: Long) = "rooms/$id/invite"
@@ -354,6 +362,25 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onCard = { nav.navigate(Routes.card(it)) },
                     onRecord = { nav.navigate(Routes.RECORDING) },
                     onBack = { nav.goTab(Routes.HOME) },
+                    onWrite = { nav.navigate(Routes.textWrite()) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.TEXT_WRITE, arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })) {
+                TextWriteScreen(
+                    initialTab = it.arguments?.getInt("tab") ?: 0,
+                    onBack = { nav.popBackStack() },
+                    // 보내면 쓰기 화면을 스택에서 빼요(만드는 중에서 뒤로 가면 에피소드)
+                    onCreated = { id -> nav.navigate(Routes.textMaking(id)) { popUpTo(Routes.TEXT_WRITE) { inclusive = true } } },
+                    onCard = { nav.navigate(Routes.card(it)) },
+                )
+            }
+            composable(Routes.TEXT_MAKING, arguments = listOf(navArgument("textId") { type = NavType.LongType })) {
+                TextMakingScreen(
+                    textId = it.arguments!!.getLong("textId"),
+                    onBack = { nav.popBackStack() },
+                    onDone = { cardId -> nav.navigate(Routes.card(cardId)) { popUpTo(Routes.TEXT_MAKING) { inclusive = true } } },
+                    onRewrite = { nav.navigate(Routes.textWrite()) { popUpTo(Routes.TEXT_MAKING) { inclusive = true } } },
+                    onHome = { nav.goTab(Routes.HOME) },
                 )
             }
             composable(Routes.CARD, arguments = listOf(navArgument("cardId") { type = NavType.LongType })) { entry ->

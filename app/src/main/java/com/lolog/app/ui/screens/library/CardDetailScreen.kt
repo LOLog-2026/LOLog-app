@@ -1,5 +1,7 @@
 package com.lolog.app.ui.screens.library
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,6 +42,9 @@ import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.util.dayLabel
 import com.lolog.app.util.longDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -52,6 +58,8 @@ import kotlinx.coroutines.launch
  *  - 아래 버튼 "컨텐츠 만들기" → 4컷 만화 / 쇼츠 고르는 시트 (컨텐츠 시안 v3 ①②)
  *  - 3번 다 씀: 회색 버튼 "4컷은 3번 다 만들었어요"
  *  - 카드를 지워도 만화는 '컨텐츠'에 남아요
+ *  - 글 카드(texts.md 초안): 맨 위 출처 줄 + 원문 보기(직접 쓴 글, 아래 창) · 원문 링크(블로그 글, 브라우저).
+ *    길어서 앞부분으로 만들었으면 노란 안내. 음성이 없어서 순간 다시 듣기 줄은 빼요
  */
 
 class CardDetailViewModel(private val repo: LologRepository, private val id: Long) : ViewModel() {
@@ -68,6 +76,14 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         val requestedVideoId: Long? = null,
         val toast: String? = null,
         val deleteFailed: Boolean = false,
+        /** 글 카드의 원문(GET /api/texts/{textId}). 못 받으면 null */
+        val text: TextDetail? = null,
+        /** 블로그 카드의 블로그 이름. 카드·글 응답에 없어서 연결한 블로그 주소로 찾아요(못 찾으면 null) */
+        val blogName: String? = null,
+        /** 원문 보기 창 */
+        val showText: Boolean = false,
+        /** 원문 링크를 열어 달라는 주소. 화면이 브라우저로 열고 비워요 */
+        val openLink: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
@@ -78,6 +94,7 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         try {
             val card = repo.card(id)
             _state.update { it.copy(card = card, loading = false, error = null) }
+            if (card.source != CardSource.RECORDING && _state.value.text == null) loadText(card)
             // 만화 날짜·그림은 카드 응답에 없어서 만화를 따로 조회해요
             val comics = card.comics.mapNotNull { c -> runCatching { repo.comic(c.id) }.getOrNull()?.let { c.id to it } }.toMap()
             _state.update { it.copy(comics = comics) }
@@ -149,6 +166,37 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
     }
 
     fun consumed() = _state.update { it.copy(requestedComicId = null, requestedVideoId = null, toast = null, deleteFailed = false) }
+
+    /** 글 카드 원문을 미리 받아 둬요. 블로그 카드면 블로그 이름도 찾아요 */
+    private suspend fun loadText(card: CardDetail) {
+        val textId = card.textId ?: return
+        val text = runCatching { repo.text(textId) }.getOrNull() ?: return
+        val name = if (card.source == CardSource.BLOG) text.link?.let { link ->
+            runCatching { repo.blogs() }.getOrNull()?.firstOrNull { sameSite(link, it.siteUrl) }?.title
+        } else null
+        _state.update { it.copy(text = text, blogName = name) }
+    }
+
+    /** 원문 보기(직접 쓴 글) · 원문 링크(블로그 글). 아직 못 받았으면 다시 받아요 */
+    fun openOriginal() = viewModelScope.launch {
+        val card = _state.value.card ?: return@launch
+        val textId = card.textId ?: return@launch
+        val text = _state.value.text ?: try {
+            repo.text(textId).also { t -> _state.update { it.copy(text = t) } }
+        } catch (e: LologException) {
+            _state.update { it.copy(toast = errorText(e)) }
+            return@launch
+        }
+        when {
+            card.source == CardSource.BLOG && text.link != null -> _state.update { it.copy(openLink = text.link) }
+            card.source == CardSource.BLOG -> _state.update { it.copy(toast = "원문 링크가 없어요") }
+            else -> _state.update { it.copy(showText = true) }
+        }
+    }
+
+    fun closeText() = _state.update { it.copy(showText = false) }
+    fun linkOpened() = _state.update { it.copy(openLink = null) }
+    fun toast(msg: String) = _state.update { it.copy(toast = msg) }
 }
 
 // ── 08 카드 상세 · 10 컨텐츠 만들기 · 22 카드 지우기 · 24 3번 다 씀 ──
@@ -193,6 +241,14 @@ fun CardDetailScreen(
         val r = snackbar.showSnackbar(msg, actionLabel = if (retry) "다시 시도" else null)
         vm.consumed()
         if (r == SnackbarResult.ActionPerformed && retry) vm.delete()
+    }
+    // 블로그 글 원문 링크는 브라우저로 열어요
+    val context = LocalContext.current
+    LaunchedEffect(state.openLink) {
+        val link = state.openLink ?: return@LaunchedEffect
+        vm.linkOpened()
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
+            .onFailure { vm.toast("링크를 열 수 없어요") }
     }
     // 카드 고치기에서 저장하고 돌아오면
     LaunchedEffect(savedJustNow) {
@@ -239,6 +295,8 @@ fun CardDetailScreen(
             card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
             else -> CardBody(
                 card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
+                blogName = state.blogName,
+                onOriginal = vm::openOriginal,
                 onVideo = onVideo,
                 freshAudioUrl = vm::freshAudioUrl,
                 // 만화 그리는 중에는 고칠 수 없어서(409 CARD_LOCKED) 화자를 눌러도 팝업을 열지 않아요
@@ -248,6 +306,8 @@ fun CardDetailScreen(
         }
     }
 
+    val text = state.text
+    if (state.showText && text != null) OriginalTextSheet(text, onDismiss = vm::closeText)
     if (sheet && card != null) {
         ComicRequestSheet(card, busy = state.busy, onComic = vm::requestComic, onVideo = vm::requestVideo, onDismiss = { sheet = false })
     }
@@ -291,7 +351,10 @@ private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composab
                 if (card != null) {
                     Text(card.summary, fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        listOfNotNull("${longDate(card.recordedAt ?: card.createdAt)} 녹음", card.place?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                        listOfNotNull(
+                            longDate(card.recordedAt ?: card.createdAt) + if (card.source == CardSource.RECORDING) " 녹음" else "",
+                            card.place?.takeIf { it.isNotBlank() },
+                        ).joinToString(" · "),
                         fontSize = 10.sp, color = LologColors.Muted, maxLines = 1,
                     )
                 }
@@ -354,15 +417,23 @@ private fun CardBody(
     onVideo: (Long) -> Unit = {},
     onSpeakerClick: ((String) -> Unit)? = null,
     freshAudioUrl: suspend () -> String? = { null },
+    blogName: String? = null,
+    onOriginal: () -> Unit = {},
 ) {
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // 글 카드: 맨 위 출처 줄(꼬리표 · 날짜 · 원문), 길어서 잘랐으면 노란 안내(글로 카드 만들기 시안 5·9번)
+        if (card.source != CardSource.RECORDING) {
+            SourceLine(card, blogName, onOriginal)
+            if (card.truncated) TruncatedNote()
+        }
         // 가운데 위 "● 웃김 · 대화 n줄"
         KindChip(card.kind, Modifier.align(Alignment.CenterHorizontally), suffix = "대화 ${card.lines.size}줄")
         // 순간 다시 듣기: 대사 위에 재생 줄(READY) 또는 안내 한 줄(PENDING). NONE이면 아무것도 없어요
-        CardAudioSection(card, freshAudioUrl)
+        // 글 카드는 음성이 없어서 이 줄을 안 보여 줘요(texts.md 2장)
+        if (card.source == CardSource.RECORDING) CardAudioSection(card, freshAudioUrl)
         // 대사는 처음부터 전부 말풍선으로(재생 없음)
         CardLines(card, onSpeakerClick = onSpeakerClick)
 
@@ -384,6 +455,81 @@ private fun CardBody(
             shortsRows(card.videos).forEach { row -> ShortsRow(row, onOpen = { onVideo(row.id) }) }
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** "11/12" 모양 날짜(글로 카드 만들기 시안 5·9번) */
+private val slashDate = DateTimeFormatter.ofPattern("M/d")
+
+private fun slashDay(iso: String?): String? =
+    iso?.let { runCatching { OffsetDateTime.parse(it).atZoneSameInstant(ZoneId.systemDefault()).format(slashDate) }.getOrNull() }
+
+/** 블로그 이름 찾기: 글 링크가 연결한 블로그 주소로 시작하면 같은 블로그(http·www·m. 은 빼고 비교) */
+internal fun sameSite(link: String, siteUrl: String): Boolean {
+    fun norm(u: String) = u.trim().lowercase().substringAfter("://").removePrefix("www.").removePrefix("m.").trimEnd('/')
+    val site = norm(siteUrl)
+    val l = norm(link)
+    return site.isNotEmpty() && (l == site || l.startsWith("$site/"))
+}
+
+/**
+ * 글 카드 출처 줄. 직접 쓴 글: [글] 11/12 · 장소 … 원문 보기 ›
+ * 블로그 글: [블로그] 블로그 이름 · 11/11 … 원문 링크 ↗
+ */
+@Composable
+private fun SourceLine(card: CardDetail, blogName: String?, onOriginal: () -> Unit) {
+    val day = slashDay(card.recordedAt ?: card.createdAt)
+    val meta = if (card.source == CardSource.BLOG) listOfNotNull(blogName, day) else listOfNotNull(day, card.place?.takeIf { it.isNotBlank() })
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        SourceTag(card.source)
+        Spacer(Modifier.width(6.dp))
+        Text(meta.joinToString(" · "), fontSize = 12.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (card.textId != null) {
+            Text(
+                if (card.source == CardSource.BLOG) "원문 링크 ↗" else "원문 보기 ›",
+                fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Pen,
+                modifier = Modifier.clip(LologShape.sm).clickable(onClick = onOriginal).padding(horizontal = 4.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/** 노란 상자: 블로그 글이 길어서 앞부분으로 만들었어요(texts.md 2장 truncated) */
+@Composable
+private fun TruncatedNote() {
+    Text(
+        "글이 길어서 앞부분으로 만들었어요", fontSize = 12.5.sp, color = LologColors.Ink,
+        modifier = Modifier.fillMaxWidth().clip(LologShape.sm).background(LologColors.AccentSoft)
+            .border(1.dp, LologColors.Highlight.copy(alpha = 0.5f), LologShape.sm).padding(horizontal = 12.dp, vertical = 10.dp),
+    )
+}
+
+/** 원문 보기 창: 직접 쓴 글의 제목 · 장소 · 상황 · 본문 */
+@Composable
+private fun OriginalTextSheet(text: TextDetail, onDismiss: () -> Unit) {
+    LologSheet(onDismiss = onDismiss) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SourceTag(text.source)
+                Spacer(Modifier.width(6.dp))
+                Text("원문", fontSize = 12.sp, color = LologColors.Muted)
+            }
+            Text(text.title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 24.sp)
+            text.place?.takeIf { it.isNotBlank() }?.let { OriginalMeta("장소", it) }
+            text.situation?.takeIf { it.isNotBlank() }?.let { OriginalMeta("상황", it) }
+            Text(
+                text.body.orEmpty(), fontSize = 14.sp, lineHeight = 22.sp, color = LologColors.Ink,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).clip(LologShape.sm).background(LologColors.Canvas).padding(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun OriginalMeta(label: String, value: String) {
+    Row {
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted, modifier = Modifier.width(36.dp))
+        Text(value, fontSize = 12.5.sp, color = LologColors.Ink)
     }
 }
 
