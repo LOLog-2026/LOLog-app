@@ -1,5 +1,8 @@
 package com.lolog.app.ui.screens.comic
 
+import com.lolog.app.util.VideoExport
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
@@ -65,6 +68,7 @@ import kotlinx.coroutines.launch
  *  - 완성: 세로 영상(9:16) 재생. 주소는 10분짜리라 재생에 실패하면 한 번 새 주소를 받아 다시 틀어요
  *  - 실패: 안내. 카드에서 다시 만들 수 있어요(실패는 횟수에 안 세요)
  *  - 아래 "쇼츠 지우기"는 만드는 중에도 돼요(지워도 횟수는 돌아오지 않아요)
+ *  - 완성이면 "폰에 저장": 동영상(Movies/LOLog)에 mp4로 넣어요. 공유는 저장한 파일로 해요(video.md)
  */
 
 class VideoViewModel(private val repo: LologRepository, private val videoId: Long) : ViewModel() {
@@ -126,6 +130,12 @@ class VideoViewModel(private val repo: LologRepository, private val videoId: Lon
     }
 
     fun consumed() = _state.update { it.copy(toast = null) }
+
+    fun toast(msg: String) = _state.update { it.copy(toast = msg) }
+
+    /** 저장하다 주소가 만료(403)되면 쇼츠를 다시 받아 새 videoUrl을 써요 */
+    suspend fun freshVideoUrl(): String? =
+        runCatching { repo.video(videoId) }.getOrNull()?.also { v -> _state.update { it.copy(video = v) } }?.videoUrl
 }
 
 @Composable
@@ -135,6 +145,23 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var askDelete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val container = LocalContainer.current
+    val scope = rememberCoroutineScope()
+    // 폰에 저장하는 동안 true. 버튼에 점이 돌고 다시 못 눌러요
+    var saving by remember { mutableStateOf(false) }
+    fun save(url: String) {
+        if (saving) return
+        saving = true
+        scope.launch {
+            try {
+                val r = VideoExport.saveToMovies(context, url, "lolog_shorts_$videoId", container.network, vm::freshVideoUrl)
+                vm.toast(VideoExport.message(r))
+            } finally {
+                saving = false
+            }
+        }
+    }
 
     LaunchedEffect(Unit) { vm.watch() }
     LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }
@@ -146,8 +173,15 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
         snackbarHost = { LologSnackbarHost(snackbar) },
         bottomBar = {
             if (video != null) {
-                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    GhostButton("쇼츠 지우기", { askDelete = true }, enabled = !state.busy)
+                Column(
+                    Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val url = video.videoUrl
+                    if (video.status == VideoStatus.DONE && url != null) {
+                        PrimaryButton("폰에 저장", { save(url) }, loading = saving, enabled = !state.busy)
+                    }
+                    GhostButton("쇼츠 지우기", { askDelete = true }, enabled = !state.busy && !saving)
                 }
             }
         },
