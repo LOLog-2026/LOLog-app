@@ -21,5 +21,11 @@ fun NavHostController.openPush(p: PushPayload) {
             navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
         // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
         PushType.FRIEND_REQUEST -> navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
+        // 방(rooms.md 3장 푸시 표의 앱 동작). 알림함에서 누를 때(RoomTarget)와 같은 곳으로 가요
+        // 초대 → 방 목록(받은 초대가 맨 위), 해산 → 방 목록
+        PushType.ROOM_INVITE, PushType.ROOM_DISBANDED -> openRoomList()
+        // 내 만화에 댓글 → 그 방의 대화 탭
+        PushType.ROOM_COMMENT ->
+            p.roomId?.let { navigate(Routes.roomChat(it)) { launchSingleTop = true } } ?: openRoomList()
     }
 }
