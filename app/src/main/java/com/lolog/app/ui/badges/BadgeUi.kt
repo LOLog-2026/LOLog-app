@@ -9,18 +9,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.lolog.app.data.model.BadgeKind
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.PushType
+import com.lolog.app.notification.NotificationTags
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
 
-/** 그 화면을 열었으면 새 소식 점을 꺼요(POST /api/me/badges/{kind}/read, inbox.md 4장) */
+/**
+ * 그 화면을 열었으면 새 소식 점을 꺼요(POST /api/me/badges/{kind}/read, inbox.md 4장).
+ * 알림창에 남은 그 기능의 알림도 같이 지워요(FR-NOTI-06)
+ */
 @Composable
 fun SeenBadge(kind: BadgeKind) {
     val badges = LocalContainer.current.badges
-    LaunchedEffect(kind) { badges.seen(kind) }
+    val context = LocalContext.current
+    LaunchedEffect(kind) {
+        badges.seen(kind)
+        NotificationTags.cancel(context, kind)
+    }
+}
+
+/** 만화·쇼츠·방 하나를 열었으면 알림창에서 그것의 알림을 지워요(꼬리표 comic:{id} 등, inbox.md 4장) */
+@Composable
+fun ClearNotification(tag: String) {
+    val context = LocalContext.current
+    LaunchedEffect(tag) { NotificationTags.cancel(context, tag) }
 }
 
 /**
