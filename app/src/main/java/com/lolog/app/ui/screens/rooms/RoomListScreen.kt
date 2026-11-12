@@ -1,5 +1,9 @@
 package com.lolog.app.ui.screens.rooms
 
+import com.lolog.app.data.model.BadgeKind
+import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.SeenBadge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -133,6 +137,9 @@ fun RoomListScreen(
         vm.load()
         onPauseOrDispose { }
     }
+    // 친구 방 새 소식 점 끄기, 초대·댓글·해산 푸시가 오면 목록 새로 받기(inbox.md 4장, #67 7번)
+    SeenBadge(BadgeKind.ROOMS)
+    OnPush(PushType.ROOM_INVITE, PushType.ROOM_COMMENT, PushType.ROOM_DISBANDED) { vm.load() }
     LaunchedEffect(state.openRoom) { state.openRoom?.let { vm.roomOpened(); onRoom(it) } }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { vm.snackbarShown(); onMessage(it) } }
 

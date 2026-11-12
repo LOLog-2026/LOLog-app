@@ -1,5 +1,8 @@
 package com.lolog.app.ui.screens.friends
 
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.NewDot
+import com.lolog.app.data.model.PushType
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -178,6 +181,9 @@ fun FriendsScreen(
     BackHandler(onBack = onBack)
     LaunchedEffect(openRooms) { if (openRooms) { if (roomsOn) showRooms = true; onRoomsOpened() } }
     LaunchedEffect(Unit) { vm.load() }
+    // 새 소식 점(inbox.md 4장)과, 켜져 있을 때 친구 요청·캐릭터 푸시가 오면 다시 받기(#67 7번)
+    val badges by LocalContainer.current.badges.badges.collectAsState()
+    OnPush(PushType.FRIEND_REQUEST, PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED) { vm.load() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
     // 띠는 화면 범위에서 띄워요(값을 비우면 이 효과가 다시 돌아 띠가 끊겨요)
     LaunchedEffect(message, highlightTop) {
@@ -209,7 +215,11 @@ fun FriendsScreen(
                 Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterPill("방", showRooms) { showRooms = true }
+                Box {
+                    FilterPill("방", showRooms) { showRooms = true }
+                    // 친구 방 새 소식: 방 목록을 열면 꺼져요
+                    if (badges.rooms && !showRooms) NewDot(Modifier.align(Alignment.TopEnd))
+                }
                 FilterPill("친구", !showRooms) { showRooms = false }
             }
         }
@@ -246,6 +256,7 @@ fun FriendsScreen(
                             onSave = { vm.setNickname(nickname) },
                             onChange = onChangeNickname,
                             onMyCharacter = onMyCharacter,
+                            characterNew = badges.profileCharacter,
                             onCopy = { code ->
                                 clipboard.setText(AnnotatedString(code))
                                 scope.launch { snackbar.showSnackbar("코드를 복사했어요") }
@@ -272,6 +283,7 @@ fun FriendsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text("받은 요청 ${state.receivedCount}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                            if (badges.friends && state.receivedCount > 0) { Spacer(Modifier.width(5.dp)); NewDot() }
                             Text(" · ", fontSize = 14.sp, color = LologColors.Muted)
                             Text("보낸 요청 ${state.sentCount}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Muted)
                             Spacer(Modifier.weight(1f))
@@ -382,6 +394,8 @@ private fun MyBox(
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
     onMyCharacter: () -> Unit,
+    /** 다 만듦·실패 새 소식(inbox.md 4장) */
+    characterNew: Boolean = false,
 ) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LologColors.Canvas).padding(18.dp),
@@ -440,7 +454,10 @@ private fun MyBox(
             SpeakerAvatar(profile.nickname ?: "나", 0, size = 40.dp, thumbnailUrl = character?.thumbnailUrl)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("내 캐릭터", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("내 캐릭터", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                    if (characterNew) { Spacer(Modifier.width(5.dp)); NewDot() }
+                }
                 Text(
                     when (character?.status) {
                         ProfileCharacterStatus.READY -> "친구가 내 캐릭터를 만화에 쓸 수 있어요"

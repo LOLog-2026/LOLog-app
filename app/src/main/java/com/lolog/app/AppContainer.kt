@@ -55,6 +55,9 @@ class AppContainer(context: Context) {
 
     val notifier = Notifier(appContext)
 
+    /** 앱 안 새 소식 점(inbox.md 4장). 탭·종 버튼·친구 탭 안이 같이 봐요 */
+    val badges = com.lolog.app.ui.badges.BadgeStore(repository)
+
     private val prefs = appContext.getSharedPreferences("lolog_app", Context.MODE_PRIVATE)
     var permissionAsked: Boolean
         get() = prefs.getBoolean("perm_asked", false)

@@ -26,6 +26,8 @@ interface LologRepository {
     suspend fun withdraw()
     suspend fun me(): Account
     suspend fun linkSocial(provider: SocialProvider, providerToken: String): Set<SocialProvider>
+    /** 그 회사 연결 끊기. 남은 연결 목록을 돌려줘요. 마지막 로그인 방법이면 409 LAST_LOGIN_METHOD */
+    suspend fun unlinkSocial(provider: SocialProvider): Set<SocialProvider>
     /** 비밀번호 찾기 인증번호를 메일로 보내 달라고 해요. 가입 여부와 관계없이 성공해요(60초 안에 또 부르면 TOO_MANY_REQUESTS) */
     suspend fun requestPasswordResetCode(email: String)
     /** 인증번호로 새 비밀번호를 정해요. 성공해도 토큰은 받지 않아서 다시 로그인해야 해요 */
@@ -114,6 +116,11 @@ interface LologRepository {
     suspend fun readInbox(kind: InboxKind, id: Long)
     /** 지금까지 온 것을 모두 읽음 */
     suspend fun readAllInbox()
+
+    // 앱 안 새 소식 점 (LOLog-docs spec/inbox.md 4장)
+    suspend fun badges(): Badges
+    /** 그 화면을 열었음 */
+    suspend fun readBadge(kind: BadgeKind)
 
     // 관리자 공지 (LOLog-docs spec/admin.md 4·7장). 목록은 inbox(InboxTab.NOTICE)를 같이 써요
     // 관리자가 아니면 403 FORBIDDEN, 제목·본문이 틀리면 400 INVALID_REQUEST(field title·body)

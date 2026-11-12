@@ -1,5 +1,9 @@
 package com.lolog.app.ui.screens.comic
 
+import com.lolog.app.data.model.BadgeKind
+import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.SeenBadge
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -134,6 +138,12 @@ fun ComicListScreen(onComic: (Long) -> Unit, onBack: () -> Unit, onLibrary: () -
             if (!st.loading && st.comics.none { it.status.inProgress }) break
             delay(5_000)
         }
+    }
+    // 컨텐츠 새 소식 점 끄기, 만화·쇼츠가 끝났다는 푸시가 오면 두 목록을 새로 받기(inbox.md 4장, #67 7번)
+    SeenBadge(BadgeKind.COMICS)
+    OnPush(PushType.COMIC_DONE, PushType.COMIC_FAILED, PushType.VIDEO_DONE, PushType.VIDEO_FAILED) {
+        vm.refresh()
+        videoVm.refresh()
     }
     LaunchedEffect(state.openComicId) { state.openComicId?.let { vm.consumed(); onComic(it) } }
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }

@@ -1,5 +1,6 @@
 package com.lolog.app.ui.screens.inbox
 
+import com.lolog.app.ui.badges.OnPush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -203,6 +204,8 @@ fun InboxScreen(
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { vm.start() }
+    // 보고 있는 동안 새 푸시가 오면 알림 목록을 새로 받아요(모든 푸시가 알림으로 남아요, #67 7번)
+    OnPush { vm.refresh() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
     // 끝에서 3줄 안쪽까지 내려오면 다음 쪽
     LaunchedEffect(listState) {

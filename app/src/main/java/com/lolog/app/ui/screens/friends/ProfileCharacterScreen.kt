@@ -1,5 +1,9 @@
 package com.lolog.app.ui.screens.friends
 
+import com.lolog.app.data.model.BadgeKind
+import com.lolog.app.data.model.PushType
+import com.lolog.app.ui.badges.OnPush
+import com.lolog.app.ui.badges.SeenBadge
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -157,7 +161,9 @@ fun ProfileCharacterScreen(
 
     // 푸시(완성·실패)가 오면 이 화면도 바로 새로 불러요
     LaunchedEffect(Unit) { vm.load() }
-    LaunchedEffect(Unit) { repo.pushEvents.collect { vm.load() } }
+    // 다 만듦·실패 푸시가 오면 다시 받고, 내 캐릭터 새 소식 점을 꺼요(inbox.md 4장)
+    OnPush(PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED) { vm.load() }
+    SeenBadge(BadgeKind.PROFILE_CHARACTER)
     LaunchedEffect(state.toast) {
         val msg = state.toast ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)

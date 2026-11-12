@@ -387,6 +387,17 @@ data class InboxNotificationDto(val type: String, val data: Map<String, String> 
 @Serializable
 data class InboxUnreadDto(val hasUnread: Boolean = false)
 
+/** GET /api/me/badges (inbox.md 4·5장) */
+@Serializable
+data class BadgesDto(
+    val cards: Boolean = false,
+    val comics: Boolean = false,
+    val profileCharacter: Boolean = false,
+    val friends: Boolean = false,
+    val rooms: Boolean = false,
+    val inbox: Boolean = false,
+)
+
 // ── 관리자 공지 (LOLog-docs spec/admin.md 7장) ──
 
 /** POST /api/admin/notices */
