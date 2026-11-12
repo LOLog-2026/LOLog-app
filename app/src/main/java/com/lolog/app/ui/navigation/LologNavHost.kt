@@ -23,9 +23,12 @@ import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
+import com.lolog.app.ui.screens.admin.AdminFeedbackScreen
 import com.lolog.app.ui.screens.admin.AdminHomeScreen
 import com.lolog.app.ui.screens.admin.AdminNoticeEditScreen
 import com.lolog.app.ui.screens.admin.AdminNoticeListScreen
+import com.lolog.app.ui.screens.admin.AdminUsersScreen
+import com.lolog.app.ui.screens.settings.FeedbackSendScreen
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
 import com.lolog.app.ui.screens.comic.VideoScreen
@@ -107,6 +110,12 @@ object Routes {
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val ADMIN = "admin"
+    /** 관리자 계정 관리(admin.md 2·3·6장) */
+    const val ADMIN_USERS = "admin/users"
+    /** 관리자 의견·오류 신고 목록(admin.md 5장) */
+    const val ADMIN_FEEDBACK = "admin/feedback"
+    /** 설정 › 의견 보내기(admin.md 5장) */
+    const val FEEDBACK_SEND = "settings/feedback"
     /** 관리자 공지 목록 */
     const val ADMIN_NOTICES = "admin/notices"
     /** 공지 쓰기·고치기. 고칠 공지는 목록 화면의 savedStateHandle로 넘겨요 */
@@ -456,6 +465,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
+                    onFeedback = { nav.navigate(Routes.FEEDBACK_SEND) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
@@ -464,6 +474,19 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 AdminHomeScreen(
                     onBack = { nav.popBackStack() },
                     onNotices = { nav.navigate(Routes.ADMIN_NOTICES) { launchSingleTop = true } },
+                    onUsers = { nav.navigate(Routes.ADMIN_USERS) { launchSingleTop = true } },
+                    onFeedback = { nav.navigate(Routes.ADMIN_FEEDBACK) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.ADMIN_USERS) { AdminUsersScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.ADMIN_FEEDBACK) { AdminFeedbackScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.FEEDBACK_SEND) {
+                FeedbackSendScreen(
+                    onBack = { nav.popBackStack() },
+                    onSent = { message ->
+                        nav.previousBackStackEntry?.savedStateHandle?.set(SETTINGS_MESSAGE, message)
+                        nav.popBackStack()
+                    },
                 )
             }
             composable(Routes.ADMIN_NOTICES) { entry ->

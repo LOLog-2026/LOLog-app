@@ -175,8 +175,8 @@ fun EmptyState(
         Spacer(Modifier.height(14.dp))
         PenMemo(memo)
         Spacer(Modifier.height(14.dp))
-        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(max = 160.dp).height(44.dp))
-        else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(max = 140.dp).height(44.dp))
+        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
+        else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
     }
 }
 

@@ -36,7 +36,7 @@ class ApiClient(private val tokens: TokenStore) {
     private val authHeader = Interceptor { chain ->
         val req = chain.request()
         val path = req.url.encodedPath
-        val public = path.startsWith("/auth/") && !path.startsWith("/auth/me") && !path.startsWith("/auth/logout")
+        val public = isPublicAuthPath(path)
         // 만화 이미지(SeaweedFS 서명 주소)처럼 우리 서버가 아닌 곳에는 토큰을 붙이지 않아요
         val ours = req.url.host == baseHost
         // 로그인 전에는 local.properties의 시험용 토큰을 써요(있을 때만)
@@ -56,7 +56,7 @@ class ApiClient(private val tokens: TokenStore) {
     private val refresher = object : Authenticator {
         override fun authenticate(route: Route?, response: Response): Request? {
             val path = response.request.url.encodedPath
-            val public = path.startsWith("/auth/") && !path.startsWith("/auth/me") && !path.startsWith("/auth/logout")
+            val public = isPublicAuthPath(path)
             if (public) return null
             if (response.request.header("X-Retried") != null) { tokens.expire(); return null }
             val code = runCatching {
@@ -126,6 +126,8 @@ class ApiClient(private val tokens: TokenStore) {
 
     val auth: AuthApi = retrofit.create(AuthApi::class.java)
     val main: MainApi = retrofit.create(MainApi::class.java)
+    /** 관리자 계정 관리·의견(admin.md 7장) */
+    val admin: AdminApi = retrofit.create(AdminApi::class.java)
 
     /**
      * 만화 이미지 받기(저장·공유용). imageUrl은 10분짜리 서명 주소라 토큰 없이 받아요.
@@ -151,3 +153,11 @@ class ApiClient(private val tokens: TokenStore) {
         data object Failed : Download
     }
 }
+
+/**
+ * 토큰 없이 부르는 /auth 주소(가입·로그인·소셜·갱신·인증번호·비밀번호 찾기)인지.
+ * /auth/me·/auth/logout·/auth/admin(관리자 계정 관리, admin.md 7장)은 토큰을 붙이고 401이면 갱신해요
+ */
+internal fun isPublicAuthPath(path: String): Boolean =
+    path.startsWith("/auth/") && !path.startsWith("/auth/me") && !path.startsWith("/auth/logout") &&
+        !path.startsWith("/auth/admin")

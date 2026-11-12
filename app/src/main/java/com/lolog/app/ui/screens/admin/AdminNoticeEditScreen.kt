@@ -134,7 +134,7 @@ class AdminNoticeEditViewModel(private val repo: LologRepository, val original: 
     }
 
     /**
-     * 400 field title·body → 칸 아래 안내, 403 → 목록으로("관리자만 할 수 있어요"),
+     * 400 field title·body → 칸 아래 안내, 403 → 쓴 글은 두고 스낵바("관리자만 할 수 있어요". 다시 로그인하면 될 수 있어요),
      * 404 → 목록으로("이미 지워진 공지예요", 목록은 돌아가면 새로 받아요), 그 밖 → 쓴 글은 두고 스낵바
      */
     private fun fail(s: State, e: Throwable): State {
@@ -145,7 +145,6 @@ class AdminNoticeEditViewModel(private val repo: LologRepository, val original: 
                 s.copy(titleError = "제목은 1~${NOTICE_TITLE_MAX}자로 적어 주세요")
             (code == ErrorCodes.INVALID_REQUEST || code == ErrorCodes.VALIDATION_FAILED) && field == "body" ->
                 s.copy(bodyError = "내용을 적어 주세요")
-            code == ErrorCodes.FORBIDDEN -> s.copy(done = Done(errorText(e)))
             code == ErrorCodes.NOTICE_NOT_FOUND -> s.copy(done = Done("이미 지워진 공지예요"))
             else -> s.copy(snackbar = errorText(e))
         }
@@ -241,7 +240,7 @@ fun AdminNoticeEditScreen(original: InboxItem.Notice?, onBack: () -> Unit, onDon
 
 /** 흰 칸: 위에 작은 회색 이름(오른쪽에 글자 수) + 입력. 틀리면 빨간 테두리 */
 @Composable
-private fun FieldBox(label: String, error: Boolean, counter: String? = null, content: @Composable () -> Unit) {
+internal fun FieldBox(label: String, error: Boolean, counter: String? = null, content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(LologShape.md).background(LologColors.Paper)
             .border(1.dp, if (error) LologColors.Rec else LologColors.Line, LologShape.md)
@@ -257,7 +256,7 @@ private fun FieldBox(label: String, error: Boolean, counter: String? = null, con
 }
 
 @Composable
-private fun FieldError(text: String) {
+internal fun FieldError(text: String) {
     Text(text, fontSize = 12.sp, color = LologColors.Rec, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
 }
 

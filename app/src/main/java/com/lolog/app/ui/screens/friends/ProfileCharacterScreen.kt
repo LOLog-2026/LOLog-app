@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
  *  - FAILED: 실패 안내. 예전 그림이 있으면 그대로 쓰여요
  *  - 친구 탭 맨 위 상자와 화자 고르기 팝업의 "내 캐릭터 만들기"에서 들어와요
  *  - 캐릭터가 있으면(READY이거나 그림이 있으면) 안내 칸 아래 "내 목소리" 줄(FR-CHAR-04, 시안 5·8).
- *    누르면 내 목소리 고르기 화면. 서버가 생길 때까지 VOICE_PICK_ENABLED로 숨겨요
+ *    누르면 내 목소리 고르기 화면
  */
 
 class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel() {
@@ -78,7 +78,7 @@ class ProfileCharacterViewModel(private val repo: LologRepository) : ViewModel()
             .onSuccess { p -> _state.update { it.copy(loading = false, loadFailed = false, character = p.character) }; watch() }
             .onFailure { _state.update { it.copy(loading = false, loadFailed = it.character == null) } }
         // 내 목소리 줄에 label과 들어 보기를 보여 주려고 기본 화자 목록을 받아요. 못 받으면 label 없이 보여요
-        if (VOICE_PICK_ENABLED && _state.value.character?.voice != null) {
+        if (_state.value.character?.voice != null) {
             runCatching { repo.defaultCharacters() }.onSuccess { list -> _state.update { it.copy(defaults = list) } }
         }
     }
@@ -237,7 +237,7 @@ fun ProfileCharacterScreen(
                     Bullet("하루에 3번까지 만들 수 있어요")
                 }
                 // 캐릭터가 있을 때만 목소리를 고를 수 있어요(없으면 서버가 404)
-                if (VOICE_PICK_ENABLED && c != null && (c.status == ProfileCharacterStatus.READY || c.thumbnailUrl != null)) {
+                if (c != null && (c.status == ProfileCharacterStatus.READY || c.thumbnailUrl != null)) {
                     Spacer(Modifier.height(12.dp))
                     val picked = c.voice?.let { id -> state.defaults.firstOrNull { it.id == id } }
                     MyVoiceRow(
