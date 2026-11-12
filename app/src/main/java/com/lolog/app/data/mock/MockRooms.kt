@@ -20,6 +20,10 @@ import java.time.OffsetDateTime
  *  - 만화는 쌓여요(덮어쓰지 않음). 한 사람이 올리는 수는 제한 없음. 같은 만화를 같은 방에 두 번 올릴 수는 없어요
  *  - 올린 사람만 내릴 수 있어요. 내리면 그 만화의 좋아요·댓글(대화 줄)도 같이 사라져요
  *  - 좋아요는 한 사람이 만화 하나에 한 번(다시 누르면 취소). 내 만화에도 할 수 있어요
+ *  - 방장만 이름 바꾸기·해산·내보내기를 해요(아니면 ROOM_OWNER_ONLY). 해산하면 방이 목록에서 빠져요
+ *  - 방장이 다른 멤버가 있는데 newOwnerId 없이 나가면 NEW_OWNER_REQUIRED. 넘기고 나가면 그 사람이 방장이에요
+ *  - 혼자 남은 방장이 나가면 방이 지워져요. 나가거나 내보내진 사람의 만화·글은 "나간 멤버"(left)로 남아요
+ *  - [hiddenAuthors](방에서 글을 숨기기로 한 차단한 사람)의 대화 줄은 "숨긴 글"(hidden)로 내용 없이 줘요
  *
  * [myComic]은 내 만화(완성된 것)의 제목·그림을, [friends]는 방 만들기에서 고른 친구 이름을 찾을 때 써요.
  * [netMs]는 네트워크 흉내 대기 시간이에요(테스트에서는 0).
@@ -28,6 +32,8 @@ class MockRooms(
     private val myComic: suspend (Long) -> MyComic? = { null },
     private val friends: suspend () -> List<Friend> = { emptyList() },
     private val netMs: Long = 300,
+    /** 글을 숨길 사람(회원 ID). 기본은 목업 차단 목록의 태오님(MockFriends와 같음) */
+    private val hiddenAuthors: suspend () -> Set<Long> = { setOf(TAEO_ID) },
 ) : RoomRepository {
 
     /** 방에 올릴 내 만화 */
@@ -64,6 +70,8 @@ class MockRooms(
     private val lock = Mutex()
     private val rooms = mutableListOf<RoomData>()
     private val received = mutableListOf<Received>()
+    /** 내가 나간 방(지워지지 않은 것). 테스트에서 새 방장을 보려고 둬요 */
+    private val gone = mutableListOf<RoomData>()
     private var nextId = 1_000L
 
     init { seed() }
@@ -169,7 +177,15 @@ class MockRooms(
         net()
         val room = findRoom(roomId)
         room.unread = 0
-        room.messages.toList()
+        val hide = hiddenAuthors()
+        // 숨긴 사람의 줄은 내용 없이(서버처럼 text·post를 비워요)
+        room.messages.map { m ->
+            when {
+                m is RoomMessage.Comment && m.author.userId in hide && !m.author.left -> m.copy(text = "", post = null, hidden = true)
+                m is RoomMessage.Like && m.member.userId in hide && !m.member.left -> m.copy(hidden = true)
+                else -> m
+            }
+        }
     }
 
     override suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment = lock.withLock {
@@ -187,11 +203,77 @@ class MockRooms(
         msg
     }
 
-    override suspend fun leaveRoom(roomId: Long) = lock.withLock {
+    // ── 방 관리·나가기 ──────────────────────────────────
+
+    override suspend fun rename(roomId: Long, name: String): Room = lock.withLock {
         net()
-        rooms.remove(findRoom(roomId))
+        val room = findRoom(roomId)
+        room.requireOwner()
+        val n = name.trim()
+        if (n.isEmpty() || n.length > RoomRules.NAME_MAX) fail(ErrorCodes.INVALID_REQUEST, "방 이름은 1~20자예요")
+        room.name = n
+        room.toRoom()
+    }
+
+    override suspend fun disband(roomId: Long) = lock.withLock {
+        net()
+        val room = findRoom(roomId)
+        room.requireOwner()
+        // 방의 만화·대화를 모두 지워요(각자 보관함의 만화는 그대로)
+        rooms.remove(room)
         Unit
     }
+
+    override suspend fun leave(roomId: Long, newOwnerId: Long?) = lock.withLock {
+        net()
+        val room = findRoom(roomId)
+        val others = room.members.filter { !it.isMe }
+        if (others.isEmpty()) {
+            // 혼자 남은 방장: 방을 지워요
+            rooms.remove(room)
+            return@withLock
+        }
+        if (room.ownerId == ME.userId) {
+            val next = newOwnerId ?: fail(RoomErrorCodes.NEW_OWNER_REQUIRED, "새 방장을 골라 주세요")
+            if (others.none { it.userId == next }) fail(ErrorCodes.INVALID_REQUEST, "방에 있는 사람만 방장이 될 수 있어요")
+            room.ownerId = next
+            // 방장이 바뀌면 내가 보낸 초대는 새 방장의 것이 돼요(목업은 그대로 둬요)
+        }
+        room.members.removeAll { it.isMe }
+        room.markLeft(ME.userId)
+        rooms.remove(room)
+        gone += room
+        Unit
+    }
+
+    override suspend fun kick(roomId: Long, userId: Long) = lock.withLock {
+        net()
+        val room = findRoom(roomId)
+        room.requireOwner()
+        if (userId == ME.userId) fail(ErrorCodes.INVALID_REQUEST, "나는 내보낼 수 없어요")
+        if (!room.members.removeAll { it.userId == userId }) fail(ErrorCodes.USER_NOT_FOUND, "방에 없는 사람이에요")
+        room.markLeft(userId)
+        Unit
+    }
+
+    /** 나간 사람의 만화·글을 "나간 멤버"로 바꿔요 */
+    private fun RoomData.markLeft(userId: Long) {
+        fun RoomMember.orLeft() = if (this.userId == userId && !left) LEFT else this
+        posts.replaceAll { it.copy(author = it.author.orLeft()) }
+        messages.replaceAll { m ->
+            when (m) {
+                is RoomMessage.Comment -> m.copy(
+                    author = m.author.orLeft(),
+                    post = m.post?.let { p -> p.copy(author = p.author.orLeft()) },
+                )
+                is RoomMessage.Like -> m.copy(member = m.member.orLeft())
+                is RoomMessage.System -> m
+            }
+        }
+    }
+
+    /** 테스트용: 내가 나간 방까지 찾아요. 지워진 방이면 null */
+    internal fun peek(roomId: Long): Room? = (rooms + gone).firstOrNull { it.id == roomId }?.toRoom()
 
     // ── 방장과 초대 ──────────────────────────────────
 
@@ -255,13 +337,16 @@ class MockRooms(
 
     private fun seed() {
         val lines = MockData.cards().associate { c -> c.id to c.lines.map { it.text } }
-        val jun = RoomMember(51, "준")
-        val minji = RoomMember(52, "민지")
-        val seoyeon = RoomMember(12, "서연", MockCharacters.thumb("young-f-03"))
-        val minsu = RoomMember(11, "민수", MockCharacters.thumb("young-m-02"))
-        val doyun = RoomMember(14, "도윤")
-        val haeun = RoomMember(15, "하은")
-        val taeo = RoomMember(31, "태오") // 내가 차단한 사람(MockFriends)
+        // 친구 관계(friendState)는 MockFriends와 같게: 서연·민수·도윤·하은은 친구, 민지는 나에게 요청을 보냄,
+        // 지아는 내가 요청을 보냄, 준은 아무 관계 없음, 태오는 내가 차단함
+        val jun = RoomMember(51, "준", friendState = "NONE")
+        val minji = RoomMember(52, "민지", friendState = "RECEIVED")
+        val seoyeon = RoomMember(12, "서연", MockCharacters.thumb("young-f-03"), friendState = "FRIEND")
+        val minsu = RoomMember(11, "민수", MockCharacters.thumb("young-m-02"), friendState = "FRIEND")
+        val doyun = RoomMember(14, "도윤", suspended = true, friendState = "FRIEND") // 정지된 계정
+        val haeun = RoomMember(15, "하은", friendState = "FRIEND")
+        val jia = RoomMember(23, "지아", friendState = "REQUESTED")
+        val taeo = RoomMember(TAEO_ID, "태오", friendState = "BLOCKED") // 내가 차단한 사람(MockFriends)
 
         // 과팀플 4인방(시안 21·24)
         val team = RoomData(1, "과팀플 4인방", mutableListOf(ME, jun, minji, seoyeon), "준님이 만화를 올렸어요", ago(3), 2, ownerId = ME.userId)
@@ -289,12 +374,14 @@ class MockRooms(
             RoomMessage.Comment(205, ago(3), ME, "이거 우리 단톡방에도 올려야 함", null),
         )
 
-        // 고등학교 동창
-        val school = RoomData(2, "고등학교 동창", mutableListOf(ME, haeun, doyun), "하은님 \"ㅋㅋㅋ 이거 나잖아\"", ago(60), 5, ownerId = haeun.userId)
+        // 고등학교 동창(시안 10): 정지된 계정(도윤), 숨긴 글(태오), 나간 멤버의 말풍선
+        val school = RoomData(2, "고등학교 동창", mutableListOf(ME, haeun, doyun, taeo, jia), "하은님 \"ㅋㅋㅋ 이거 나잖아\"", ago(60), 5, ownerId = haeun.userId)
         val taxi = RoomPost(111, 2, 9_011, "택시 기사님의 인생 상담", "mock://comic/9011", doyun, ago(90), 1, false, 1, lines[7].orEmpty())
         school.posts += taxi
         school.likes[111] = mutableSetOf(15L)
         school.messages += listOf(
+            RoomMessage.Comment(209, ago(60 * 3), LEFT, "다들 잘 지내? 나 이번 달에 이사 가", null),
+            RoomMessage.Comment(210, ago(60 * 2), taeo, "주말에 다 같이 볼래?", null),
             RoomMessage.System(211, ago(90), "도윤님이 만화를 올렸어요", 111),
             RoomMessage.Like(212, ago(70), haeun, 111),
             RoomMessage.Comment(213, ago(60), haeun, "ㅋㅋㅋ 이거 나잖아", taxi),
@@ -320,7 +407,13 @@ class MockRooms(
 
     companion object {
         /** 나. 목업 회원 ID는 MockFriends와 같은 1 */
-        val ME = RoomMember(MockFriends.MY_USER_ID, "나", isMe = true)
+        val ME = RoomMember(MockFriends.MY_USER_ID, "나", isMe = true, friendState = "ME")
+
+        /** 나간 멤버(서버는 userId·nickname·thumbnailUrl이 null) */
+        val LEFT = RoomMember(RoomMember.LEFT_ID, "", left = true)
+
+        /** 내가 차단하고 방에서 글을 숨기는 사람(MockFriends 차단 목록의 태오) */
+        const val TAEO_ID = 31L
 
         /** 앱에서 쓰는 목업: 내 만화와 친구 목록은 목업 저장소에서 찾아요 */
         fun of(repo: LologRepository) = MockRooms(

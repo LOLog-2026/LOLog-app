@@ -169,7 +169,7 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                rooms.leaveRoom(roomId)
+                rooms.leave(roomId)
                 _state.update { it.copy(busy = false, left = true) }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, snackbar = errorText(e)) }

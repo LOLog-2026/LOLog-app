@@ -14,12 +14,13 @@ import com.lolog.app.data.remote.RoomCreateDto
 import com.lolog.app.data.remote.RoomInviteCreateDto
 import com.lolog.app.data.remote.RoomMapper.toModel
 import com.lolog.app.data.remote.RoomPostCreateDto
+import com.lolog.app.data.remote.RoomRenameDto
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import retrofit2.HttpException
 
 /**
- * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51 · 방장과 초대는 #59).
+ * 친구 방 실서버 구현(LOLog-docs spec/rooms.md, 서버 lolog-api #51 · 방장과 초대는 #59 · 방 관리와 나간 멤버는 #60, 둘 다 병합 전).
  * 서버 주소에는 방 ID가 필요한데 [RoomRepository]의 내리기·좋아요는 만화 ID만 받아서,
  * 받은 만화를 기억해 두고(어느 방인지, 내가 좋아요를 눌렀는지) 그걸로 주소와 PUT·DELETE를 골라요.
  */
@@ -81,9 +82,21 @@ class RemoteRoomRepository(private val network: ApiClient) : RoomRepository {
             ?: throw LologException(ErrorCodes.NETWORK, "댓글을 보내지 못했어요")
     }
 
-    override suspend fun leaveRoom(roomId: Long) {
-        call { api.leaveRoom(roomId) }
+    override suspend fun rename(roomId: Long, name: String): Room =
+        call { api.renameRoom(roomId, RoomRenameDto(name.trim())) }.toModel()
+
+    override suspend fun disband(roomId: Long) {
+        call { api.disbandRoom(roomId) }
         posts.values.removeIf { it.roomId == roomId }
+    }
+
+    override suspend fun leave(roomId: Long, newOwnerId: Long?) {
+        call { api.leaveRoom(roomId, newOwnerId) }
+        posts.values.removeIf { it.roomId == roomId }
+    }
+
+    override suspend fun kick(roomId: Long, userId: Long) {
+        call { api.kickRoomMember(roomId, userId) }
     }
 
     override suspend fun invite(roomId: Long, userIds: List<Long>): List<RoomInvite> =

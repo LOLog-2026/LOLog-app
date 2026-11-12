@@ -112,4 +112,32 @@ class RoomMapperTest {
         assertEquals("모르는 만화", unknown.post?.title) // 목록에 없으면 서버 요약으로
         assertNull((list[5] as RoomMessage.Comment).post)
     }
+
+    @Test
+    fun `대화 JSON에 left·hidden이 없어도 읽힌다`() {
+        val list = LologJson.decodeFromString(
+            RoomMessageListDto.serializer(),
+            """{"messages":[{"id":1,"type":"COMMENT","member":{"userId":2,"nickname":"준","isMe":false},"at":"t","postId":null,"post":null,"text":"안녕"}]}""",
+        ).messages.mapNotNull { it.toModel(1, emptyMap()) }
+        val c = list.single() as RoomMessage.Comment
+        assertFalse(c.hidden)
+        assertFalse(c.author.left)
+        assertEquals("준", c.author.displayName)
+    }
+
+    @Test
+    fun `나간 멤버와 숨긴 글을 읽는다`() {
+        val list = LologJson.decodeFromString(
+            RoomMessageListDto.serializer(),
+            """{"messages":[
+              {"id":1,"type":"POSTED","member":{"userId":null,"nickname":null,"thumbnailUrl":null,"isMe":false,"left":true},"at":"t1","postId":10},
+              {"id":2,"type":"COMMENT","member":{"userId":31,"nickname":"태오","isMe":false},"at":"t2","postId":10,"post":null,"text":null,"hidden":true}
+            ]}""",
+        ).messages.mapNotNull { it.toModel(1, emptyMap()) }
+        assertEquals("나간 멤버가 만화를 올렸어요", (list[0] as RoomMessage.System).text)
+        val hidden = list[1] as RoomMessage.Comment
+        assertTrue(hidden.hidden)
+        assertEquals("", hidden.text)
+        assertNull(hidden.post)
+    }
 }

@@ -2,6 +2,7 @@ package com.lolog.app.data
 
 import com.lolog.app.data.mock.MockFriends
 import com.lolog.app.data.mock.MockRooms
+import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Friend
 import com.lolog.app.data.model.RoomErrorCodes
 import com.lolog.app.data.model.RoomMessage
@@ -11,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -200,4 +202,84 @@ class MockRoomsTest {
         r.messages(team)
         assertEquals(0, r.room(team).unread)
     }
+
+    // ── 방 관리·나가기 ──
+
+    /** 고등학교 동창(목업 방 2번). 방장은 하은님 */
+    private val school = 2L
+
+    @Test
+    fun 방장이_아니면_이름_바꾸기_해산_내보내기가_ROOM_OWNER_ONLY() {
+        val r = rooms()
+        assertEquals(RoomErrorCodes.ROOM_OWNER_ONLY, errorCode { r.rename(school, "새 이름") })
+        assertEquals(RoomErrorCodes.ROOM_OWNER_ONLY, errorCode { r.disband(school) })
+        assertEquals(RoomErrorCodes.ROOM_OWNER_ONLY, errorCode { r.kick(school, 14) })
+    }
+
+    @Test
+    fun 방장은_이름을_앞뒤_공백_빼고_바꾼다() = runBlocking {
+        val r = rooms()
+        assertEquals("새 이름", r.rename(team, "  새 이름 ").name)
+        assertEquals("새 이름", r.room(team).name)
+        assertEquals(ErrorCodes.INVALID_REQUEST, errorCode { r.rename(team, "   ") })
+    }
+
+    @Test
+    fun 방장이_새_방장_없이_나가면_NEW_OWNER_REQUIRED() {
+        val r = rooms()
+        assertEquals(RoomErrorCodes.NEW_OWNER_REQUIRED, errorCode { r.leave(team, null) })
+    }
+
+    @Test
+    fun 넘기고_나가면_새_사람이_방장이고_내_글은_나간_멤버() = runBlocking {
+        val r = rooms()
+        r.leave(team, 51)
+        assertFalse(r.rooms().any { it.id == team })
+        val after = r.peek(team)!!
+        assertEquals(51L, after.ownerId)
+        assertTrue(after.members.first { it.userId == 51L }.isOwner)
+        assertFalse(after.members.any { it.isMe })
+    }
+
+    @Test
+    fun 혼자_남은_방장이_나가면_방이_지워진다() = runBlocking {
+        val r = rooms()
+        val room = r.createRoom("혼자 방", listOf(11))
+        r.leave(room.id, null)
+        assertFalse(r.rooms().any { it.id == room.id })
+        assertNull(r.peek(room.id))
+        assertEquals(RoomErrorCodes.ROOM_NOT_FOUND, errorCode { r.room(room.id) })
+    }
+
+    @Test
+    fun 내보낸_사람의_말풍선은_나간_멤버가_된다() = runBlocking {
+        val r = rooms()
+        r.kick(team, 52) // 민지
+        assertFalse(r.room(team).members.any { it.userId == 52L })
+        val bubble = r.messages(team).filterIsInstance<RoomMessage.Comment>().first { it.id == 202L }
+        assertTrue(bubble.author.left)
+        assertEquals("나간 멤버", bubble.author.displayName)
+        // 올린 만화도 나간 멤버로 남아요
+        assertTrue(r.posts(team).first { it.id == 102L }.author.left)
+    }
+
+    @Test
+    fun 해산하면_목록에서_빠진다() = runBlocking {
+        val r = rooms()
+        r.disband(team)
+        assertFalse(r.rooms().any { it.id == team })
+        assertEquals(RoomErrorCodes.ROOM_NOT_FOUND, errorCode { r.messages(team) })
+    }
+
+    @Test
+    fun 목업_방에는_나간_멤버_숨긴_글_정지된_계정이_있다() = runBlocking {
+        val r = rooms()
+        val chat = r.messages(school)
+        assertTrue(chat.any { it is RoomMessage.Comment && it.author.left })
+        val hidden = chat.filterIsInstance<RoomMessage.Comment>().single { it.hidden }
+        assertEquals("", hidden.text)
+        assertNull(hidden.post)
+        assertTrue(r.room(school).members.first { it.userId == 14L }.suspended)
+    }
 }
+

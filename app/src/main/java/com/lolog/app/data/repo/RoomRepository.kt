@@ -27,7 +27,20 @@ interface RoomRepository {
     suspend fun messages(roomId: Long): List<RoomMessage>
     /** postId가 있으면 그 만화 캡션을 단 댓글. 글은 앞뒤 공백을 잘라 1~200자 */
     suspend fun sendComment(roomId: Long, postId: Long?, text: String): RoomMessage.Comment
-    suspend fun leaveRoom(roomId: Long)
+
+    // ── 방 관리·나가기 ──
+
+    /** 방장만(ROOM_OWNER_ONLY). 이름은 앞뒤 공백을 잘라 1~20자 */
+    suspend fun rename(roomId: Long, name: String): Room
+    /** 방 해산. 방장만. 방의 만화·대화를 모두 지우고 멤버에게 알려요 */
+    suspend fun disband(roomId: Long)
+    /**
+     * 방 나가기. 내가 방장이고 다른 멤버가 있으면 [newOwnerId](남은 멤버 중 한 명)가 꼭 필요해요(없으면 NEW_OWNER_REQUIRED).
+     * 혼자 남은 방장이 나가면 방이 지워져요. 내가 올린 만화와 글은 "나간 멤버"로 남아요
+     */
+    suspend fun leave(roomId: Long, newOwnerId: Long? = null)
+    /** 멤버 내보내기. 방장만. 그 사람의 글은 "나간 멤버"로 남고, 다시 초대할 수 있어요 */
+    suspend fun kick(roomId: Long, userId: Long)
 
     // ── 방장과 초대 ──
 

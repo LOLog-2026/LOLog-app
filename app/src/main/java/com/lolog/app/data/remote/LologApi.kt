@@ -103,7 +103,12 @@ interface MainApi {
     @GET("api/rooms") suspend fun rooms(): RoomListDto
     @POST("api/rooms") suspend fun createRoom(@Body body: RoomCreateDto): RoomItemDto
     @GET("api/rooms/{id}") suspend fun room(@Path("id") id: Long): RoomItemDto
-    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long)
+    // 방장이 다른 멤버가 있는데 newOwnerId 없이 나가면 409 NEW_OWNER_REQUIRED(초안). null이면 쿼리를 빼요
+    @DELETE("api/rooms/{id}/members/me") suspend fun leaveRoom(@Path("id") id: Long, @Query("newOwnerId") newOwnerId: Long?)
+    // 방 관리(rooms.md "방장과 초대", 초안 · 서버 lolog-api #60). 방장만(403 ROOM_OWNER_ONLY)
+    @PATCH("api/rooms/{id}") suspend fun renameRoom(@Path("id") id: Long, @Body body: RoomRenameDto): RoomItemDto
+    @DELETE("api/rooms/{id}") suspend fun disbandRoom(@Path("id") id: Long)
+    @DELETE("api/rooms/{id}/members/{userId}") suspend fun kickRoomMember(@Path("id") id: Long, @Path("userId") userId: Long)
     @GET("api/rooms/{id}/posts") suspend fun roomPosts(@Path("id") id: Long): RoomPostListDto
     @POST("api/rooms/{id}/posts") suspend fun postToRoom(@Path("id") id: Long, @Body body: RoomPostCreateDto): RoomPostDto
     @DELETE("api/rooms/{id}/posts/{postId}") suspend fun removeRoomPost(@Path("id") id: Long, @Path("postId") postId: Long)
