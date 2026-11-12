@@ -68,7 +68,10 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         val busy: Boolean = false,
         val sending: Boolean = false,
         val snackbar: String? = null,
-        val left: Boolean = false,
+        /** 방을 떠남(나가기·해산·방이 없어짐). 방 목록으로 돌아가 이 문구를 스낵바로 띄워요 */
+        val exit: String? = null,
+        /** 새 방장을 골라야 나갈 수 있어요(NEW_OWNER_REQUIRED). 새 방장 고르기 시트를 다시 띄워요 */
+        val pickOwner: Boolean = false,
         /** 올릴 수 있는 내 만화(완성된 것만). null = 불러오는 중 */
         val myComics: List<ComicSummary>? = null,
     )
@@ -85,8 +88,21 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
             val messages = rooms.messages(roomId) // 불러오면 받지 않은 글이 0이 돼요
             _state.update { it.copy(room = room, posts = posts, messages = messages, error = null, chatDot = room.unread > 0) }
         } catch (e: Throwable) {
+            if (gone(e)) return@launch
             _state.update { it.copy(error = errorText(e)) }
         }
+    }
+
+    /** 방이 해산됐거나 내보내져서 없어졌으면(ROOM_NOT_FOUND) 방 목록으로 돌아가요 */
+    private fun gone(e: Throwable): Boolean {
+        if ((e as? LologException)?.code != RoomErrorCodes.ROOM_NOT_FOUND) return false
+        _state.update { it.copy(busy = false, sending = false, exit = "방이 없어졌어요") }
+        return true
+    }
+
+    /** 실패하면 스낵바. 방이 없어졌으면 방 목록으로 */
+    private fun fail(e: Throwable) {
+        if (!gone(e)) _state.update { it.copy(busy = false, sending = false, snackbar = errorText(e)) }
     }
 
     /** 만화·대화를 다시 받아요(올리기·좋아요·댓글 뒤) */
@@ -105,7 +121,7 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
                 refresh()
                 _state.update { it.copy(busy = false, snackbar = success) }
             } catch (e: Throwable) {
-                _state.update { it.copy(busy = false, snackbar = errorText(e)) }
+                fail(e)
             }
         }
     }
@@ -136,7 +152,7 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
                 _state.update { it.copy(sending = false) }
                 onSent()
             } catch (e: Throwable) {
-                _state.update { it.copy(sending = false, snackbar = errorText(e)) }
+                fail(e)
             }
         }
     }
@@ -156,7 +172,7 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
                 val room = rooms.room(roomId)
                 _state.update { it.copy(busy = false, room = room, snackbar = "초대를 취소했어요") }
             } catch (e: Throwable) {
-                _state.update { it.copy(busy = false, snackbar = errorText(e)) }
+                fail(e)
                 // 이미 답했거나 취소된 초대, 방장이 바뀐 경우는 방을 다시 받아 맞춰요
                 val code = (e as? LologException)?.code
                 if (code == RoomErrorCodes.ROOM_INVITE_NOT_FOUND || code == RoomErrorCodes.ROOM_OWNER_ONLY) reloadRoom()
@@ -164,17 +180,71 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         }
     }
 
-    fun leave() {
+    // ── 방 관리·나가기 ──
+
+    /** 방장 일을 하다 실패. 방장이 바뀌었으면(ROOM_OWNER_ONLY) 방을 다시 받아 메뉴를 맞춰요 */
+    private fun ownerFail(e: Throwable) {
+        fail(e)
+        if ((e as? LologException)?.code == RoomErrorCodes.ROOM_OWNER_ONLY) reloadRoom()
+    }
+
+    private fun busy(block: suspend () -> Unit) {
         if (_state.value.busy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
-            try {
-                rooms.leave(roomId)
-                _state.update { it.copy(busy = false, left = true) }
-            } catch (e: Throwable) {
-                _state.update { it.copy(busy = false, snackbar = errorText(e)) }
+            block()
+        }
+    }
+
+    /** 방장: 이름 바꾸기. 바뀌면 위 제목도 바뀌어요 */
+    fun rename(name: String, onDone: () -> Unit) = busy {
+        try {
+            val room = rooms.rename(roomId, name)
+            _state.update { it.copy(busy = false, room = room, snackbar = "방 이름을 바꿨어요") }
+            onDone()
+        } catch (e: Throwable) {
+            ownerFail(e)
+        }
+    }
+
+    /** 나가기. 내가 방장이고 다른 멤버가 있으면 [newOwnerId]를 꼭 넘겨요 */
+    fun leave(newOwnerId: Long?) = busy {
+        try {
+            rooms.leave(roomId, newOwnerId)
+            _state.update { it.copy(busy = false, exit = "방에서 나왔어요") }
+        } catch (e: Throwable) {
+            fail(e)
+            // 그사이 방장이 됐거나 멤버가 바뀌었으면 방을 다시 받고 새 방장 고르기를 다시 띄워요
+            if ((e as? LologException)?.code == RoomErrorCodes.NEW_OWNER_REQUIRED) {
+                runCatching { rooms.room(roomId) }.onSuccess { room -> _state.update { it.copy(room = room) } }
+                _state.update { it.copy(pickOwner = true) }
             }
         }
+    }
+
+    fun ownerPicked() = _state.update { it.copy(pickOwner = false) }
+
+    /** 방장: 방 해산 */
+    fun disband() = busy {
+        try {
+            rooms.disband(roomId)
+            _state.update { it.copy(busy = false, exit = "방을 해산했어요") }
+        } catch (e: Throwable) {
+            ownerFail(e)
+        }
+    }
+
+    /** 방장: 멤버 내보내기. 그 사람의 글은 "나간 멤버"로 바뀌어서 대화도 다시 받아요 */
+    fun kick(member: RoomMember, onDone: () -> Unit) = busy {
+        try {
+            rooms.kick(roomId, member.userId)
+            val room = rooms.room(roomId)
+            refresh()
+            _state.update { it.copy(busy = false, room = room, snackbar = "${member.nickname}님을 내보냈어요") }
+        } catch (e: Throwable) {
+            ownerFail(e)
+        }
+        onDone()
     }
 
     fun toast(msg: String?) = _state.update { it.copy(snackbar = msg) }
@@ -190,7 +260,8 @@ internal data class Pressed(val post: RoomPost, val bounds: Rect)
 fun RoomScreen(
     roomId: Long,
     onBack: () -> Unit,
-    onLeft: () -> Unit,
+    /** 방을 떠남(나가기·해산·방이 없어짐). 방 목록으로 돌아가 [message]를 스낵바로 띄워요 */
+    onLeft: (message: String) -> Unit,
     /** 방장: "+ 친구 초대" */
     onInvite: () -> Unit,
     /** 방 만들기·친구 초대 화면에서 넘어온 스낵바 문구 */
@@ -213,13 +284,19 @@ fun RoomScreen(
     var menu by remember { mutableStateOf(false) }
     var members by remember { mutableStateOf(false) }
     var askLeave by remember { mutableStateOf(false) }
+    var pickOwner by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var askDisband by remember { mutableStateOf(false) }
+    var memberFor by remember { mutableStateOf<RoomMember?>(null) }
+    var askKick by remember { mutableStateOf<RoomMember?>(null) }
     var askRemove by remember { mutableStateOf<RoomPost?>(null) }
     var picking by remember { mutableStateOf(false) }
     // 칸마다 화면 위치(꾹 누르면 그 자리에 칸을 다시 그려요). 그릴 때 쓰지 않아서 상태로 두지 않아요
     val cellBounds = remember { mutableMapOf<Long, Rect>() }
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
 
-    LaunchedEffect(state.left) { if (state.left) onLeft() }
+    LaunchedEffect(state.exit) { state.exit?.let(onLeft) }
+    LaunchedEffect(state.pickOwner) { if (state.pickOwner) { askLeave = false; pickOwner = true; vm.ownerPicked() } }
     // 초대를 보내고 돌아오면 기다리는 초대가 바뀌어서 방을 다시 받아요
     LaunchedEffect(message) { message?.let { onMessageShown(); vm.reloadRoom(); snackbar.showSnackbar(it) } }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
@@ -340,11 +417,23 @@ fun RoomScreen(
         )
     }
 
-    if (menu) {
+    // 7 방 메뉴: 방장만 이름 바꾸기·해산
+    if (menu && room != null) {
+        val owner = room.isMineOwner
         LologSheet(onDismiss = { menu = false }) {
             Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
+                Text(
+                    room.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 6.dp),
+                )
                 SheetRow("멤버 보기", LologColors.Ink) { menu = false; members = true }
-                SheetRow("방 나가기", LologColors.Rec) { menu = false; askLeave = true }
+                if (owner) SheetRow("방 이름 바꾸기", LologColors.Ink) { menu = false; renaming = true }
+                SheetRow("방 나가기", LologColors.Rec) {
+                    menu = false
+                    // 방장이고 다른 멤버가 있으면 새 방장부터 골라요(시안 8)
+                    if (owner && room.members.any { !it.isMe }) pickOwner = true else askLeave = true
+                }
+                if (owner) SheetRow("방 해산", LologColors.Rec) { menu = false; askDisband = true }
             }
         }
     }
@@ -354,21 +443,81 @@ fun RoomScreen(
             MemberSheet(
                 room,
                 busy = state.busy,
+                onMember = { members = false; memberFor = it },
                 onCancelInvite = { vm.cancelInvite(it) },
                 onInvite = { members = false; onInvite() },
             )
         }
     }
 
-    if (askLeave && room != null) {
+    // 6 멤버 누르기: 방장이고 남이면 "방에서 내보내기"
+    memberFor?.let { m ->
+        LologSheet(onDismiss = { memberFor = null }) {
+            MemberActionSheet(
+                member = m,
+                index = room?.memberIndex(m) ?: 0,
+                canKick = room?.isMineOwner == true && !m.isMe,
+                onKick = { memberFor = null; askKick = m },
+            )
+        }
+    }
+
+    askKick?.let { m ->
         LologDialog(
-            title = "${room.name}에서 나갈까요?",
-            body = "나가면 이 방의 만화와 대화를 더 볼 수 없어요.",
+            title = "${m.nickname}님을 내보낼까요?",
+            body = KICK_NOTE,
+            confirmText = "내보내기",
+            danger = true,
+            loading = state.busy,
+            onConfirm = { vm.kick(m) { askKick = null } },
+            onDismiss = { if (!state.busy) askKick = null },
+        )
+    }
+
+    if (renaming && room != null) {
+        RenameDialog(
+            current = room.name,
+            loading = state.busy,
+            onSave = { vm.rename(it) { renaming = false } },
+            onDismiss = { if (!state.busy) renaming = false },
+        )
+    }
+
+    // 방장이 아니거나 혼자 남은 방장: 확인 창
+    if (askLeave && room != null) {
+        val alone = room.isMineOwner && room.members.none { !it.isMe }
+        LologDialog(
+            title = "방에서 나갈까요?",
+            body = if (alone) "혼자 남은 방이라 나가면 방이 지워져요. 각자 컨텐츠에 있는 만화는 그대로 남아요."
+            else "올린 만화와 글은 \"나간 멤버\"로 남아요.",
             confirmText = "나가기",
             danger = true,
             loading = state.busy,
-            onConfirm = { vm.leave() },
+            onConfirm = { vm.leave(null) },
             onDismiss = { if (!state.busy) askLeave = false },
+        )
+    }
+
+    // 8 방장이 나가기: 새 방장 고르기
+    if (pickOwner && room != null) {
+        PickOwnerSheet(
+            room = room,
+            loading = state.busy,
+            onLeave = { vm.leave(it.userId) },
+            onDismiss = { if (!state.busy) pickOwner = false },
+        )
+    }
+
+    // 9 방 해산
+    if (askDisband && room != null) {
+        LologDialog(
+            title = "\"${room.name}\" 방을 해산할까요?",
+            body = "방의 만화와 대화가 모두 지워져요. 각자 컨텐츠에 있는 만화는 그대로 남아요. 멤버에게 알림이 가요.",
+            confirmText = "해산하기",
+            danger = true,
+            loading = state.busy,
+            onConfirm = { vm.disband() },
+            onDismiss = { if (!state.busy) askDisband = false },
         )
     }
 
@@ -390,7 +539,13 @@ fun RoomScreen(
  * 내가 방장이면 아래에 답을 기다리는 초대(흐린 얼굴 + "초대 취소")와 "+ 친구 초대"
  */
 @Composable
-private fun MemberSheet(room: Room, busy: Boolean, onCancelInvite: (RoomInvite) -> Unit, onInvite: () -> Unit) {
+private fun MemberSheet(
+    room: Room,
+    busy: Boolean,
+    onMember: (RoomMember) -> Unit,
+    onCancelInvite: (RoomInvite) -> Unit,
+    onInvite: () -> Unit,
+) {
     val owner = room.isMineOwner
     Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
         Text(
@@ -398,7 +553,10 @@ private fun MemberSheet(room: Room, busy: Boolean, onCancelInvite: (RoomInvite) 
             fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, modifier = Modifier.padding(bottom = 8.dp),
         )
         room.members.forEachIndexed { i, m ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().clip(LologShape.sm).clickable { onMember(m) }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 MemberAvatar(m, i, 36.dp)
                 Spacer(Modifier.width(12.dp))
                 Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
@@ -427,6 +585,100 @@ private fun MemberSheet(room: Room, busy: Boolean, onCancelInvite: (RoomInvite) 
             }
             Spacer(Modifier.height(14.dp))
             PrimaryButton("+ 친구 초대", onInvite)
+        }
+    }
+}
+
+/** 내보내기 안내(멤버 누르기 시트·확인 창) */
+private const val KICK_NOTE = "올린 만화와 글은 \"나간 멤버\"로 남아요. 다시 초대할 수 있어요."
+
+/** 6 멤버 누르기: 얼굴·닉네임, 방장이고 남이면 빨간 "방에서 내보내기" */
+@Composable
+private fun MemberActionSheet(member: RoomMember, index: Int, canKick: Boolean, onKick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MemberAvatar(member, index, 52.dp)
+            Spacer(Modifier.width(14.dp))
+            Text(member.nickname, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+        }
+        if (canKick) {
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
+            Column(Modifier.fillMaxWidth().clickable(onClick = onKick).padding(vertical = 14.dp)) {
+                Text("방에서 내보내기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Rec)
+                Text(KICK_NOTE, fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 3.dp))
+            }
+        }
+    }
+}
+
+/** 방 이름 바꾸기: 지금 이름이 들어 있는 입력 창. 앞뒤 공백을 뺀 길이가 1~20자면 저장 버튼이 켜져요 */
+@Composable
+private fun RenameDialog(current: String, loading: Boolean, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    val trimmed = name.trim()
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().background(LologColors.Paper, LologShape.dialog)
+                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("방 이름 바꾸기", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+            OutlinedTextField(
+                value = name, onValueChange = { name = it.take(RoomRules.NAME_MAX) },
+                singleLine = true,
+                supportingText = { Text("${trimmed.length} / ${RoomRules.NAME_MAX}", fontSize = 12.sp, color = LologColors.Muted) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LologColors.Accent, unfocusedBorderColor = LologColors.Line),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GhostButton("취소", onDismiss, Modifier.weight(1f))
+                PrimaryButton(
+                    "저장", { onSave(trimmed) },
+                    enabled = trimmed.length in 1..RoomRules.NAME_MAX, loading = loading, modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** 8 새 방장 고르기: 남은 멤버 중 한 명(첫 사람을 골라 둠). [취소][{닉네임}님에게 넘기고 나가기] */
+@Composable
+private fun PickOwnerSheet(room: Room, loading: Boolean, onLeave: (RoomMember) -> Unit, onDismiss: () -> Unit) {
+    val others = room.members.filter { !it.isMe }
+    var picked by remember(room.id) { mutableStateOf(others.firstOrNull()?.userId) }
+    val who = others.firstOrNull { it.userId == picked } ?: others.firstOrNull()
+    LologSheet(onDismiss = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp)) {
+            Text("새 방장을 골라 주세요", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+            Text(
+                "방장이 나가려면 남은 멤버 중 한 명에게 방장을 넘겨야 해요.", fontSize = 13.sp, color = LologColors.Muted,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            others.forEach { m ->
+                Row(
+                    Modifier.fillMaxWidth().clip(LologShape.sm).clickable { picked = m.userId }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = m.userId == who?.userId, onClick = { picked = m.userId },
+                        colors = RadioButtonDefaults.colors(selectedColor = LologColors.Accent, unselectedColor = LologColors.Line),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    MemberAvatar(m, room.memberIndex(m), 32.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(m.nickname, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GhostButton("취소", onDismiss, Modifier.weight(1f))
+                PrimaryButton(
+                    who?.let { "${it.nickname}님에게 넘기고 나가기" } ?: "나가기",
+                    { who?.let(onLeave) },
+                    enabled = who != null, loading = loading, modifier = Modifier.weight(1.6f),
+                )
+            }
         }
     }
 }

@@ -143,6 +143,9 @@ fun FriendsScreen(
     /** 친구 방(목업에서만). null이면 "방" / "친구" 알약 없이 지금 모양 그대로 */
     onRoom: ((Long) -> Unit)? = null,
     onCreateRoom: (() -> Unit)? = null,
+    /** true면 "방" 알약으로 열어요(방을 나왔거나 방이 없어졌을 때) */
+    openRooms: Boolean = false,
+    onRoomsOpened: () -> Unit = {},
 ) {
     val roomsOn = Features.ROOMS && onRoom != null && onCreateRoom != null
     // 맨 위 알약: 처음엔 "방"
@@ -161,6 +164,7 @@ fun FriendsScreen(
     var highlight by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
+    LaunchedEffect(openRooms) { if (openRooms) { if (roomsOn) showRooms = true; onRoomsOpened() } }
     LaunchedEffect(Unit) { vm.load() }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.snackbarShown() } }
     // 띠는 화면 범위에서 띄워요(값을 비우면 이 효과가 다시 돌아 띠가 끊겨요)

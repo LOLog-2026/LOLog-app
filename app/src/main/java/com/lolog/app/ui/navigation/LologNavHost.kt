@@ -72,6 +72,8 @@ private const val SETTINGS_MESSAGE = "settingsMessage"
 private const val FRIENDS_MESSAGE = "friendsMessage"
 /** 친구 추가에서 바로 친구가 됐으면 true: 친구 목록 맨 위 줄을 잠깐 연노랑으로 */
 private const val FRIENDS_HIGHLIGHT = "friendsHighlight"
+/** 친구 탭을 "방" 알약으로 열기(방을 나가거나 방이 없어졌을 때) */
+private const val FRIENDS_ROOMS = "friendsRooms"
 // 내 목소리 고르기에서 저장하고 내 캐릭터 화면으로 돌아올 때 띠 문구
 private const val VOICE_MESSAGE = "voiceMessage"
 /** 알림함 → 공지사항 자세히로 넘기는 값. 목록에서 받은 그대로 그려요(따로 조회 없음) */
@@ -152,6 +154,15 @@ fun NavHostController.goTab(route: String) {
         popUpTo(Routes.HOME) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+/** 방 목록(친구 탭의 "방" 알약)으로 돌아가요. [message]는 거기서 띄울 스낵바 문구 */
+fun NavHostController.openRoomList(message: String? = null) {
+    if (!popBackStack(Routes.FRIENDS, inclusive = false)) goTab(Routes.FRIENDS)
+    currentBackStackEntry?.savedStateHandle?.let {
+        it[FRIENDS_ROOMS] = true
+        if (message != null) it[FRIENDS_MESSAGE] = message
     }
 }
 
@@ -344,6 +355,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             composable(Routes.FRIENDS) { entry ->
                 val message by entry.savedStateHandle.getStateFlow<String?>(FRIENDS_MESSAGE, null).collectAsState()
                 val highlight by entry.savedStateHandle.getStateFlow(FRIENDS_HIGHLIGHT, false).collectAsState()
+                val openRooms by entry.savedStateHandle.getStateFlow(FRIENDS_ROOMS, false).collectAsState()
                 FriendsScreen(
                     onBack = { nav.goTab(Routes.HOME) },
                     onAddFriend = { nav.navigate(Routes.ADD_FRIEND) { launchSingleTop = true } },
@@ -358,6 +370,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     },
                     onRoom = if (Features.ROOMS) { id -> nav.navigate(Routes.room(id)) } else null,
                     onCreateRoom = if (Features.ROOMS) { { nav.navigate(Routes.ROOM_CREATE) { launchSingleTop = true } } } else null,
+                    openRooms = openRooms,
+                    onRoomsOpened = { entry.savedStateHandle[FRIENDS_ROOMS] = false },
                 )
             }
             if (Features.ROOMS) {
@@ -378,7 +392,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     RoomScreen(
                         roomId = id,
                         onBack = { nav.popBackStack() },
-                        onLeft = { nav.popBackStack() },
+                        onLeft = { msg -> nav.openRoomList(msg) },
                         onInvite = { nav.navigate(Routes.roomInvite(id)) { launchSingleTop = true } },
                         message = message,
                         onMessageShown = { entry.savedStateHandle[ROOM_MESSAGE] = null },
