@@ -371,6 +371,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onBack = { nav.popBackStack() },
                     // 보내면 쓰기 화면을 스택에서 빼요(만드는 중에서 뒤로 가면 에피소드)
                     onCreated = { id -> nav.navigate(Routes.textMaking(id)) { popUpTo(Routes.TEXT_WRITE) { inclusive = true } } },
+                    onCard = { nav.navigate(Routes.card(it)) },
                 )
             }
             composable(Routes.TEXT_MAKING, arguments = listOf(navArgument("textId") { type = NavType.LongType })) {

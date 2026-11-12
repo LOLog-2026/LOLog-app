@@ -36,6 +36,7 @@ import com.lolog.app.util.TextDraft
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -45,6 +46,7 @@ import kotlinx.coroutines.launch
  *  - 직접 쓰기: 제목·본문(필수) + 장소·상황(선택). 날짜·나온 사람 칸은 없어요
  *    쓰는 중에는 0.5초 뒤 폰에 임시 저장(TextDraft)하고, 다시 열면 불러와요. 보내면 지워요. 뒤로 가기는 확인 없이 나가요
  *    보내면 카드 만드는 중 화면으로 가고 이 화면은 스택에서 빠져요
+ *  - 블로그(TextBlogTab.kt): 주소 확인 → 카테고리 고르기 → 연결, 연결한 블로그의 가져온 글
  *  - 서버에 아직 API가 없어서 실서버에서는 "아직 서버 준비 중이에요" 띠가 나와요(쓴 글은 그대로)
  */
 
@@ -106,12 +108,14 @@ internal fun textErrorText(e: Throwable): String {
     return if (ex != null && ex.code in MESSAGE_CODES && ex.message.isNotBlank()) ex.message else errorText(e)
 }
 
-/** [initialTab] 0 = 직접 쓰기, 1 = 블로그 */
+/** [initialTab] 0 = 직접 쓰기, 1 = 블로그. [onCard]는 블로그 탭의 "카드 만듦" 글을 눌렀을 때 */
 @Composable
-fun TextWriteScreen(initialTab: Int, onBack: () -> Unit, onCreated: (Long) -> Unit) {
+fun TextWriteScreen(initialTab: Int, onBack: () -> Unit, onCreated: (Long) -> Unit, onCard: (Long) -> Unit) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { TextWriteViewModel(repo) }
     val state by vm.state.collectAsState()
+    val blogVm = viewModel { TextBlogViewModel(repo) }
+    val blogToast by remember { blogVm.state.map { it.toast } }.collectAsState(null)
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var tab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
@@ -129,6 +133,7 @@ fun TextWriteScreen(initialTab: Int, onBack: () -> Unit, onCreated: (Long) -> Un
         onCreated(id)
     }
     LaunchedEffect(state.toast) { state.toast?.let { snackbar.showSnackbar(it); vm.toastShown() } }
+    LaunchedEffect(blogToast) { blogToast?.let { snackbar.showSnackbar(it); blogVm.toastShown() } }
 
     Scaffold(
         containerColor = LologColors.Paper,
@@ -139,7 +144,7 @@ fun TextWriteScreen(initialTab: Int, onBack: () -> Unit, onCreated: (Long) -> Un
             ContentTabs(listOf("직접 쓰기", "블로그"), tab, { tab = it })
             when (tab) {
                 0 -> WriteTab(state, vm, Modifier.weight(1f))
-                else -> Spacer(Modifier.weight(1f))
+                else -> BlogTab(blogVm, onCard, Modifier.weight(1f))
             }
         }
     }
