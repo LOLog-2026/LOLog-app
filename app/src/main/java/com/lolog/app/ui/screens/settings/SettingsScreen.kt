@@ -141,7 +141,8 @@ class SettingsViewModel(
 
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
+    /** 아래 탭으로 열면 null(← 없음) */
+    onBack: (() -> Unit)? = null,
     onLoggedOut: () -> Unit,
     onChangePassword: () -> Unit,
     onNickname: () -> Unit,

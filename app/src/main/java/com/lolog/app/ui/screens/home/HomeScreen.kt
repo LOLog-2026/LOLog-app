@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.IconButton
@@ -24,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +40,7 @@ import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.RecordingState
+import com.lolog.app.ui.badges.NewDot
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -150,9 +152,8 @@ fun HomeScreen(
     onRecord: () -> Unit,
     onCard: (Long) -> Unit,
     onLibrary: () -> Unit,
-    /** "4컷만화" 숫자 칸을 누르면 내 만화 탭으로 */
+    /** "컨텐츠" 숫자 칸을 누르면 쇼츠 화면의 "4컷" 탭으로 */
     onComics: () -> Unit,
-    onSettings: () -> Unit,
     /** 종 버튼 → 알림함 */
     onInbox: () -> Unit = {},
     /** 방금 끝낸 녹음 ID (녹음 화면에서 끝내고 돌아오면 들어와요) */
@@ -201,7 +202,7 @@ fun HomeScreen(
         Modifier.fillMaxSize().noteLines().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 종 · 설정 톱니
+        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 종(설정은 아래 탭)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(32.dp))
             Spacer(Modifier.width(8.dp))
@@ -217,9 +218,6 @@ fun HomeScreen(
                         )
                     }
                 }
-            }
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Outlined.Settings, contentDescription = "설정", tint = LologColors.Ink)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -250,7 +248,7 @@ fun HomeScreen(
             Spacer(Modifier.height(12.dp))
         }
         val newCards = analysis?.progress?.takeIf { it.status == RecordingStatus.DONE }?.cardCount ?: 0
-        StatBox(state.cardCount, state.comicCount, newCards, onLibrary, onComics)
+        StatBox(state.cardCount, state.comicCount, newCards, badges.cards, onLibrary, onComics)
         Spacer(Modifier.height(18.dp))
         if (state.recent.isEmpty()) {
             EmptyCards()
@@ -384,23 +382,29 @@ private fun RecordButton(onClick: () -> Unit) {
     ) { Icon(Icons.Default.Mic, contentDescription = "녹음 시작", tint = LologColors.Paper, modifier = Modifier.size(32.dp)) }
 }
 
-/** 숫자 칸: Canvas 상자 하나를 세로 선으로 반 나눔. 각 칸은 이름(왼쪽) · 숫자+단위(오른쪽) 가로 한 줄 */
+/**
+ * 숫자 칸: Canvas 상자 하나를 세로 선으로 반 나눔. 각 칸은 이름(왼쪽) · 숫자+단위(오른쪽) 가로 한 줄.
+ * "에피소드" 칸이 에피소드 화면 입구예요. [newEpisode]면 이름 옆에 새 소식 점
+ */
 @Composable
-private fun StatBox(cards: String, comics: String, plus: Int, onLibrary: () -> Unit, onComics: () -> Unit) {
+private fun StatBox(cards: String, comics: String, plus: Int, newEpisode: Boolean, onLibrary: () -> Unit, onComics: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp)).background(LologColors.Canvas),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatCell("이야기 카드", cards, "장", plus, Modifier.weight(1f).clickable(onClick = onLibrary))
+        StatCell("에피소드", cards, "장", plus, Modifier.weight(1f).clickable(onClick = onLibrary), dot = newEpisode)
         Box(Modifier.padding(vertical = 14.dp).width(1.dp).fillMaxHeight().background(LologColors.Line))
-        StatCell("4컷만화", comics, "편", 0, Modifier.weight(1f).clickable(onClick = onComics))
+        StatCell("컨텐츠", comics, "편", 0, Modifier.weight(1f).clickable(onClick = onComics))
     }
 }
 
 @Composable
-private fun StatCell(label: String, value: String, unit: String, plus: Int, modifier: Modifier) {
+private fun StatCell(label: String, value: String, unit: String, plus: Int, modifier: Modifier, dot: Boolean = false) {
     Row(modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            if (dot) NewDot(Modifier.padding(start = 4.dp).semantics { contentDescription = "새 소식 있음" })
+        }
         Text(value, style = LologText.stat, maxLines = 1)
         Spacer(Modifier.width(2.dp))
         Text(unit, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Bottom).padding(bottom = 3.dp))
