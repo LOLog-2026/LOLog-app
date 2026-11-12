@@ -275,11 +275,14 @@ data class CardDetail(
     val textId: Long? = null,
     /** 블로그 글이 길어 앞부분으로 만들었으면 true(texts.md 2장, 초안) */
     val truncated: Boolean = false,
+    /** 서버가 센 쇼츠 남은 횟수(0~2, 지운 쇼츠도 셈. 정함 11-13). 없으면 아래 videoRemaining이 계산 */
+    val serverVideoRemaining: Int? = null,
 ) {
     /**
-     * 쇼츠를 더 만들 수 있는 횟수(앱 계산). 서버는 지운 쇼츠도 세지만 앱은 모르니, 넘치면 서버의 409 VIDEO_LIMIT로 알려요
+     * 쇼츠를 더 만들 수 있는 횟수. 서버 값(videoRemaining, 지운 쇼츠도 셈)을 쓰고, 예전 서버처럼 없으면 앱이 videos[]로 세요
      */
-    val videoRemaining: Int get() = (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
+    val videoRemaining: Int get() = serverVideoRemaining
+        ?: (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
 
     /** 그 카드로 만드는 중인 쇼츠가 있음(409 VIDEO_IN_PROGRESS) */
     val videoInProgress: Boolean get() = videos.any { it.status.inProgress }

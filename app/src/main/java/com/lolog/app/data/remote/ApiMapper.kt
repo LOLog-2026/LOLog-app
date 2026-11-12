@@ -156,6 +156,7 @@ object ApiMapper {
         audio = audio.toModel(),
         videos = videos.map { VideoRef(it.id, videoStatus(it.status)) },
         source = cardSource(source), textId = textId, truncated = truncated,
+        serverVideoRemaining = videoRemaining?.coerceIn(0, VIDEO_LIMIT_PER_CARD),
     )
 
     /**
