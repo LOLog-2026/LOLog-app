@@ -7,18 +7,20 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 /**
- * 글로 카드 만들기 목업(LOLog-docs PR #62 spec/texts.md 초안). 서버에 아직 API가 없어서 목업에서만 끝까지 돌아요.
+ * 글로 카드 만들기 목업(LOLog-docs PR #62 spec/texts.md). 서버(LOLog-api PR #73·#74)와 같은 규칙으로 돌아요.
  * MockLologRepository가 lock 안에서 불러요. [clock]을 바꿔 시험에서 시간을 넘길 수 있어요.
  *
  * 규칙
  *  - 직접 쓴 글: 제목·본문이 비거나 공백만 → 400 INVALID_REQUEST(field title·body),
- *    본문이 TEXT_BODY_MAX를 넘음 → 400 TEXT_TOO_LONG(이름은 초안)
+ *    본문이 TEXT_BODY_MAX를 넘음 → 400 TEXT_TOO_LONG
  *  - 올리면 QUEUED, 4초 뒤 DONE + 카드 1장(source WRITTEN). 본문에 "실패"가 있으면 FAILED(실패 화면 확인용)
  *  - 블로그 확인: 주소에 naver·tistory가 있으면 찾음(카테고리 여행·일상·맛집·공부·리뷰), 아니면 400 INVALID_BLOG.
  *    localhost·127.·192.168.은 내부 주소라 같은 오류(서버의 SSRF 막기 흉내)
- *  - 블로그 연결: 가져온 글 4개(카드 만듦 2 · 만드는 중 1 · 실패 1)와 BLOG 카드 2장(1장은 truncated)이 생겨요
+ *  - 블로그 연결: 가져온 글 4개(카드 만듦 2 · 만드는 중 1 · 실패 1)와 BLOG 카드 2장(1장은 truncated)이 생겨요.
+ *    같은 RSS를 또 연결하면 409 BLOG_EXISTS, 카테고리는 1~30자이고 대소문자만 다른 이름도 같은 이름이라 400
+ *  - 카드를 지우면 그 글도 지워요. 가져온 글 목록의 그 줄은 cardId·status가 null("카드 지움")
  *  - 처음부터 카드 7(택시)은 직접 쓴 글(text 1) 카드예요
- *  - 없는 글·블로그의 오류 코드는 명세에 없어서 목업에서만 TEXT_NOT_FOUND·BLOG_NOT_FOUND를 써요
+ *  - 없는 글·블로그는 404 TEXT_NOT_FOUND·BLOG_NOT_FOUND
  */
 internal class MockTexts(
     private val clock: () -> Long = System::currentTimeMillis,
@@ -43,6 +45,8 @@ internal class MockTexts(
         ),
     )
     private val blogs = mutableListOf<Blog>()
+    /** 블로그 id → 찾은 RSS 주소. 같은 RSS 두 번 연결 막기(409 BLOG_EXISTS)에 써요 */
+    private val feeds = mutableMapOf<Long, String>()
     private val posts = mutableMapOf<Long, List<BlogPost>>()
 
     private fun nowIso(): String = OffsetDateTime.ofInstant(Instant.ofEpochMilli(clock()), ZoneId.systemDefault()).toString()
@@ -53,7 +57,7 @@ internal class MockTexts(
         fun bad(field: String, msg: String): Nothing = throw LologException(ErrorCodes.INVALID_REQUEST, msg, field)
         if (input.title.isBlank()) bad("title", "제목을 써 주세요")
         if (input.body.isBlank()) bad("body", "본문을 써 주세요")
-        if (input.body.length > TEXT_BODY_MAX) {
+        if (textLength(input.body.trim()) > TEXT_BODY_MAX) {
             throw LologException(ErrorCodes.TEXT_TOO_LONG, "글이 너무 길어요. 줄여서 다시 보내 주세요", "body")
         }
         val id = newId()
@@ -69,9 +73,9 @@ internal class MockTexts(
         return id
     }
 
-    /** 올린 지 4초 지난 QUEUED 글을 끝내요. 새로 만든 카드 수를 돌려줘요 */
-    fun settle(): Int {
-        var made = 0
+    /** 올린 지 4초 지난 QUEUED 글을 끝내요. 카드를 만든 글의 textId를 돌려줘요(푸시용) */
+    fun settle(): List<Long> {
+        val made = mutableListOf<Long>()
         texts.filter { it.detail.status == TextStatus.QUEUED && it.detail.source == CardSource.WRITTEN && clock() - it.createdMs >= MAKE_MS }
             .forEach { e ->
                 val d = e.detail
@@ -83,13 +87,19 @@ internal class MockTexts(
                 val card = writtenCard(newId(), d)
                 addCard(card)
                 e.detail = d.copy(status = TextStatus.DONE, cardId = card.id)
-                made++
+                made += d.textId
             }
         return made
     }
 
     fun get(id: Long): TextDetail = texts.firstOrNull { it.detail.textId == id }?.detail
-        ?: throw LologException("TEXT_NOT_FOUND", "글을 찾지 못했어요")
+        ?: throw LologException(ErrorCodes.TEXT_NOT_FOUND, "글을 찾지 못했어요")
+
+    /** 카드를 지우면 그 글도 지워요. 가져온 글 목록의 그 줄은 cardId·status가 null이 돼요(texts.md 2장) */
+    fun cardDeleted(cardId: Long) {
+        texts.removeIf { it.detail.cardId == cardId }
+        posts.replaceAll { _, list -> list.map { if (it.cardId == cardId) it.copy(cardId = null, status = null) else it } }
+    }
 
     /** 직접 쓴 글 카드: 장소는 적은 그대로, 날짜는 올린 시각(texts.md 2장), 대사 3줄은 목업 */
     private fun writtenCard(id: Long, t: TextDetail) = CardDetail(
@@ -112,30 +122,33 @@ internal class MockTexts(
         val notFound = LologException(ErrorCodes.INVALID_BLOG, "블로그를 찾지 못했어요. 주소를 확인해 주세요")
         // 서버는 내부 주소를 거절해요(SSRF 막기). 목업은 흔한 내부 주소만 흉내 내요
         if (INTERNAL_HOSTS.any { it in u }) throw notFound
-        val platform = when {
-            "naver" in u -> "NAVER"
-            "tistory" in u -> "TISTORY"
+        val naver = when {
+            "naver" in u -> true
+            "tistory" in u -> false
             else -> throw notFound
         }
         val path = u.substringAfter("://").trimEnd('/')
-        val feed = if (platform == "NAVER") "https://rss.blog.naver.com/${path.substringAfterLast('/')}.xml" else "https://${path.substringBefore('/')}/rss"
-        return BlogCheck(feed, platform, MOCK_CATEGORIES)
+        val feed = if (naver) "https://rss.blog.naver.com/${path.substringAfterLast('/')}.xml" else "https://${path.substringBefore('/')}/rss"
+        return BlogCheck(feed, MOCK_CATEGORIES)
     }
 
     fun add(url: String, categories: List<String>): Blog {
         val c = check(url)
-        checkCategories(categories)
-        val blog = Blog(newId(), c.platform, url.trim(), if (c.platform == "NAVER") "민지의 여행일기" else null, categories.distinct())
+        val picked = checkCategories(categories)
+        if (c.feedUrl in feeds.values) throw LologException(ErrorCodes.BLOG_EXISTS, "이미 연결한 블로그예요")
+        val title = if ("naver" in c.feedUrl) "민지의 여행일기" else "하루 기록"
+        val blog = Blog(newId(), url.trim(), title, picked)
+        feeds[blog.id] = c.feedUrl
         blogs += blog
         posts[blog.id] = samplePosts(blog)
         return blog
     }
 
     fun update(id: Long, categories: List<String>): Blog {
-        checkCategories(categories)
+        val picked = checkCategories(categories)
         val i = blogs.indexOfFirst { it.id == id }
         if (i < 0) blogNotFound()
-        blogs[i] = blogs[i].copy(categories = categories.distinct())
+        blogs[i] = blogs[i].copy(categories = picked)
         return blogs[i]
     }
 
@@ -146,6 +159,7 @@ internal class MockTexts(
     fun delete(id: Long) {
         if (!blogs.removeIf { it.id == id }) blogNotFound()
         posts.remove(id)
+        feeds.remove(id)
     }
 
     fun posts(id: Long, cursor: String?): BlogPostPage {
@@ -154,11 +168,18 @@ internal class MockTexts(
         return BlogPostPage(page, next)
     }
 
-    private fun blogNotFound(): Nothing = throw LologException("BLOG_NOT_FOUND", "블로그를 찾지 못했어요")
+    private fun blogNotFound(): Nothing = throw LologException(ErrorCodes.BLOG_NOT_FOUND, "블로그를 찾지 못했어요")
 
-    private fun checkCategories(categories: List<String>) {
-        if (categories.any { it.isBlank() || it.length > BLOG_CATEGORY_MAX }) {
-            throw LologException(ErrorCodes.INVALID_REQUEST, "카테고리는 1~${BLOG_CATEGORY_MAX}자로 써 주세요", "categories")
+    /** 서버와 같게: 앞뒤 공백을 빼고 1~30자, 대소문자만 다른 이름도 같은 이름이라 400(field categories[i]) */
+    private fun checkCategories(categories: List<String>): List<String> {
+        val seen = mutableSetOf<String>()
+        return categories.mapIndexed { i, raw ->
+            val c = raw.trim()
+            if (c.isEmpty() || textLength(c) > BLOG_CATEGORY_MAX) {
+                throw LologException(ErrorCodes.INVALID_REQUEST, "카테고리는 1~${BLOG_CATEGORY_MAX}자로 써 주세요", "categories[$i]")
+            }
+            if (!seen.add(c.lowercase())) throw LologException(ErrorCodes.INVALID_REQUEST, "이미 있는 카테고리예요", "categories[$i]")
+            c
         }
     }
 
@@ -190,7 +211,7 @@ internal class MockTexts(
             texts += Entry(
                 TextDetail(
                     textId, CardSource.BLOG, status, cardId, title, body = null, place = null, situation = null,
-                    link = link, truncated = truncated, createdAt = published,
+                    link = link, truncated = truncated, createdAt = published, blogTitle = blog.title,
                 ),
                 createdMs = clock(),
             )

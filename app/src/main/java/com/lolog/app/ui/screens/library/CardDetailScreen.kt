@@ -167,11 +167,14 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
 
     fun consumed() = _state.update { it.copy(requestedComicId = null, requestedVideoId = null, toast = null, deleteFailed = false) }
 
-    /** 글 카드 원문을 미리 받아 둬요. 블로그 카드면 블로그 이름도 찾아요 */
+    /**
+     * 글 카드 원문을 미리 받아 둬요. 블로그 카드면 블로그 이름은 서버가 준 blogTitle(가져올 때 복사해 연결을 끊어도 남음)이고,
+     * 비어 있을 때만 연결한 블로그 주소와 비교해 찾아요
+     */
     private suspend fun loadText(card: CardDetail) {
         val textId = card.textId ?: return
         val text = runCatching { repo.text(textId) }.getOrNull() ?: return
-        val name = if (card.source == CardSource.BLOG) text.link?.let { link ->
+        val name = if (card.source == CardSource.BLOG) text.blogTitle ?: text.link?.let { link ->
             runCatching { repo.blogs() }.getOrNull()?.firstOrNull { sameSite(link, it.siteUrl) }?.title
         } else null
         _state.update { it.copy(text = text, blogName = name) }

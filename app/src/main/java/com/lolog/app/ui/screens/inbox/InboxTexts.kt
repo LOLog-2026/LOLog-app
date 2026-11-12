@@ -57,7 +57,7 @@ fun InboxItem.line(): InboxLine = when (this) {
     is InboxItem.Notification -> when (type) {
         "CARDS_CREATED" -> InboxLine(
             data["cardCount"]?.toIntOrNull()?.let { "이야기 카드 ${it}장이 생겼어요" } ?: "이야기 카드가 생겼어요",
-            "녹음에서 재밌는 순간을 찾았어요",
+            if (data.containsKey("textId")) "쓴 글로 카드를 만들었어요" else "녹음에서 재밌는 순간을 찾았어요",
         )
         "COMIC_DONE" -> InboxLine("4컷만화가 다 그려졌어요", "눌러서 볼 수 있어요")
         "COMIC_FAILED" -> InboxLine("4컷만화를 그리지 못했어요", "다시 그려 볼 수 있어요")

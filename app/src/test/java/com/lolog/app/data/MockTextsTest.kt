@@ -8,13 +8,14 @@ import com.lolog.app.data.model.TEXT_BODY_MAX
 import com.lolog.app.data.model.TextInput
 import com.lolog.app.data.model.TextStatus
 import com.lolog.app.data.repo.LologException
-import com.lolog.app.data.repo.textApiNotReady
+import com.lolog.app.data.model.BlogPlatform
+import com.lolog.app.data.model.blogPlatform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 글로 카드 만들기 목업(MockTexts, texts.md 초안)이 화면 확인용 규칙대로 도는지 본다. */
+/** 글로 카드 만들기 목업(MockTexts, texts.md)이 서버와 같은 규칙대로 도는지 본다. */
 class MockTextsTest {
 
     private var now = 1_000_000L
@@ -61,11 +62,11 @@ class MockTextsTest {
         assertEquals(TextStatus.QUEUED, texts.get(textId).status)
 
         now += MockTexts.MAKE_MS - 1
-        assertEquals(0, texts.settle())
+        assertEquals(emptyList<Long>(), texts.settle())
         assertEquals(TextStatus.QUEUED, texts.get(textId).status)
 
         now += 1
-        assertEquals(1, texts.settle())
+        assertEquals(listOf(textId), texts.settle())
         val done = texts.get(textId)
         assertEquals(TextStatus.DONE, done.status)
         assertEquals(1, cards.size)
@@ -81,7 +82,7 @@ class MockTextsTest {
 
         // 다시 정리해도 카드가 또 생기지 않아요
         now += 10_000
-        assertEquals(0, texts.settle())
+        assertEquals(emptyList<Long>(), texts.settle())
         assertEquals(1, cards.size)
     }
 
@@ -99,10 +100,9 @@ class MockTextsTest {
     @Test
     fun 블로그_확인은_네이버_티스토리만_찾는다() {
         val naver = texts.check("blog.naver.com/minji_trip")
-        assertEquals("NAVER", naver.platform)
         assertEquals("https://rss.blog.naver.com/minji_trip.xml", naver.feedUrl)
         assertEquals(MockTexts.MOCK_CATEGORIES, naver.categories)
-        assertEquals("TISTORY", texts.check("https://minji.tistory.com").platform)
+        assertEquals("https://minji.tistory.com/rss", texts.check("https://minji.tistory.com").feedUrl)
         assertEquals(ErrorCodes.INVALID_BLOG, error { texts.check("https://example.com/blog") }?.code)
     }
 
@@ -140,9 +140,42 @@ class MockTextsTest {
     }
 
     @Test
-    fun 실서버의_글_API는_NOT_READY() {
-        val e = error { textApiNotReady() }
-        assertEquals(ErrorCodes.NOT_READY, e?.code)
-        assertEquals("아직 서버 준비 중이에요", e?.message)
+    fun 같은_블로그를_또_연결하면_BLOG_EXISTS() {
+        texts.add("blog.naver.com/minji_trip", emptyList())
+        assertEquals(ErrorCodes.BLOG_EXISTS, error { texts.add("https://m.blog.naver.com/minji_trip", emptyList()) }?.code)
+    }
+
+    @Test
+    fun 카테고리는_대소문자만_달라도_같은_이름이다() {
+        val e = error { texts.add("blog.naver.com/minji_trip", listOf("Daily", "daily")) }
+        assertEquals(ErrorCodes.INVALID_REQUEST, e?.code)
+        assertEquals("categories[1]", e?.field)
+        assertEquals("categories[0]", error { texts.add("blog.naver.com/minji_trip", listOf("가".repeat(31))) }?.field)
+        assertEquals(listOf("여행"), texts.add("blog.naver.com/minji_trip", listOf(" 여행 ")).categories)
+    }
+
+    @Test
+    fun 카드를_지우면_글도_지우고_가져온_글은_카드_지움이_된다() {
+        val blog = texts.add("blog.naver.com/minji_trip", emptyList())
+        val card = cards.first()
+        texts.cardDeleted(card.id)
+        assertEquals(ErrorCodes.TEXT_NOT_FOUND, error { texts.get(card.textId!!) }?.code)
+        val post = texts.posts(blog.id, null).posts.single { it.title == card.summary }
+        assertNull(post.cardId)
+        assertNull(post.status)
+    }
+
+    @Test
+    fun 블로그_글_원문에는_블로그_이름이_있다() {
+        texts.add("blog.naver.com/minji_trip", emptyList())
+        assertEquals("민지의 여행일기", texts.get(cards.first().textId!!).blogTitle)
+    }
+
+    @Test
+    fun 플랫폼_표시는_주소로_정한다() {
+        assertEquals(BlogPlatform.NAVER, blogPlatform("blog.naver.com/minji"))
+        assertEquals(BlogPlatform.NAVER, blogPlatform("https://m.blog.naver.com/minji/1"))
+        assertEquals(BlogPlatform.TISTORY, blogPlatform("https://minji.tistory.com/rss"))
+        assertEquals(BlogPlatform.OTHER, blogPlatform("https://example.com/naver.com"))
     }
 }

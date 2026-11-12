@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lolog.app.data.model.CardSource
 import com.lolog.app.data.model.CardSummary
 import com.lolog.app.BuildConfig
 import com.lolog.app.data.model.ComicStatus
@@ -458,14 +459,17 @@ private fun FrontCard(card: CardSummary, isNew: Boolean, swipeHint: Boolean, onC
         Modifier.fillMaxWidth().softCard(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 글 카드는 에피소드 목록처럼 종류 칩 옆에 출처 꼬리표("글"·"블로그")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             KindChip(card.kind)
+            SourceTag(card.source)
             Spacer(Modifier.weight(1f))
             if (isNew) PenMemo("새로!", angle = 3f)
         }
         Text(card.summary, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         val meta = listOfNotNull(
-            dayLabel(card.recordedAt ?: card.createdAt).ifBlank { null }?.let { "$it 녹음" },
+            // 글 카드의 날짜는 녹음 날짜가 아니라 쓴 날이라(texts.md 2장) "녹음"을 붙이지 않아요(카드 자세히와 같음)
+            dayLabel(card.recordedAt ?: card.createdAt).ifBlank { null }?.let { if (card.source == CardSource.RECORDING) "$it 녹음" else it },
             card.place?.takeIf { it.isNotBlank() },
             if (swipeHint) "밀어서 넘기기 →" else null,
         ).joinToString(" · ")

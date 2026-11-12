@@ -405,6 +405,8 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         // 만화 그리는 중에는 지우기도 막아요 (11/5 프론트 확정)
         if (card.withLiveComics().locked) throw LologException(ErrorCodes.CARD_LOCKED, "만화를 만드는 중이에요")
         cardStore.remove(card)
+        // 글 카드면 서버처럼 그 글도 지워요(texts.md 2장). 가져온 글 목록에는 "카드 지움"으로 남아요
+        texts.cardDeleted(id)
         // 카드를 지워도 만화는 남겨요(FR-LIB-03). 만화에는 cardDeleted 표시
         deletedCards[id] = card.summary
         Unit
@@ -639,12 +641,12 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         lock.withLock { net(); inboxBook.updateNotice(loggedInAsAdmin, id, title, body) }
     override suspend fun deleteNotice(id: Long) = lock.withLock { net(); inboxBook.deleteNotice(loggedInAsAdmin, id) }
 
-    // ── 글로 카드 만들기 (MockTexts, texts.md 초안) ──
+    // ── 글로 카드 만들기 (MockTexts, texts.md) ──
     private val texts = MockTexts(newId = { nextId++ }, addCard = { cardStore.add(0, it) })
 
-    /** 글 카드가 생기면 서버처럼 에피소드 새 소식 점을 켜요. 푸시는 안 보내요(블로그 글은 명세상 푸시 없음) */
-    private fun settleTexts() {
-        if (texts.settle() > 0) newKinds += BadgeKind.CARDS
+    /** 직접 쓴 글 카드가 생기면 서버처럼 CARDS_CREATED { textId, cardCount 1 } 푸시를 보내요(texts.md 6장). 푸시가 점도 켜요 */
+    private suspend fun settleTexts() {
+        texts.settle().forEach { textId -> push(PushPayload(PushType.CARDS_CREATED, textId = textId, cardCount = 1)) }
     }
 
     override suspend fun createText(input: TextInput): Long = lock.withLock {
