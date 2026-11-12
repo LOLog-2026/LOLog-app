@@ -64,6 +64,8 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         val busy: Boolean = false,
         val deleted: Boolean = false,
         val requestedComicId: Long? = null,
+        /** 쇼츠를 요청했으면 그 쇼츠 화면으로 가요 */
+        val requestedVideoId: Long? = null,
         val toast: String? = null,
         val deleteFailed: Boolean = false,
     )
@@ -93,6 +95,18 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         try {
             val res = repo.requestComic(id)
             _state.update { it.copy(busy = false, requestedComicId = res.comicId) }
+        } catch (e: LologException) {
+            _state.update { it.copy(busy = false, toast = errorText(e)) }
+            load()
+        }
+    }
+
+    /** POST /api/cards/{id}/videos → 202, videoId (video.md 2장). 409 VIDEO_IN_PROGRESS·VIDEO_LIMIT은 문구로 */
+    fun requestVideo() = viewModelScope.launch {
+        _state.update { it.copy(busy = true) }
+        try {
+            val res = repo.requestVideo(id)
+            _state.update { it.copy(busy = false, requestedVideoId = res.videoId) }
         } catch (e: LologException) {
             _state.update { it.copy(busy = false, toast = errorText(e)) }
             load()
@@ -134,7 +148,7 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
         card.audio.url
     }
 
-    fun consumed() = _state.update { it.copy(requestedComicId = null, toast = null, deleteFailed = false) }
+    fun consumed() = _state.update { it.copy(requestedComicId = null, requestedVideoId = null, toast = null, deleteFailed = false) }
 }
 
 // ── 08 카드 상세 · 10 컨텐츠 만들기 · 22 카드 지우기 · 24 3번 다 씀 ──
@@ -150,6 +164,8 @@ fun CardDetailScreen(
     onNotFound: () -> Unit,
     /** 화자 팝업의 "내 캐릭터 만들기" */
     onMakeCharacter: () -> Unit = {},
+    /** 쇼츠를 요청했을 때 그 쇼츠 화면으로 */
+    onVideo: (Long) -> Unit = {},
     savedJustNow: Boolean = false,
     onSavedShown: () -> Unit = {},
 ) {
@@ -168,6 +184,7 @@ fun CardDetailScreen(
     LaunchedEffect(state.deleted) { if (state.deleted) onDeleted() }
     LaunchedEffect(state.notFound) { if (state.notFound) onNotFound() }
     LaunchedEffect(state.requestedComicId) { state.requestedComicId?.let { sheet = false; vm.consumed(); onComic(it) } }
+    LaunchedEffect(state.requestedVideoId) { state.requestedVideoId?.let { sheet = false; vm.consumed(); onVideo(it) } }
     LaunchedEffect(state.toast) {
         val msg = state.toast ?: return@LaunchedEffect
         val retry = state.deleteFailed
@@ -190,19 +207,22 @@ fun CardDetailScreen(
         snackbarHost = { LologSnackbarHost(snackbar) },
         topBar = {
             CardTopBar(card, onBack) {
-                IconButton(onClick = onEdit, enabled = card != null && !card.locked) {
+                IconButton(onClick = onEdit, enabled = card != null && !card.locked && !card.videoLocked) {
                     Icon(Icons.Outlined.Edit, "카드 고치기", modifier = Modifier.size(21.dp))
                 }
                 Box {
                     IconButton(onClick = { menu = true }, enabled = card != null) { Icon(Icons.Default.MoreVert, "더 보기") }
                     DropdownMenu(menu, { menu = false }) {
-                        val locked = card?.locked == true
+                        val locked = card?.locked == true || card?.videoLocked == true
                         DropdownMenuItem(
                             leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = if (locked) LologColors.Muted else LologColors.Rec) },
                             text = {
                                 Column {
                                     Text("카드 지우기", color = if (locked) LologColors.Muted else LologColors.Rec)
-                                    if (locked) Text("만화를 다 그린 뒤에 지울 수 있어요", fontSize = 11.sp, color = LologColors.Muted)
+                                    if (locked) Text(
+                                        if (card?.locked == true) "만화를 다 그린 뒤에 지울 수 있어요" else "쇼츠 목소리를 다 만든 뒤에 지울 수 있어요",
+                                        fontSize = 11.sp, color = LologColors.Muted,
+                                    )
                                 }
                             },
                             enabled = !locked,
@@ -221,13 +241,14 @@ fun CardDetailScreen(
                 card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
                 freshAudioUrl = vm::freshAudioUrl,
                 // 만화 그리는 중에는 고칠 수 없어서(409 CARD_LOCKED) 화자를 눌러도 팝업을 열지 않아요
-                onSpeakerClick = if (card.locked) null else { key -> speakerSheet = key; charVm.open() },
+                // 쇼츠가 카드 내용을 쓰는 동안(대기·목소리)도 같아요(video.md 8장)
+                onSpeakerClick = if (card.locked || card.videoLocked) null else { key -> speakerSheet = key; charVm.open() },
             )
         }
     }
 
     if (sheet && card != null) {
-        ComicRequestSheet(card, busy = state.busy, onConfirm = vm::requestComic, onDismiss = { sheet = false })
+        ComicRequestSheet(card, busy = state.busy, onComic = vm::requestComic, onVideo = vm::requestVideo, onDismiss = { sheet = false })
     }
     speakerSheet?.let { key ->
         val sp = card?.speakers?.firstOrNull { it.key == key } ?: return@let
@@ -281,33 +302,34 @@ private fun CardTopBar(card: CardDetail?, onBack: () -> Unit, actions: @Composab
     }
 }
 
-/** 아래: "이 카드로 만든 4컷 n / 3번" + 전체 너비 알약 "컨텐츠 만들기". 남은 횟수는 4컷 기준, 잠김 규칙은 그대로 */
+/**
+ * 아래: 만든 횟수 + 전체 너비 알약 "컨텐츠 만들기". 4컷(3번)·쇼츠(2번, video.md 2장) 중 하나라도 만들 수 있으면 켜져요.
+ * 만화를 그리는 중이거나 쇼츠가 카드 내용을 쓰는 중(대기·목소리)이면 고치기·지우기가 잠겨요
+ */
 @Composable
 private fun BottomActions(card: CardDetail, busy: Boolean, onDraw: () -> Unit) {
-    val full = card.remaining <= 0 && !card.locked
+    val comicOk = !card.locked && card.remaining > 0
+    val videoOk = !card.videoInProgress && card.videoRemaining > 0
     Column(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         when {
             card.locked -> LockNote("만화 그리는 중엔 고치거나 지울 수 없어요")
-            full -> LockNote("한 카드로는 ${COMIC_LIMIT_PER_CARD}번까지 그릴 수 있어요")
+            card.videoLocked -> LockNote("쇼츠 목소리를 만드는 중엔 고치거나 지울 수 없어요")
             else -> Text(
-                "이 카드로 만든 4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번", fontSize = 11.sp, color = LologColors.Muted,
+                "이 카드로 만든 4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번 · 쇼츠 ${VIDEO_LIMIT_PER_CARD - card.videoRemaining} / ${VIDEO_LIMIT_PER_CARD}번",
+                fontSize = 11.sp, color = LologColors.Muted,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp),
             )
         }
-        if (full) {
-            PrimaryButton("4컷은 ${COMIC_LIMIT_PER_CARD}번 다 만들었어요", {}, enabled = false)
-        } else {
-            PrimaryButton(
-                text = when {
-                    card.locked -> "그리는 중…"
-                    card.used == 0 && card.comics.isEmpty() -> "컨텐츠 만들기"
-                    else -> "컨텐츠 또 만들기 · 4컷 ${card.remaining}번 남음"
-                },
-                onClick = onDraw, enabled = !card.locked, loading = busy,
-            )
-        }
+        PrimaryButton(
+            text = when {
+                comicOk || videoOk -> if (card.used == 0 && card.comics.isEmpty() && card.videos.isEmpty()) "컨텐츠 만들기" else "컨텐츠 또 만들기"
+                card.locked || card.videoInProgress -> "만드는 중…"
+                else -> "컨텐츠를 다 만들었어요"
+            },
+            onClick = onDraw, enabled = comicOk || videoOk, loading = busy,
+        )
     }
 }
 
@@ -434,29 +456,44 @@ fun LineBubble(
 
 /**
  * 10 컨텐츠 만들기 시트(컨텐츠 시안 v3 ②): 4컷 만화 / 쇼츠 중 고르기.
- * 쇼츠는 서버 명세·API가 아직 없어서 회색 "준비 중"으로 못 골라요. 그래서 4컷이 늘 골라져 있어요
+ * 만들 수 없는 쪽(횟수를 다 씀, 만드는 중)은 회색으로 못 골라요. 처음엔 만들 수 있는 쪽이 골라져 있어요
  */
 @Composable
-private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onComic: () -> Unit, onVideo: () -> Unit, onDismiss: () -> Unit) {
+    val comicOk = !card.locked && card.remaining > 0
+    val videoOk = !card.videoInProgress && card.videoRemaining > 0
+    // true = 쇼츠
+    var video by remember { mutableStateOf(!comicOk && videoOk) }
     LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("이 카드로 무엇을 만들까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 4.dp))
             ContentOption(
                 title = "4컷 만화",
                 body = "세로 4칸 그림. 보통 몇 분 걸려요.",
-                note = "이 카드로 ${COMIC_LIMIT_PER_CARD}번 중 ${card.remaining}번 남음",
-                selected = true,
+                note = if (card.locked) "지금 그리는 만화가 있어요" else "이 카드로 ${COMIC_LIMIT_PER_CARD}번 중 ${card.remaining}번 남음",
+                selected = comicOk && !video,
+                enabled = comicOk,
+                offLabel = if (card.locked) "그리는 중" else "다 씀",
+                onClick = { video = false },
                 thumb = { FourCutThumb() },
             )
             ContentOption(
                 title = "쇼츠",
-                body = "짧은 세로 영상. 곧 만들 수 있어요.",
-                selected = false,
-                enabled = false,
-                thumb = { Icon(Icons.Outlined.SmartDisplay, null, tint = LologColors.Muted, modifier = Modifier.size(20.dp)) },
+                body = "대사를 목소리로 읽는 30초 안팎의 세로 영상. 몇 분 걸려요.",
+                note = if (card.videoInProgress) "지금 만드는 쇼츠가 있어요" else "이 카드로 ${VIDEO_LIMIT_PER_CARD}번 중 ${card.videoRemaining}번 남음",
+                selected = videoOk && video,
+                enabled = videoOk,
+                offLabel = if (card.videoInProgress) "만드는 중" else "다 씀",
+                onClick = { video = true },
+                thumb = { Icon(Icons.Outlined.SmartDisplay, null, tint = if (videoOk) LologColors.Accent else LologColors.Muted, modifier = Modifier.size(20.dp)) },
             )
             Text("다 되면 알림으로 알려 드려요. 실패는 횟수에 안 세요.", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(vertical = 2.dp))
-            PrimaryButton("4컷 만화로 만들기", onConfirm, loading = busy)
+            PrimaryButton(
+                if (video) "쇼츠로 만들기" else "4컷 만화로 만들기",
+                { if (video) onVideo() else onComic() },
+                enabled = if (video) videoOk else comicOk,
+                loading = busy,
+            )
             GhostButton("취소", onDismiss)
         }
     }
@@ -471,10 +508,13 @@ private fun ContentOption(
     thumb: @Composable () -> Unit,
     note: String? = null,
     enabled: Boolean = true,
+    /** 꺼졌을 때 제목 옆 칩 */
+    offLabel: String = "준비 중",
+    onClick: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(14.dp)
     Row(
-        Modifier.fillMaxWidth().clip(shape)
+        Modifier.fillMaxWidth().clip(shape).clickable(enabled = enabled, onClick = onClick)
             .background(if (selected) LologColors.Accent.copy(alpha = 0.05f) else if (enabled) LologColors.Paper else OptionOff)
             .border(if (selected) 1.5.dp else 1.dp, if (selected) LologColors.Accent else LologColors.Line, shape)
             .padding(horizontal = 14.dp, vertical = 14.dp),
@@ -491,7 +531,7 @@ private fun ContentOption(
                 if (!enabled) {
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "준비 중", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted,
+                        offLabel, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted,
                         modifier = Modifier.clip(LologShape.pill).background(LologColors.Canvas).padding(horizontal = 7.dp, vertical = 2.dp),
                     )
                 }

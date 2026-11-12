@@ -64,6 +64,13 @@ interface MainApi {
 
     /** 요청 본문 없음 */
     @POST("api/cards/{id}/comics") suspend fun requestComic(@Path("id") cardId: Long): ComicAcceptedDto
+
+    // 쇼츠 (LOLog-docs spec/video.md 2장). 409 VIDEO_IN_PROGRESS·VIDEO_LIMIT, 없으면 404 VIDEO_NOT_FOUND
+    @POST("api/cards/{id}/videos") suspend fun requestVideo(@Path("id") cardId: Long): VideoAcceptedDto
+    @GET("api/videos")
+    suspend fun videos(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): VideoPageDto
+    @GET("api/videos/{id}") suspend fun video(@Path("id") id: Long): VideoDto
+    @DELETE("api/videos/{id}") suspend fun deleteVideo(@Path("id") id: Long)
     @GET("api/comics")
     suspend fun comics(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): ComicPageDto
     @GET("api/comics/{id}") suspend fun comic(@Path("id") id: Long): ComicDto

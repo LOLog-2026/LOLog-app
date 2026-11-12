@@ -28,6 +28,7 @@ import com.lolog.app.ui.screens.admin.AdminNoticeEditScreen
 import com.lolog.app.ui.screens.admin.AdminNoticeListScreen
 import com.lolog.app.ui.screens.comic.ComicListScreen
 import com.lolog.app.ui.screens.comic.ComicScreen
+import com.lolog.app.ui.screens.comic.VideoScreen
 import com.lolog.app.ui.screens.friends.AddFriendScreen
 import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
@@ -118,6 +119,7 @@ object Routes {
     const val CARD = "card/{cardId}"
     const val CARD_EDIT = "card/{cardId}/edit"
     const val COMIC = "comic/{comicId}"
+    const val VIDEO = "video/{videoId}"
     /** 친구 방(목업에서만) */
     /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
     const val ROOM = "room/{id}?tab={tab}"
@@ -129,6 +131,7 @@ object Routes {
     fun card(id: Long) = "card/$id"
     fun cardEdit(id: Long) = "card/$id/edit"
     fun comic(id: Long) = "comic/$id"
+    fun video(id: Long) = "video/$id"
     fun room(id: Long) = "room/$id"
     fun roomChat(id: Long) = "room/$id?tab=2"
     fun roomInvite(id: Long) = "rooms/$id/invite"
@@ -325,6 +328,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onDeleted = { nav.popBackStack() },
                     onNotFound = { nav.goTab(Routes.LIBRARY) },
                     onMakeCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
+                    onVideo = { videoId -> nav.navigate(Routes.video(videoId)) },
                 )
             }
             composable(Routes.CARD_EDIT, arguments = listOf(navArgument("cardId") { type = NavType.LongType })) {
@@ -341,6 +345,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             composable(Routes.COMICS) {
                 ComicListScreen(
                     onComic = { nav.navigate(Routes.comic(it)) },
+                    onVideo = { nav.navigate(Routes.video(it)) },
                     onBack = { nav.goTab(Routes.HOME) },
                     onLibrary = { nav.goTab(Routes.LIBRARY) },
                 )
@@ -352,6 +357,13 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onCard = { cardId -> nav.navigate(Routes.card(cardId)) },
                     onEditCard = { cardId -> nav.navigate(Routes.cardEdit(cardId)) },
                     onOtherComic = { comicId -> nav.navigate(Routes.comic(comicId)) { popUpTo(Routes.COMIC) { inclusive = true } } },
+                    onDeleted = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.VIDEO, arguments = listOf(navArgument("videoId") { type = NavType.LongType })) {
+                VideoScreen(
+                    videoId = it.arguments!!.getLong("videoId"),
+                    onBack = { nav.popBackStack() },
                     onDeleted = { nav.popBackStack() },
                 )
             }

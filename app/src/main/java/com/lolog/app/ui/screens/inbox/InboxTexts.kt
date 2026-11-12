@@ -43,7 +43,7 @@ fun InboxItem.badge(): InboxBadge = when (this) {
     is InboxItem.Notice -> InboxBadge.NOTICE
     is InboxItem.Notification -> when (type) {
         "CARDS_CREATED" -> InboxBadge.CARDS
-        "COMIC_DONE", "COMIC_FAILED" -> InboxBadge.COMIC
+        "COMIC_DONE", "COMIC_FAILED", "VIDEO_DONE", "VIDEO_FAILED" -> InboxBadge.COMIC
         "PROFILE_CHARACTER_READY", "PROFILE_CHARACTER_FAILED" -> InboxBadge.CHARACTER
         "FRIEND_REQUEST" -> InboxBadge.FRIEND
         "ROOM_INVITE", "ROOM_COMMENT", "ROOM_DISBANDED" -> InboxBadge.ROOM
@@ -61,6 +61,8 @@ fun InboxItem.line(): InboxLine = when (this) {
         )
         "COMIC_DONE" -> InboxLine("4컷만화가 다 그려졌어요", "눌러서 볼 수 있어요")
         "COMIC_FAILED" -> InboxLine("4컷만화를 그리지 못했어요", "다시 그려 볼 수 있어요")
+        "VIDEO_DONE" -> InboxLine("쇼츠가 완성됐어요", "눌러서 볼 수 있어요")
+        "VIDEO_FAILED" -> InboxLine("쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요")
         "PROFILE_CHARACTER_READY" -> InboxLine("내 캐릭터 그림이 생겼어요", "친구들이 화자 그림으로 쓸 수 있어요")
         "PROFILE_CHARACTER_FAILED" -> InboxLine("내 캐릭터를 만들지 못했어요", "사진을 다시 골라 주세요")
         "FRIEND_REQUEST" -> InboxLine(
