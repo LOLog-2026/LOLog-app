@@ -190,6 +190,8 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 기본 화자 목소리(FR-CHAR-03): -01·-02로 끝나는 12명만 가짜 voiceUrl, 나머지는 null
  *  - 내 목소리 고르기(FR-CHAR-04): 저장하면 내 프로필 캐릭터의 voice가 바뀌어요(다시 만들어도 그대로).
  *    캐릭터 없음 → 404 CHARACTER_NOT_FOUND, 없거나 목소리 없는 기본 화자 id → 400 UNKNOWN_CHARACTER
+ *  - 내 목소리 만들기(명세 없음, MockVoiceClone): 문장 5개 → MAKING → 5초 뒤 DONE. 다 되면 voice = MY_VOICE_ID로 고를 수 있고,
+ *    지우면 NONE이고 고른 목소리가 내 목소리였으면 null. 2KB보다 작은 문장 파일은 VOICE_TOO_QUIET
  *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
  *  - 카드 고치기(PATCH)에서 그림 붙이기
  *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
@@ -587,7 +589,17 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             })
         }
     }
-    override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
+    override suspend fun setProfileCharacterVoice(voice: String?) =
+        lock.withLock { net(); friendBook.setVoice(voice, myVoiceReady = voiceClone.ready()) }
+
+    // ── 내 목소리 만들기(명세 없음, 목업만. 규칙은 MockVoiceClone 위 주석) ──
+    private val voiceClone = MockVoiceClone()
+
+    override suspend fun getVoiceClone(): VoiceClone = lock.withLock { net(150); voiceClone.get() }
+    override suspend fun uploadVoiceSample(index: Int, file: java.io.File) = lock.withLock { net(500); voiceClone.upload(index, file.length()) }
+    override suspend fun startVoiceClone(agreeFriends: Boolean) = lock.withLock { net(); voiceClone.start() }
+    override suspend fun deleteVoiceClone() = lock.withLock { net(); voiceClone.delete(); friendBook.clearMyVoice() }
+
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
     override suspend fun requestByUserId(userId: Long): FriendRequest = lock.withLock { net(); friendBook.sendTo(userId, roomPeople(userId)) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =

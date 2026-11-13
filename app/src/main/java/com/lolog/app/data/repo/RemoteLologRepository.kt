@@ -105,6 +105,11 @@ class RemoteLologRepository(
     override suspend fun deleteProfileCharacter() = call { api.deleteProfileCharacter() }
     override suspend fun setProfileCharacterVoice(voice: String?) =
         call { api.setProfileCharacterVoice(ApiMapper.voiceBody(voice)) }
+    // 내 목소리 만들기: 서버·명세가 아직 없어요
+    override suspend fun getVoiceClone(): VoiceClone = throw LologException(ErrorCodes.NOT_READY, "아직 서버 준비 중이에요")
+    override suspend fun uploadVoiceSample(index: Int, file: java.io.File) = throw LologException(ErrorCodes.NOT_READY, "아직 서버 준비 중이에요")
+    override suspend fun startVoiceClone(agreeFriends: Boolean) = throw LologException(ErrorCodes.NOT_READY, "아직 서버 준비 중이에요")
+    override suspend fun deleteVoiceClone() = throw LologException(ErrorCodes.NOT_READY, "아직 서버 준비 중이에요")
     override suspend fun sendFriendRequest(code: String) =
         call { api.sendFriendRequest(FriendRequestCreate(friendCode = code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =

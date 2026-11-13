@@ -88,12 +88,20 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
      * 목소리 고르기(FR-CHAR-04, 초안). voice null = 안 고름.
      * 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND, 없거나 목소리가 없는 기본 화자 id면 400 UNKNOWN_CHARACTER
      */
-    fun setVoice(voice: String?) {
+    fun setVoice(voice: String?, myVoiceReady: Boolean = false) {
         val c = character ?: fail(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
-        if (voice != null && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
+        // 내 목소리(MY_VOICE_ID)는 다 만들었을 때만 고를 수 있어요(목업, 서버 미정)
+        val mine = voice == MY_VOICE_ID && myVoiceReady
+        if (voice != null && !mine && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
             fail(ErrorCodes.UNKNOWN_CHARACTER, "없는 목소리예요")
         }
         character = c.copy(voice = voice)
+    }
+
+    /** 내 목소리를 지우면: 프로필 캐릭터 목소리가 내 목소리였으면 안 고름(null)으로 */
+    fun clearMyVoice() {
+        val c = character ?: return
+        if (c.voice == MY_VOICE_ID) character = c.copy(voice = null)
     }
 
     fun updateNickname(raw: String): Profile {
