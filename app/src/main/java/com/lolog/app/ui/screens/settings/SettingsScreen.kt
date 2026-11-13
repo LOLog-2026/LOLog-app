@@ -149,6 +149,7 @@ fun SettingsScreen(
     onBlocked: () -> Unit,
     onAdmin: () -> Unit = {},
     onFeedback: () -> Unit = {},
+    onLicenses: () -> Unit = {},
     message: String? = null,
     onMessageShown: () -> Unit = {},
 ) {
@@ -269,6 +270,7 @@ fun SettingsScreen(
             }
             // 오류 신고·의견 보내기(admin.md 5장). 관리자가 아니어도 보여요
             SettingsRow("의견 보내기", trailing = "오류 신고 · 의견", onClick = onFeedback)
+            SettingsRow("오픈소스 라이선스", onClick = onLicenses)
             SettingsRow("로그아웃") { askLogout = true }
             SettingsRow("탈퇴하고 모든 에피소드 지우기", danger = true) { askWithdraw = true }
             Spacer(Modifier.height(16.dp))

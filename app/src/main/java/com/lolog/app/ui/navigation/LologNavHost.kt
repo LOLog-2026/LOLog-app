@@ -62,6 +62,7 @@ import com.lolog.app.ui.screens.recording.AnalyzingScreen
 import com.lolog.app.ui.screens.recording.RECORDING_NOT_STARTED
 import com.lolog.app.ui.screens.recording.RecordingScreen
 import com.lolog.app.ui.screens.settings.PasswordChangeScreen
+import com.lolog.app.ui.screens.settings.OpenSourceLicensesScreen
 import com.lolog.app.ui.screens.settings.SettingsScreen
 import com.lolog.app.ui.screens.start.LoginScreen
 import com.lolog.app.ui.screens.start.PasswordResetScreen
@@ -119,6 +120,7 @@ object Routes {
     const val PROFILE_CHARACTER = "profile/character"
     const val VOICE_PICK = "profile/character/voice"
     const val BLOCKED = "blocked"
+    const val OSS_LICENSES = "ossLicenses"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val ADMIN = "admin"
@@ -538,6 +540,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
                     onFeedback = { nav.navigate(Routes.FEEDBACK_SEND) { launchSingleTop = true } },
+                    onLicenses = { nav.navigate(Routes.OSS_LICENSES) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
@@ -663,6 +666,9 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             }
             composable(Routes.BLOCKED) {
                 BlockedScreen(onBack = { nav.popBackStack() })
+            }
+            composable(Routes.OSS_LICENSES) {
+                OpenSourceLicensesScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.PASSWORD_CHANGE) {
                 PasswordChangeScreen(
