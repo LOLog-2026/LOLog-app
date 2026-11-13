@@ -165,8 +165,9 @@ class TextBlogViewModel(private val repo: LologRepository) : ViewModel() {
                 _state.update { it.copy(form = BlogForm(), connected = true) }
                 load(select = blog.id)
             } catch (e: LologException) {
-                form { it.copy(connecting = false) }
-                _state.update { it.copy(toast = textErrorText(e)) }
+                // 띠는 "블로그 더 연결하기" 아래 창에 가려 안 보여서(11/13 폰 시험), 주소 칸 아래 빨간 글로 보여요.
+                // 빈 화면의 연결 칸도 같은 자리에 보여요. 주소를 고치면(setUrl) 지워져요
+                form { it.copy(connecting = false, checkError = textErrorText(e)) }
             }
         }
     }
