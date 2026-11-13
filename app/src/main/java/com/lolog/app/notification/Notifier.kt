@@ -77,7 +77,8 @@ class Notifier(private val context: Context) {
             .setAutoCancel(true)
             .setContentIntent(pi)
             .build()
-        NotificationManagerCompat.from(context).notify(payload.hashCode(), n)
+        // 꼬리표를 달아 두면 그 화면을 열 때 같은 알림을 지울 수 있어요(inbox.md 4장, NotificationTags)
+        NotificationManagerCompat.from(context).notify(NotificationTags.of(payload), payload.hashCode(), n)
     }
 
     companion object {

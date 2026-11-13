@@ -1,5 +1,7 @@
 package com.lolog.app.ui.navigation
 
+import com.lolog.app.notification.NotificationTags
+import com.lolog.app.ui.badges.ClearNotification
 import com.lolog.app.ui.badges.OnPush
 import com.lolog.app.data.model.PushType
 import com.lolog.app.data.model.Badges
@@ -423,8 +425,10 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 )
             }
             composable(Routes.COMIC, arguments = listOf(navArgument("comicId") { type = NavType.LongType })) {
+                val comicId = it.arguments!!.getLong("comicId")
+                ClearNotification(NotificationTags.comic(comicId))
                 ComicScreen(
-                    comicId = it.arguments!!.getLong("comicId"),
+                    comicId = comicId,
                     onBack = { nav.popBackStack() },
                     onCard = { cardId -> nav.navigate(Routes.card(cardId)) },
                     onEditCard = { cardId -> nav.navigate(Routes.cardEdit(cardId)) },
@@ -433,8 +437,10 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 )
             }
             composable(Routes.VIDEO, arguments = listOf(navArgument("videoId") { type = NavType.LongType })) {
+                val videoId = it.arguments!!.getLong("videoId")
+                ClearNotification(NotificationTags.video(videoId))
                 VideoScreen(
-                    videoId = it.arguments!!.getLong("videoId"),
+                    videoId = videoId,
                     onBack = { nav.popBackStack() },
                     onDeleted = { nav.popBackStack() },
                 )
@@ -482,6 +488,8 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                 ) { entry ->
                     val id = entry.arguments!!.getLong("id")
                     val message by entry.savedStateHandle.getStateFlow<String?>(ROOM_MESSAGE, null).collectAsState()
+                    // 이 방의 초대·댓글 알림을 알림창에서 지워요
+                    ClearNotification(NotificationTags.room(id))
                     RoomScreen(
                         roomId = id,
                         initialTab = entry.arguments!!.getInt("tab"),

@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +35,7 @@ import com.lolog.app.data.model.InboxTab
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.notification.NotificationTags
 import com.lolog.app.notification.Notifier
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
@@ -202,6 +204,7 @@ fun InboxScreen(
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { vm.start() }
     // 보고 있는 동안 새 푸시가 오면 알림 목록을 새로 받아요(모든 푸시가 알림으로 남아요, #67 7번)
@@ -258,6 +261,10 @@ fun InboxScreen(
                             items(state.items, key = { "${it.kind}-${it.id}" }) { item ->
                                 InboxRow(item) {
                                     vm.open(item)
+                                    // 앱 안에서 알림을 누르면 알림창의 같은 알림도 지워요(inbox.md 4장)
+                                    if (item is InboxItem.Notification) {
+                                        Notifier.payloadOf(item.data)?.let { NotificationTags.cancel(context, NotificationTags.of(it)) }
+                                    }
                                     when (item) {
                                         is InboxItem.Notice -> onNotice(item)
                                         // 방 알림은 ui에서 갈 곳을 정해요. 모르는 type이면 payloadOf가 null: 이동 없이 읽음만
