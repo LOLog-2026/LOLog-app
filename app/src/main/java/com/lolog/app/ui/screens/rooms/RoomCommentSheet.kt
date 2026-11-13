@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +35,7 @@ import com.lolog.app.ui.components.TypingDots
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
 import com.lolog.app.util.relativeTime
+import java.time.OffsetDateTime
 
 // ── 방 만화 댓글 창 (11/12 시안 8~11) ─────────────────
 
@@ -43,6 +45,28 @@ import com.lolog.app.util.relativeTime
  */
 internal fun commentsFor(messages: List<RoomMessage>, postId: Long): List<RoomMessage.Comment> =
     messages.filterIsInstance<RoomMessage.Comment>().filter { it.postId == postId }.sortedBy { it.id }
+
+/** 댓글을 놓을 쪽. 내 댓글만 오른쪽, 숨긴 글·나간 멤버·정지된 계정·남의 댓글은 왼쪽 */
+internal enum class CommentSide { LEFT, RIGHT }
+
+internal fun commentSide(c: RoomMessage.Comment): CommentSide =
+    if (c.author.isMe && !c.hidden) CommentSide.RIGHT else CommentSide.LEFT
+
+/** 같은 사람이 이어 쓴 댓글로 보는 간격 */
+internal const val COMMENT_GROUP_MS = 60_000L
+
+/**
+ * [prev] 바로 다음 [c]가 같은 사람이 1분 안에 이어 쓴 댓글이면 true. 둘째부터 사진·이름을 생략해요.
+ * 숨긴 글은 늘 따로 보여 주고, 시간을 읽지 못하면 이어 쓴 것으로 보지 않아요
+ */
+internal fun continuesFrom(prev: RoomMessage.Comment?, c: RoomMessage.Comment): Boolean {
+    if (prev == null || prev.hidden || c.hidden || prev.author.userId != c.author.userId) return false
+    val a = epochMs(prev.at) ?: return false
+    val b = epochMs(c.at) ?: return false
+    return b - a in 0..COMMENT_GROUP_MS
+}
+
+private fun epochMs(iso: String): Long? = runCatching { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
 
 /** 받아 둔 댓글이 만화의 댓글 수보다 적고 그 앞 대화가 더 있으면 "이전 댓글 더 보기" */
 internal fun showOlderComments(loaded: Int, commentCount: Int, hasOlder: Boolean): Boolean =
@@ -109,7 +133,9 @@ internal fun RoomCommentSheet(
                                 }
                             }
                         }
-                        items(comments, key = { it.id }) { c -> CommentRow(room, c) }
+                        itemsIndexed(comments, key = { _, c -> c.id }) { i, c ->
+                            CommentRow(room, c, continued = continuesFrom(comments.getOrNull(i - 1), c))
+                        }
                     }
                     if (comments.isEmpty() && !loadingOlder) {
                         Column(Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -156,36 +182,73 @@ internal fun RoomCommentSheet(
     }
 }
 
-/** 댓글 한 줄: 얼굴 · 닉네임 · 시간, 아래 글. 내 댓글은 연한 노랑 바탕. 숨긴 사람 댓글은 대화 탭의 "숨긴 글" 모양 */
+/** 댓글 말풍선: 방 대화 탭과 같은 색(남 = Canvas, 나 = AccentSoft), 둥근 10dp, 최대 화면의 75% */
+private val commentBubble = RoundedCornerShape(10.dp)
+
 @Composable
-private fun CommentRow(room: Room, c: RoomMessage.Comment) {
+private fun commentMaxWidth() = (LocalConfiguration.current.screenWidthDp * 0.75f).dp
+
+/** 댓글 한 줄. 놓는 쪽은 [commentSide]. [continued]면 같은 사람이 이어 쓴 것이라 사진·이름을 생략해요 */
+@Composable
+private fun CommentRow(room: Room, c: RoomMessage.Comment, continued: Boolean) {
+    when (commentSide(c)) {
+        CommentSide.RIGHT -> MyCommentRow(c)
+        CommentSide.LEFT -> OtherCommentRow(room, c, continued)
+    }
+}
+
+/** 남의 댓글(왼쪽): 사진 · 이름 · 시간, 아래 회색 말풍선. 숨긴 사람 댓글은 대화 탭의 "숨긴 글" 모양 */
+@Composable
+private fun OtherCommentRow(room: Room, c: RoomMessage.Comment, continued: Boolean) {
     Row(verticalAlignment = Alignment.Top) {
-        if (c.hidden) GrayDot("·", 28.dp) else MemberAvatar(c.author, room.memberIndex(c.author), 28.dp)
+        // 이어 쓴 댓글은 사진 자리만 비워 둬 말풍선 줄을 맞춰요
+        when {
+            continued -> Spacer(Modifier.width(28.dp))
+            c.hidden -> GrayDot("·", 28.dp)
+            else -> MemberAvatar(c.author, room.memberIndex(c.author), 28.dp)
+        }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when {
-                        c.hidden -> "숨긴 글"
-                        c.author.left -> RoomMember.LEFT_NAME
-                        c.author.suspended -> "${c.author.nickname} · 정지된 계정"
-                        else -> c.author.nickname
-                    },
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(relativeTime(c.at), fontSize = 11.sp, color = LologColors.Muted)
+            if (!continued) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        when {
+                            c.hidden -> "숨긴 글"
+                            c.author.left -> RoomMember.LEFT_NAME
+                            c.author.suspended -> "${c.author.nickname} · 정지된 계정"
+                            else -> c.author.nickname
+                        },
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(relativeTime(c.at), fontSize = 11.sp, color = LologColors.Muted)
+                }
+                Spacer(Modifier.height(3.dp))
             }
-            Spacer(Modifier.height(3.dp))
-            when {
-                c.hidden -> Text("차단한 사람의 글이에요", fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Muted)
-                c.author.isMe -> Text(
+            if (c.hidden) {
+                Text("차단한 사람의 글이에요", fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Muted)
+            } else {
+                Text(
                     c.text, fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Ink,
-                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(LologColors.AccentSoft).padding(horizontal = 10.dp, vertical = 5.dp),
+                    modifier = Modifier.widthIn(max = commentMaxWidth()).clip(commentBubble).background(LologColors.Canvas)
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                 )
-                else -> Text(c.text, fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Ink)
             }
         }
+    }
+}
+
+/** 내 댓글(오른쪽): 사진·이름 없이 연한 말풍선, 시간은 말풍선 왼쪽 아래 */
+@Composable
+private fun MyCommentRow(c: RoomMessage.Comment) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.Bottom) {
+        Text(relativeTime(c.at), fontSize = 11.sp, color = LologColors.Muted)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            c.text, fontSize = 13.5.sp, lineHeight = 20.sp, color = LologColors.Ink,
+            modifier = Modifier.widthIn(max = commentMaxWidth()).clip(commentBubble).background(LologColors.AccentSoft)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+        )
     }
 }

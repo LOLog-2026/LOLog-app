@@ -537,6 +537,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onLoggedOut = { nav.resetTo(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    onMyCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
                     onFeedback = { nav.navigate(Routes.FEEDBACK_SEND) { launchSingleTop = true } },
