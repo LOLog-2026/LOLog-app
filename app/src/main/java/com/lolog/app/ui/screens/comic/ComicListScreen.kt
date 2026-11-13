@@ -9,8 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -51,49 +49,66 @@ import kotlinx.coroutines.launch
 class ComicListViewModel(private val repo: LologRepository) : ViewModel() {
     data class State(
         val comics: List<ComicSummary> = emptyList(),
-        val nextCursor: String? = null,
         val loading: Boolean = true,
-        val loadingMore: Boolean = false,
+        /** 당겨서 새로 고침 중 */
+        val refreshing: Boolean = false,
         val error: String? = null,
         val toast: String? = null,
         val openComicId: Long? = null,
         /** 앱을 다시 켜면 최신순으로 돌아가요 */
         val sort: SortOrder = SortOrder.NEWEST,
+        /** 보고 있는 쪽(1부터). 쇼츠 탭과 따로 기억해요 */
+        val page: Int = 1,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    /** GET /api/comics?size=20(&sort=oldest) */
-    fun refresh() = viewModelScope.launch {
+    /**
+     * GET /api/comics?size=50(&sort=oldest)를 nextCursor가 없을 때까지 받아 앱에서 쪽을 나눠요.
+     * 서버에 page·totalCount 생기면 그 쪽만 받도록 바꿀 것(임시)
+     */
+    fun refresh(pull: Boolean = false) = viewModelScope.launch {
         val sort = _state.value.sort
+        if (pull) _state.update { it.copy(refreshing = true) }
         try {
-            val p = repo.comics(null, 20, sort)
-            // 받는 사이에 정렬을 바꿨으면 버려요
-            _state.update { if (it.sort != sort) it else it.copy(comics = p.comics, nextCursor = p.nextCursor, loading = false, error = null) }
+            val comics = fetchAll { cursor -> repo.comics(cursor, CONTENT_FETCH_SIZE, sort).let { it.comics to it.nextCursor } }
+            // 받는 사이에 정렬을 바꿨으면 버려요. 편 수가 줄었으면 마지막 쪽으로
+            _state.update {
+                if (it.sort != sort) it
+                else it.copy(comics = comics, page = clampPage(it.page, comics.size), loading = false, refreshing = false, error = null)
+            }
         } catch (e: LologException) {
-            _state.update { if (it.sort != sort) it else it.copy(loading = false, error = errorText(e)) }
+            // 받아 둔 목록이 있으면 그대로 두고 띠로만 알려요
+            _state.update {
+                if (it.sort != sort) it
+                else it.copy(loading = false, refreshing = false, error = errorText(e), toast = if (pull && it.comics.isNotEmpty()) errorText(e) else it.toast)
+            }
         }
     }
 
-    fun loadMore() {
-        val st = _state.value
-        val cursor = st.nextCursor ?: return
-        if (st.loadingMore) return // 중복 요청 막기
-        _state.update { it.copy(loadingMore = true) }
-        viewModelScope.launch {
-            // 다음 쪽도 처음과 같은 sort로
-            runCatching { repo.comics(cursor, 20, st.sort) }
-                .onSuccess { p -> _state.update { if (it.sort != st.sort) it else it.copy(comics = it.comics + p.comics, nextCursor = p.nextCursor, loadingMore = false) } }
-                .onFailure { _state.update { if (it.sort != st.sort) it else it.copy(loadingMore = false) } }
-        }
-    }
-
-    /** 정렬을 바꾸면 cursor·목록을 비우고 처음부터 다시 불러요 (명세) */
+    /** 정렬을 바꾸면 목록을 비우고 1쪽부터 다시 받아요 (명세) */
     fun setSort(sort: SortOrder) {
         if (sort == _state.value.sort) return
-        _state.update { it.copy(sort = sort, comics = emptyList(), nextCursor = null, loading = true, loadingMore = false, error = null) }
+        _state.update { it.copy(sort = sort, comics = emptyList(), page = 1, loading = true, refreshing = false, error = null) }
         refresh()
+    }
+
+    fun setPage(page: Int) = _state.update { it.copy(page = clampPage(page, it.comics.size)) }
+
+    /**
+     * 보이는 쪽에 그리는 중인 만화가 있으면 5초마다 GET /api/comics/{id}로 확인해요.
+     * 끝난 게 있으면 목록을 다시 받아 썸네일까지 맞춰요. 보이는 쪽에 그리는 중이 없으면 멈춰요
+     */
+    suspend fun watchVisible() {
+        while (true) {
+            val st = _state.value
+            val ids = pageSlice(st.comics, st.page).filter { it.status.inProgress }.map { it.id }
+            if (st.loading || ids.isEmpty()) return
+            delay(5_000)
+            val done = ids.any { id -> runCatching { !repo.comic(id).status.inProgress }.getOrDefault(false) }
+            if (done) refresh().join()
+        }
     }
 
     /** 실패한 만화 "다시 시도" = 같은 카드로 POST /api/cards/{id}/comics 다시 */
@@ -137,16 +152,10 @@ fun ComicListScreen(
     val videoVm = viewModel { VideoListViewModel(repo) }
     val videoState by videoVm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(Unit) {
-        // 그리는 중인 게 있으면 가끔 새로 고침
-        while (true) {
-            vm.refresh().join()
-            // 정렬을 바꿔 다시 받는 중이면 아직 멈추지 않아요
-            val st = vm.state.value
-            if (!st.loading && st.comics.none { it.status.inProgress }) break
-            delay(5_000)
-        }
-    }
+    LaunchedEffect(Unit) { vm.refresh() }
+    // 보이는 쪽에 그리는 중인 만화가 바뀔 때마다 다시 지켜봐요
+    val watching = pageSlice(state.comics, state.page).filter { it.status.inProgress }.map { it.id }
+    LaunchedEffect(watching, state.loading) { vm.watchVisible() }
     // 컨텐츠 새 소식 점 끄기, 만화·쇼츠가 끝났다는 푸시가 오면 두 목록을 새로 받기(inbox.md 4장, #67 7번)
     SeenBadge(BadgeKind.COMICS)
     OnPush(PushType.COMIC_DONE, PushType.COMIC_FAILED, PushType.VIDEO_DONE, PushType.VIDEO_FAILED) {
@@ -159,14 +168,8 @@ fun ComicListScreen(
     BackHandler(onBack = onBack)
     // 위 탭: 0 = 쇼츠, 1 = 4컷. 처음엔 쇼츠
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(openFourCut) { if (openFourCut) { tab = 1; onFourCutOpened() } }
-
-    // 정렬을 바꾸면 첫 편부터 보여 줘요
-    val pager = key(state.sort) { rememberPagerState { state.comics.size } }
-    // 끝 쪽에 닿으면 다음 20개 (정렬·cursor 그대로)
-    LaunchedEffect(pager.currentPage, state.comics.size) {
-        if (state.comics.isNotEmpty() && pager.currentPage >= state.comics.size - 1) vm.loadMore()
-    }
+    // 홈 "컨텐츠" 숫자 칸에서 오면 4컷 탭 1쪽
+    LaunchedEffect(openFourCut) { if (openFourCut) { tab = 1; vm.setPage(1); onFourCutOpened() } }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -194,35 +197,29 @@ fun ComicListScreen(
                         onButton = onLibrary,
                         primary = false,
                     )
-                    // 한 편씩 옆으로 넘기기(11/10 확정)
-                    else -> Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
-                        HorizontalPager(
-                            pager,
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            pageSpacing = 12.dp,
-                            verticalAlignment = Alignment.Top,
-                        ) { page ->
-                            val c = state.comics[page]
-                            ComicPage(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed)
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        PageDots(state.comics.size, pager.currentPage)
-                        if (state.loadingMore) LoadMoreDots()
+                    // 2열 격자 + 아래 숫자 쪽 줄(11/13 시안)
+                    else -> ContentGrid(
+                        items = state.comics, page = state.page, onPage = vm::setPage,
+                        refreshing = state.refreshing, onRefresh = { vm.refresh(pull = true) },
+                        key = { it.id },
+                    ) { c ->
+                        ComicCell(c, onClick = { onComic(c.id) }, onRetry = { vm.retry(c) }, onImageError = vm::imageFailed)
                     }
                 }
             }
         }
-        LologSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+        // 아래 쪽 줄을 가리지 않게 조금 띄워요
+        LologSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 64.dp))
     }
 }
 
-/** 한 장: 흰 카드(둥근 18dp, 그림자), 위에 그림 위쪽 부분(아래로 갈수록 흰색으로 흐려짐), 아래 제목·날짜·상태 칩 */
+/** 격자 칸 하나: 흰 둥근 카드(14dp). 위 그림(아래로 흐려짐), 아래 제목 1줄, 날짜 + 상태 칩. 실패면 그림 자리에 "다시 시도" */
 @Composable
-private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit, onImageError: () -> Unit) {
+private fun ComicCell(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit, onImageError: () -> Unit) {
     val stage = c.status.stage
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(14.dp)
     Column(Modifier.fillMaxWidth().softCard(shape).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
             when (stage) {
                 ComicStage.DONE -> ComicImage(
                     c.thumbnailUrl ?: c.imageUrl, emptyList(), Modifier.fillMaxSize(), small = true, onLoadError = onImageError,
@@ -231,9 +228,9 @@ private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit,
                 )
                 ComicStage.FAILED -> if (!c.cardDeleted) Box(
                     Modifier.align(Alignment.Center).clip(LologShape.pill).border(1.dp, LologColors.Rec, LologShape.pill)
-                        .clickable(onClick = onRetry).padding(horizontal = 14.dp, vertical = 7.dp),
-                ) { Text("다시 시도", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Rec) }
-                else -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 6.dp) }
+                        .clickable(onClick = onRetry).padding(horizontal = 12.dp, vertical = 6.dp),
+                ) { Text("다시 시도", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LologColors.Rec) }
+                else -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 5.dp) }
             }
             // 아래쪽 흰색으로 흐려짐
             Box(
@@ -241,19 +238,20 @@ private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit,
                     .background(Brush.verticalGradient(listOf(Color.Transparent, LologColors.Paper))),
             )
         }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(c.cardSummary ?: "4컷만화", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 10.dp)) {
+            Text(c.cardSummary ?: "4컷만화", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     when {
                         stage == ComicStage.WAITING || stage == ComicStage.MAKING -> "방금"
                         else -> shortDate(c.createdAt) + if (c.cardDeleted) " · 원래 에피소드 지워짐" else ""
                     },
-                    fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontSize = 10.5.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(4.dp))
+                StateChip(stage)
             }
-            Spacer(Modifier.width(8.dp))
-            StateChip(stage)
         }
     }
 }
@@ -267,8 +265,8 @@ private fun StateChip(stage: ComicStage) {
         else -> Triple("그리는 중", LologColors.AccentSoft, LologColors.Accent)
     }
     Text(
-        label, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = fg,
-        modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1,
+        modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
 
