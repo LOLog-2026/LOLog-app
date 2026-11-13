@@ -29,7 +29,12 @@ class Notifier(private val context: Context) {
         ) return
 
         val (channel, title, body) = when (payload.type) {
-            PushType.CARDS_CREATED -> Triple(NotificationChannels.PUSH, "새 이야기 카드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
+            // 직접 쓴 글의 카드면 textId가 와요(texts.md 6장 푸시)
+            PushType.CARDS_CREATED -> if (payload.textId != null) {
+                Triple(NotificationChannels.PUSH, "새 이야기 카드 1개", "쓴 글로 카드를 만들었어요")
+            } else {
+                Triple(NotificationChannels.PUSH, "새 이야기 카드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
+            }
             PushType.COMIC_DONE -> Triple(NotificationChannels.PUSH, "4컷만화가 완성됐어요 🎉", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
             PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 만들지 못했어요", "다시 그리거나 카드를 고쳐 볼 수 있어요.")
             // 실패 제목은 api-dto 푸시 표 그대로. 완성 문구는 명세에 없어서 정했어요
@@ -78,6 +83,7 @@ class Notifier(private val context: Context) {
     companion object {
         private const val EXTRA_TYPE = "push_type"
         private const val EXTRA_RECORDING = "push_recording"
+        private const val EXTRA_TEXT = "push_text"
         private const val EXTRA_CARDS = "push_cards"
         private const val EXTRA_COMIC = "push_comic"
         private const val EXTRA_CARD = "push_card"
@@ -91,6 +97,7 @@ class Notifier(private val context: Context) {
         fun Intent.putPayload(p: PushPayload) {
             putExtra(EXTRA_TYPE, p.type.name)
             p.recordingId?.let { putExtra(EXTRA_RECORDING, it) }
+            p.textId?.let { putExtra(EXTRA_TEXT, it) }
             p.cardCount?.let { putExtra(EXTRA_COUNT, it) }
             putExtra(EXTRA_CARDS, p.cardIds.toLongArray())
             p.comicId?.let { putExtra(EXTRA_COMIC, it) }
@@ -103,7 +110,7 @@ class Notifier(private val context: Context) {
         }
 
         /**
-         * FCM data(문자열 맵) → PushPayload. 키는 명세(api-dto 3장): type, recordingId, cardCount, comicId, cardId,
+         * FCM data(문자열 맵) → PushPayload. 키는 명세(api-dto 3장): type, recordingId(직접 쓴 글은 textId), cardCount, comicId, cardId,
          * FRIEND_REQUEST는 requestId, nickname. 방 푸시는 roomId, roomName, nickname(rooms.md 3장).
          * 카드를 지웠으면 cardId가 빈 문자열이라 null이 돼요. 모르는 type이면 null.
          */
@@ -114,6 +121,7 @@ class Notifier(private val context: Context) {
             return PushPayload(
                 type = t,
                 recordingId = data["recordingId"]?.toLongOrNull(),
+                textId = data["textId"]?.toLongOrNull(),
                 cardCount = data["cardCount"]?.toIntOrNull(),
                 cardIds = data["cardIds"]?.split(",")?.mapNotNull { it.trim().toLongOrNull() }.orEmpty(),
                 comicId = data["comicId"]?.toLongOrNull(),
@@ -139,6 +147,7 @@ class Notifier(private val context: Context) {
             return PushPayload(
                 type = t,
                 recordingId = long(EXTRA_RECORDING, "recordingId"),
+                textId = long(EXTRA_TEXT, "textId"),
                 cardCount = if (hasExtra(EXTRA_COUNT)) getIntExtra(EXTRA_COUNT, 0) else getStringExtra("cardCount")?.toIntOrNull(),
                 cardIds = cards,
                 comicId = long(EXTRA_COMIC, "comicId"),

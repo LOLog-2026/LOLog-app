@@ -64,9 +64,12 @@ object ErrorCodes {
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
     // 관리자 (LOLog-docs spec/admin.md 7장)
     const val FORBIDDEN = "FORBIDDEN" // 403 관리자가 아닌데 관리자 주소를 부름
-    // 글로 카드 만들기 (LOLog-docs PR #62 texts.md 초안. 코드 이름도 초안)
-    const val TEXT_TOO_LONG = "TEXT_TOO_LONG" // 400 직접 쓴 글 본문이 길이 상한을 넘음
-    const val INVALID_BLOG = "INVALID_BLOG"   // 400 블로그 주소로 RSS를 찾지 못함, 내부 주소
+    // 글로 카드 만들기 (LOLog-docs PR #62 texts.md 6장)
+    const val TEXT_TOO_LONG = "TEXT_TOO_LONG"   // 400 직접 쓴 글 본문이 길이 상한(임시 2,000자)을 넘음
+    const val INVALID_BLOG = "INVALID_BLOG"     // 400 블로그 주소로 RSS를 찾지 못함, 내부 주소
+    const val TEXT_NOT_FOUND = "TEXT_NOT_FOUND" // 404 없는 글, 내 글이 아님(카드를 지우면 글도 지워져요)
+    const val BLOG_NOT_FOUND = "BLOG_NOT_FOUND" // 404 없는 블로그, 내 블로그가 아님
+    const val BLOG_EXISTS = "BLOG_EXISTS"       // 409 같은 RSS 주소를 이미 연결함
     const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
@@ -323,19 +326,22 @@ data class CardEdit(
             newSpeakers == null && removeSpeakers == null
 }
 
-// ── 글로 카드 만들기 (LOLog-docs PR #62 spec/texts.md 초안, 서버 아직 없음) ──
+// ── 글로 카드 만들기 (LOLog-docs PR #62 spec/texts.md, LOLog-api PR #73·#74) ──
 
 /** 카드 출처(texts.md 6장 source): 녹음 · 직접 쓴 글 · 블로그 글 */
 enum class CardSource { RECORDING, WRITTEN, BLOG }
 
 /**
- * 직접 쓴 글 본문 길이 상한. 명세에 숫자가 없어요(AI 담당이 정함).
- * 2,000은 앱이 정한 임시값이라 숫자가 정해지면 바꿔요
+ * 직접 쓴 글 본문 길이 상한(texts.md 2장, 임시 정함 11-12). 숫자는 AI 담당이 정하고, 그 전까지 서버도 2,000자로 막아요.
+ * 서버는 글자(코드포인트) 수로 세서 앱도 [textLength]로 세요
  */
 const val TEXT_BODY_MAX = 2000
 
-/** 블로그 카테고리를 직접 적을 때 글자 수(명세에 없어 앱이 정함) */
+/** 블로그 카테고리 이름 1~30자(texts.md 4장) */
 const val BLOG_CATEGORY_MAX = 30
+
+/** 서버와 같게 글자(코드포인트) 수로 세요. 이모지 하나도 1자예요 */
+fun textLength(s: String): Int = s.codePointCount(0, s.length)
 
 /** POST /api/texts 보내는 것. place·situation은 선택이라 비면 null */
 data class TextInput(val title: String, val body: String, val place: String?, val situation: String?)
@@ -344,8 +350,8 @@ data class TextInput(val title: String, val body: String, val place: String?, va
 enum class TextStatus { QUEUED, DONE, FAILED }
 
 /**
- * GET /api/texts/{id}. 블로그 글이면 body 대신 link(카드가 생기면 서버가 본문을 지워요).
- * cardId는 DONE일 때만 있어요
+ * GET /api/texts/{id}. 블로그 글이면 body 대신 link·blogTitle(카드가 생기면 서버가 본문을 지워요).
+ * blogTitle은 가져올 때 복사한 블로그 이름이라 연결을 끊어도 남아요. cardId는 DONE일 때만 있어요
  */
 data class TextDetail(
     val textId: Long,
@@ -359,13 +365,26 @@ data class TextDetail(
     val link: String?,
     val truncated: Boolean,
     val createdAt: String,
+    val blogTitle: String? = null,
 )
 
 /** POST /api/blogs/check: 링크로 찾은 RSS 주소와 피드에 나온 카테고리(저장 안 함) */
-data class BlogCheck(val feedUrl: String, val platform: String, val categories: List<String>)
+data class BlogCheck(val feedUrl: String, val categories: List<String>)
 
-/** 연결한 블로그. categories가 비면 전부 가져와요 */
-data class Blog(val id: Long, val platform: String, val siteUrl: String, val title: String?, val categories: List<String>)
+/** 연결한 블로그(texts.md 6장 블로그 응답). title은 RSS의 블로그 이름. categories가 비면 전부 가져와요 */
+data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>)
+
+/** 화면의 플랫폼 표시(N·T 동그라미)용. 서버는 플랫폼을 저장·응답하지 않아서(texts.md 4장) 앱이 주소로 정해요 */
+enum class BlogPlatform { NAVER, TISTORY, OTHER }
+
+fun blogPlatform(url: String): BlogPlatform {
+    val host = url.trim().lowercase().substringAfter("://").substringBefore('/').substringBefore('?')
+    return when {
+        host == "naver.com" || host.endsWith(".naver.com") -> BlogPlatform.NAVER
+        host.endsWith(".tistory.com") -> BlogPlatform.TISTORY
+        else -> BlogPlatform.OTHER
+    }
+}
 
 /** GET /api/blogs/{id}/posts 한 줄. 글마다 바로 카드로 만들어져요 */
 data class BlogPost(
@@ -374,7 +393,8 @@ data class BlogPost(
     val category: String?,
     val publishedAt: String?,
     val cardId: Long?,
-    val status: TextStatus,
+    /** 카드를 지운 글은 cardId·status가 둘 다 null이에요. 화면은 "카드 지움"(texts.md 2장) */
+    val status: TextStatus?,
 )
 
 data class BlogPostPage(val posts: List<BlogPost>, val nextCursor: String?)
@@ -516,6 +536,8 @@ enum class PushType {
 data class PushPayload(
     val type: PushType,
     val recordingId: Long? = null,
+    /** CARDS_CREATED(직접 쓴 글): recordingId 대신 글 ID가 와요(texts.md 6장 푸시). 블로그 글은 푸시가 없어요 */
+    val textId: Long? = null,
     /** CARDS_CREATED: 새로 생긴 카드 수 */
     val cardCount: Int? = null,
     /** 명세에 없음(제안): 새 카드 번호들. 오면 1개일 때 그 카드로 바로 가요 */

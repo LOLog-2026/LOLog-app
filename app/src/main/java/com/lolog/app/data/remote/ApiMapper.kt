@@ -104,7 +104,34 @@ object ApiMapper {
     fun CardSummaryDto.toModel() = CardSummary(
         id = id, kind = cardKind(kind), summary = summary, recordedAt = recordedAt,
         comicCount = comicCount, createdAt = createdAt, place = place, lineCount = lineCount, hasAudio = hasAudio,
+        source = cardSource(source), textId = textId,
     )
+
+    /** 모르는 값이거나 없으면 녹음으로 봐요 */
+    fun cardSource(s: String?): CardSource = when (s?.trim()?.uppercase()) {
+        "WRITTEN" -> CardSource.WRITTEN
+        "BLOG" -> CardSource.BLOG
+        else -> CardSource.RECORDING
+    }
+
+    /** 글 상태. 모르는 값은 만드는 중으로 봐요. null은 null(카드를 지운 블로그 글) */
+    fun textStatus(s: String?): TextStatus? = when (s?.trim()?.uppercase()) {
+        null, "" -> null
+        "DONE" -> TextStatus.DONE
+        "FAILED" -> TextStatus.FAILED
+        else -> TextStatus.QUEUED
+    }
+
+    fun TextDto.toModel() = TextDetail(
+        textId = textId, source = cardSource(source), status = textStatus(status) ?: TextStatus.QUEUED, cardId = cardId,
+        title = title, body = body, place = place?.ifBlank { null }, situation = situation?.ifBlank { null },
+        link = link?.ifBlank { null }, truncated = truncated, createdAt = createdAt, blogTitle = blogTitle?.ifBlank { null },
+    )
+
+    fun BlogCheckDto.toModel() = BlogCheck(feedUrl, categories)
+    fun BlogDto.toModel() = Blog(id, siteUrl, title?.ifBlank { null }, categories)
+    fun BlogPostDto.toModel() = BlogPost(title, link, category?.ifBlank { null }, publishedAt, cardId, textStatus(status))
+    fun BlogPostPageDto.toModel() = BlogPostPage(posts.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
 
     /** 모르는 상태값이거나, READY인데 주소·길이가 없으면 들을 수 없으니 NONE으로 봐요 */
     fun CardAudioDto?.toModel(): CardAudio {
@@ -120,7 +147,7 @@ object ApiMapper {
 
     fun CardDetailDto.toModel() = CardDetail(
         id = id, kind = cardKind(kind), summary = summary, place = place,
-        startMs = startMs, endMs = endMs,
+        startMs = startMs ?: 0, endMs = endMs ?: 0,
         speakers = speakers.map { it.toModel() },
         lines = lines.map { it.toModel() },
         comics = comics.map { ComicRef(it.id, comicStatus(it.status)) },
@@ -128,6 +155,7 @@ object ApiMapper {
         recordingId = recordingId,
         audio = audio.toModel(),
         videos = videos.map { VideoRef(it.id, videoStatus(it.status)) },
+        source = cardSource(source), textId = textId, truncated = truncated,
     )
 
     /**

@@ -26,6 +26,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.TEXT_BODY_MAX
 import com.lolog.app.data.model.TextInput
+import com.lolog.app.data.model.TextLimits
+import com.lolog.app.data.model.BLOG_CATEGORY_MAX
+import com.lolog.app.data.model.textLength
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
@@ -63,8 +66,12 @@ class TextWriteViewModel(private val repo: LologRepository) : ViewModel() {
         /** 보내서 받은 textId. 있으면 만드는 중 화면으로 가요 */
         val createdId: Long? = null,
     ) {
-        /** 제목·본문이 공백만이 아니어야 켜져요 */
-        val canSend: Boolean get() = title.isNotBlank() && body.isNotBlank() && !sending
+        /** 본문이 상한을 넘었어요. 서버도 거절해서(TEXT_TOO_LONG) 줄여야 보낼 수 있어요(texts.md 2장) */
+        val tooLong: Boolean get() = textLength(body) > TEXT_BODY_MAX
+        /** 장소는 그대로 카드 장소가 되어 카드 장소 한도(20자)를 넘을 수 없어요 */
+        val placeTooLong: Boolean get() = textLength(place.trim()) > TextLimits.PLACE
+        /** 제목·본문이 공백만이 아니고 길이 한도 안이어야 켜져요 */
+        val canSend: Boolean get() = title.isNotBlank() && body.isNotBlank() && !tooLong && !placeTooLong && !sending
         val draft: TextDraft.Draft get() = TextDraft.Draft(title, body, place, situation)
     }
 
@@ -73,12 +80,12 @@ class TextWriteViewModel(private val repo: LologRepository) : ViewModel() {
 
     fun loadDraft(d: TextDraft.Draft) {
         if (_state.value.loaded) return
-        _state.update { it.copy(title = d.title, body = d.body.take(TEXT_BODY_MAX), place = d.place, situation = d.situation, loaded = true) }
+        _state.update { it.copy(title = d.title, body = d.body, place = d.place, situation = d.situation, loaded = true) }
     }
 
     fun setTitle(v: String) = _state.update { it.copy(title = v) }
-    /** 상한보다 길게는 안 들어가요 */
-    fun setBody(v: String) = _state.update { it.copy(body = v.take(TEXT_BODY_MAX)) }
+    /** 붙여넣은 긴 글이 몰래 잘리지 않게 그대로 받고, 넘으면 글자 수를 빨갛게 보여 주고 보내기를 막아요 */
+    fun setBody(v: String) = _state.update { it.copy(body = v) }
     fun setPlace(v: String) = _state.update { it.copy(place = v) }
     fun setSituation(v: String) = _state.update { it.copy(situation = v) }
 
@@ -100,12 +107,29 @@ class TextWriteViewModel(private val repo: LologRepository) : ViewModel() {
     fun toastShown() = _state.update { it.copy(toast = null) }
 }
 
-/** 이 오류들은 서버(목업) 메시지를 그대로 띠에 보여요. 그 밖(인터넷 등)은 공통 문구 */
-private val MESSAGE_CODES = setOf(ErrorCodes.NOT_READY, ErrorCodes.TEXT_TOO_LONG, ErrorCodes.INVALID_REQUEST, ErrorCodes.INVALID_BLOG)
-
+/**
+ * 글·블로그 오류 문구. 서버 message는 개발자용이라 화면에 띄우지 않고(api-dto ErrorResponse) 코드마다 앱 문구를 써요.
+ * 그 밖(인터넷 등)은 공통 문구
+ */
 internal fun textErrorText(e: Throwable): String {
     val ex = e as? LologException
-    return if (ex != null && ex.code in MESSAGE_CODES && ex.message.isNotBlank()) ex.message else errorText(e)
+    return when (ex?.code) {
+    ErrorCodes.TEXT_TOO_LONG -> "글이 너무 길어요. ${"%,d".format(TEXT_BODY_MAX)}자 안으로 줄여 주세요"
+    ErrorCodes.INVALID_BLOG -> "블로그를 찾지 못했어요. 주소를 확인해 주세요"
+    ErrorCodes.BLOG_EXISTS -> "이미 연결한 블로그예요"
+    ErrorCodes.BLOG_NOT_FOUND -> "블로그를 찾지 못했어요. 이미 연결을 끊었을 수 있어요"
+    ErrorCodes.TEXT_NOT_FOUND -> "글을 찾지 못했어요. 카드를 지웠을 수 있어요"
+    ErrorCodes.INVALID_REQUEST -> when (ex.field) {
+        "title" -> "제목을 써 주세요"
+        "body" -> "본문을 써 주세요"
+        "place" -> "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요"
+        "situation" -> "상황이 너무 길어요"
+        else -> if (ex.field?.startsWith("categories") == true) "카테고리는 1~${BLOG_CATEGORY_MAX}자, 같은 이름은 한 번만 고를 수 있어요"
+        else "입력한 내용을 확인해 주세요"
+    }
+    ErrorCodes.NOT_READY -> "아직 서버 준비 중이에요"
+    else -> errorText(e)
+    }
 }
 
 /** [initialTab] 0 = 직접 쓰기, 1 = 블로그. [onCard]는 블로그 탭의 "카드 만듦" 글을 눌렀을 때 */
@@ -166,12 +190,14 @@ private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, mo
                 state.body, vm::setBody,
                 "있었던 일을 자유롭게 적어 주세요.\n누가 무슨 말을 했는지 쓰면 더 재밌어요.",
                 singleLine = false, enabled = !state.sending,
-                counter = "%,d / %,d".format(state.body.length, TEXT_BODY_MAX),
+                counter = "%,d / %,d".format(textLength(state.body), TEXT_BODY_MAX),
+                error = state.tooLong,
                 modifier = Modifier.weight(1f).heightIn(min = 120.dp),
             )
             Spacer(Modifier.height(12.dp))
             FieldLabel("장소", note = "선택")
-            InputBox(state.place, vm::setPlace, "어디서 있었던 일인가요?", enabled = !state.sending)
+            InputBox(state.place, vm::setPlace, "어디서 있었던 일인가요?", enabled = !state.sending, error = state.placeTooLong)
+            if (state.placeTooLong) FieldError("장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요")
             Spacer(Modifier.height(12.dp))
             // 상황은 AI에 배경으로만 넘기고 카드에는 저장하지 않아요(texts.md 3장)
             FieldLabel("상황", note = "선택 · 카드엔 안 남아요")
@@ -183,10 +209,21 @@ private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, mo
         ) {
             PrimaryButton("카드 만들기", vm::send, enabled = state.canSend, loading = state.sending)
             if (!state.canSend && !state.sending) {
-                Text("제목과 본문을 쓰면 만들 수 있어요", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(top = 8.dp))
+                val hint = when {
+                    state.tooLong -> "본문을 ${"%,d".format(TEXT_BODY_MAX)}자 안으로 줄이면 만들 수 있어요"
+                    state.placeTooLong -> "장소를 ${TextLimits.PLACE}자 안으로 줄이면 만들 수 있어요"
+                    else -> "제목과 본문을 쓰면 만들 수 있어요"
+                }
+                Text(hint, fontSize = 12.sp, color = if (state.tooLong || state.placeTooLong) LologColors.Rec else LologColors.Muted, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }
+}
+
+/** 칸 아래 빨간 글(블로그 탭의 직접 적기 오류와 같은 모양) */
+@Composable
+private fun FieldError(text: String) {
+    Text(text, fontSize = 12.sp, color = LologColors.Rec, modifier = Modifier.padding(start = 2.dp, top = 4.dp))
 }
 
 /** 회색 안내 상자 */

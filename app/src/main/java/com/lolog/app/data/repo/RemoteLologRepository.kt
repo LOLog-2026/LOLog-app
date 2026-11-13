@@ -132,15 +132,18 @@ class RemoteLologRepository(
         call { api.updateNotice(id, NoticeUpdateDto(title, body)).toModel() }
     override suspend fun deleteNotice(id: Long) = call { api.deleteNotice(id) }
 
-    // 글로 카드 만들기: 서버에 아직 API가 없어요(texts.md 초안). 서버가 나오면 LologApi·DTO를 따로 연결해요
-    override suspend fun createText(input: TextInput): Long = textApiNotReady()
-    override suspend fun text(id: Long): TextDetail = textApiNotReady()
-    override suspend fun checkBlog(url: String): BlogCheck = textApiNotReady()
-    override suspend fun addBlog(url: String, categories: List<String>): Blog = textApiNotReady()
-    override suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog = textApiNotReady()
-    override suspend fun blogs(): List<Blog> = textApiNotReady()
-    override suspend fun deleteBlog(id: Long): Unit = textApiNotReady()
-    override suspend fun blogPosts(id: Long, cursor: String?): BlogPostPage = textApiNotReady()
+    // 글로 카드 만들기(texts.md 6장, LOLog-api PR #73·#74)
+    override suspend fun createText(input: TextInput): Long = call {
+        api.createText(TextCreateDto(input.title, input.body, input.place, input.situation)).textId
+    }
+    override suspend fun text(id: Long): TextDetail = call { api.text(id).toModel() }
+    override suspend fun checkBlog(url: String): BlogCheck = call { api.checkBlog(BlogCheckRequestDto(url)).toModel() }
+    override suspend fun addBlog(url: String, categories: List<String>): Blog = call { api.addBlog(BlogCreateDto(url, categories)).toModel() }
+    override suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog =
+        call { api.updateBlog(id, BlogUpdateDto(categories)).toModel() }
+    override suspend fun blogs(): List<Blog> = call { api.blogs().blogs.map { it.toModel() } }
+    override suspend fun deleteBlog(id: Long): Unit = call { api.deleteBlog(id) }
+    override suspend fun blogPosts(id: Long, cursor: String?): BlogPostPage = call { api.blogPosts(id, cursor).toModel() }
 
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
@@ -149,6 +152,3 @@ class RemoteLologRepository(
 
     override suspend fun unregisterFcmToken(token: String) = call { api.deleteFcmToken(FcmTokenDto(token)) }
 }
-
-/** 서버에 아직 없는 글 카드·블로그 API. 화면은 이 메시지를 띠로 보여 줘요 */
-internal fun textApiNotReady(): Nothing = throw LologException(ErrorCodes.NOT_READY, "아직 서버 준비 중이에요")

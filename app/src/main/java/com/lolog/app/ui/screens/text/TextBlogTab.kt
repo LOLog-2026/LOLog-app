@@ -28,7 +28,9 @@ import androidx.lifecycle.viewModelScope
 import com.lolog.app.data.model.BLOG_CATEGORY_MAX
 import com.lolog.app.data.model.Blog
 import com.lolog.app.data.model.BlogCheck
+import com.lolog.app.data.model.BlogPlatform
 import com.lolog.app.data.model.BlogPost
+import com.lolog.app.data.model.blogPlatform
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.TextStatus
 import com.lolog.app.data.repo.LologException
@@ -48,7 +50,7 @@ import kotlinx.coroutines.launch
  *  - 연결한 블로그가 없으면: 주소 + [확인] → 블로그 줄 · 가져올 카테고리(피드 목록 + 직접 적기) · [블로그 연결]
  *  - 있으면: 블로그 카드(여럿이면 위아래로 쌓고 고른 것만 코랄 테두리) + 고른 블로그의 가져온 글 목록
  *    ⋯ → 카테고리 바꾸기 · 연결 끊기. 아래 [+ 블로그 더 연결하기]는 같은 연결 칸을 아래 창으로
- *  - 블로그 목록·연결 끊기 주소는 명세에 없어서 저장소 함수만 만들어 뒀어요. 실서버는 아직 "준비 중"
+ *  - 플랫폼 표시(N·T)는 서버가 주지 않아서(texts.md 4장) 블로그 주소로 정해요
  */
 
 /** 연결 칸(주소 확인 → 카테고리 고르기)의 상태. 빈 화면과 "더 연결하기" 창이 같이 써요 */
@@ -89,7 +91,7 @@ class TextBlogViewModel(private val repo: LologRepository) : ViewModel() {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    /** 블로그 목록. 실서버는 아직 API가 없어서(NOT_READY) 빈 목록으로 보여 줘요 */
+    /** 블로그 목록(GET /api/blogs, 연결한 순서) */
     fun load(select: Long? = null) = viewModelScope.launch {
         _state.update { it.copy(loading = it.blogs.isEmpty(), loadFailed = false) }
         try {
@@ -231,10 +233,10 @@ private fun BlogForm.withCustom(): BlogForm {
     }
 }
 
-private fun platformLabel(platform: String) = when (platform) {
-    "NAVER" -> "네이버 블로그"
-    "TISTORY" -> "티스토리"
-    else -> "블로그"
+private fun platformLabel(platform: BlogPlatform) = when (platform) {
+    BlogPlatform.NAVER -> "네이버 블로그"
+    BlogPlatform.TISTORY -> "티스토리"
+    BlogPlatform.OTHER -> "블로그"
 }
 
 /** 블로그 탭 본문. [vm]은 쓰기 화면이 만들어 넘겨요(띠도 쓰기 화면이 보여 줘요) */
@@ -405,11 +407,12 @@ private fun ConnectForm(form: BlogForm, vm: TextBlogViewModel, showEmpty: Boolea
         Modifier.fillMaxWidth().clip(LologShape.sm).border(1.dp, LologColors.Line, LologShape.sm).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlatformDot(check.platform)
+        val platform = blogPlatform(form.url).takeIf { it != BlogPlatform.OTHER } ?: blogPlatform(check.feedUrl)
+        PlatformDot(platform)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(form.url.trim(), fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${platformLabel(check.platform)} · RSS 찾음", fontSize = 11.5.sp, color = LologColors.Muted)
+            Text("${platformLabel(platform)} · RSS 찾음", fontSize = 11.5.sp, color = LologColors.Muted)
         }
     }
     Spacer(Modifier.height(16.dp))
@@ -464,11 +467,11 @@ private fun CategoryPill(text: String, on: Boolean, onClick: () -> Unit) {
 
 /** 플랫폼 동그라미: 네이버 N(초록), 티스토리 T(코랄), 그 밖 B */
 @Composable
-private fun PlatformDot(platform: String) {
+private fun PlatformDot(platform: BlogPlatform) {
     val (label, color) = when (platform) {
-        "NAVER" -> "N" to LologColors.Naver
-        "TISTORY" -> "T" to LologColors.Accent
-        else -> "B" to LologColors.Muted
+        BlogPlatform.NAVER -> "N" to LologColors.Naver
+        BlogPlatform.TISTORY -> "T" to LologColors.Accent
+        BlogPlatform.OTHER -> "B" to LologColors.Muted
     }
     Box(Modifier.size(32.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Paper)
@@ -484,7 +487,7 @@ private fun BlogCard(blog: Blog, selected: Boolean, onClick: () -> Unit, onMenu:
             .clickable(onClick = onClick).padding(start = 12.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlatformDot(blog.platform)
+        PlatformDot(blogPlatform(blog.siteUrl))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(blog.title ?: blog.siteUrl, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -515,13 +518,14 @@ private fun PostRow(post: BlogPost, onClick: (() -> Unit)?) {
     }
 }
 
-/** 상태 알약: 카드 만듦(초록) · 만드는 중(코랄) · 실패(빨강) */
+/** 상태 알약: 카드 만듦(초록) · 만드는 중(코랄) · 실패(빨강) · 카드 지움(회색, status null) */
 @Composable
-private fun PostStatus(status: TextStatus) {
+private fun PostStatus(status: TextStatus?) {
     val (label, bg, fg) = when (status) {
         TextStatus.DONE -> Triple("카드 만듦", LologColors.MemorySoft, LologColors.MemoryText)
         TextStatus.QUEUED -> Triple("만드는 중", LologColors.AccentSoft, LologColors.Accent)
         TextStatus.FAILED -> Triple("실패", LologColors.RecSoft, LologColors.Rec)
+        null -> Triple("카드 지움", LologColors.Canvas, LologColors.Muted)
     }
     Text(
         label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg,

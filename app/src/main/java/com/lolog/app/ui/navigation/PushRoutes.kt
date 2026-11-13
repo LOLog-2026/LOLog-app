@@ -11,8 +11,12 @@ import com.lolog.app.data.model.PushType
 fun NavHostController.openPush(p: PushPayload) {
     when (p.type) {
         // 명세: 새 카드 → 보관함 새로고침. (제안한 cardIds가 오고 1개면 그 카드로)
-        PushType.CARDS_CREATED ->
-            if (p.cardIds.size == 1) navigate(Routes.card(p.cardIds.first())) else goTab(Routes.LIBRARY)
+        // 직접 쓴 글의 카드(textId, texts.md 6장)는 카드 만드는 중 화면을 거쳐 그 카드로 가요(그 화면이 GET /api/texts/{id}로 cardId를 받아 넘겨요)
+        PushType.CARDS_CREATED -> when {
+            p.textId != null -> navigate(Routes.textMaking(p.textId))
+            p.cardIds.size == 1 -> navigate(Routes.card(p.cardIds.first()))
+            else -> goTab(Routes.LIBRARY)
+        }
         PushType.COMIC_DONE -> p.comicId?.let { navigate(Routes.comic(it)) } ?: openShorts(fourCut = true)
         // 실패 → 그 만화 화면. "만들지 못했어요" 안내와 "다시 시도" 버튼이 거기 있어요
         PushType.COMIC_FAILED -> p.comicId?.let { navigate(Routes.comic(it)) } ?: openShorts(fourCut = true)
