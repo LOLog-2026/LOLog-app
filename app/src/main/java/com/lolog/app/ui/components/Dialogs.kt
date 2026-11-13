@@ -24,8 +24,12 @@ fun LologDialog(
     danger: Boolean = false,
     loading: Boolean = false,
     eyebrow: (@Composable () -> Unit)? = null,
+    /** 뒤로가기·창 밖 누르기로 닫을 때. 안 주면 [onDismiss](보조 버튼)와 같아요 */
+    onDismissRequest: () -> Unit = onDismiss,
+    /** 본문 아래, 버튼 위에 넣을 것(체크 한 줄 등). [LologNoticeDialog]의 content와 같아요 */
+    content: (@Composable () -> Unit)? = null,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismissRequest) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -36,12 +40,46 @@ fun LologDialog(
             eyebrow?.invoke()
             Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
             Text(body, fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp)
+            content?.invoke()
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 확정 디자인: [취소]는 흰 바탕 + 테두리 보조 버튼
                 GhostButton(dismissText, onDismiss, Modifier.weight(1f))
                 PrimaryButton(confirmText, onConfirm, danger = danger, loading = loading, modifier = Modifier.weight(1f))
             }
+        }
+    }
+}
+
+/**
+ * 버튼 하나짜리 창. [LologDialog]와 같은 모양이에요(쇼츠 릴스 공유 시안 3·5번).
+ * @param primary true면 코랄 버튼([확인]), false면 흰 바탕 보조 버튼([취소])
+ * @param content 본문 아래에 넣을 것(진행 막대 등)
+ */
+@Composable
+fun LologNoticeDialog(
+    title: String,
+    body: String,
+    buttonText: String,
+    onButton: () -> Unit,
+    primary: Boolean = true,
+    /** 뒤로가기·창 밖 누르기로 닫을 때. 안 주면 [onButton]과 같아요 */
+    onDismissRequest: () -> Unit = onButton,
+    content: (@Composable () -> Unit)? = null,
+) {
+    Dialog(onDismissRequest = onDismissRequest) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(LologColors.Paper, com.lolog.app.ui.theme.LologShape.dialog)
+                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+            Text(body, fontSize = 14.sp, color = LologColors.Muted, lineHeight = 21.sp)
+            content?.invoke()
+            Spacer(Modifier.height(8.dp))
+            if (primary) PrimaryButton(buttonText, onButton) else GhostButton(buttonText, onButton)
         }
     }
 }

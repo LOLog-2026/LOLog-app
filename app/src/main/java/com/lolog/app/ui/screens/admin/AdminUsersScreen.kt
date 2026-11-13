@@ -242,10 +242,16 @@ class AdminUsersViewModel(private val repo: AdminRepository) : ViewModel() {
                 users = s.users.filterNot { it.userId == u.userId }, selected = null,
                 suspending = false, confirmUnsuspend = false, confirmWithdraw = false, snackbar = "이미 탈퇴한 계정이에요",
             )
-            // 같은 403이어도 "관리자는 정지할 수 없습니다"(대상이 관리자)와 "관리자만 쓸 수 있습니다"(내가 관리자에서 빠짐)를 나눠 보여요
+            // 같은 403이어도 대상이 관리자일 때와 내가 관리자에서 빠졌을 때를 나눠 보여요.
+            // 서버 message는 개발자용이라(api-dto ErrorResponse) 목록에서 받은 대상의 role로 나눠요
             code == ErrorCodes.FORBIDDEN -> s.copy(
                 suspending = false, confirmUnsuspend = false, confirmWithdraw = false,
-                snackbar = if ("관리자는" in e.message.orEmpty()) "관리자 계정은 정지하거나 탈퇴시킬 수 없어요" else errorText(e),
+                // 정지 풀기도 관리자 계정은 403이에요(admin.md, 정함 11-13)
+                snackbar = when {
+                    !u.isAdmin -> errorText(e)
+                    s.confirmUnsuspend -> "관리자 계정은 정지를 풀 수 없어요"
+                    else -> "관리자 계정은 정지하거나 탈퇴시킬 수 없어요"
+                },
             )
             else -> s.copy(suspending = false, confirmUnsuspend = false, confirmWithdraw = false, snackbar = errorText(e))
         }

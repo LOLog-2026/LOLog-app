@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,7 +105,7 @@ class LibraryViewModel(private val repo: LologRepository) : ViewModel() {
 // ── 07 보관함 · 17 빈 보관함 (공용 부품 ①④⑤, 보관함·만화 ①) ──
 
 @Composable
-fun LibraryScreen(onCard: (Long) -> Unit, onRecord: () -> Unit, onBack: () -> Unit) {
+fun LibraryScreen(onCard: (Long) -> Unit, onRecord: () -> Unit, onBack: () -> Unit, onWrite: () -> Unit = {}) {
     val repo = LocalContainer.current.repository
     val vm = viewModel { LibraryViewModel(repo) }
     val state by vm.state.collectAsState()
@@ -132,19 +134,26 @@ fun LibraryScreen(onCard: (Long) -> Unit, onRecord: () -> Unit, onBack: () -> Un
             }
         }
         // 아래 칸: 연한 회색, 노트 줄 없음
-        Column(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
+        Box(Modifier.fillMaxWidth().weight(1f).background(LologColors.Canvas)) {
             when {
                 state.loading -> SkeletonList()
                 state.error != null && state.cards.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
+                // 카드가 없으면 녹음하기 · 글로 만들기 두 버튼(글로 만들기 시안 1번)
                 state.cards.isEmpty() -> EmptyState(
                     icon = Icons.Outlined.Style,
                     title = "아직 카드가 없어요",
                     body = "대화를 녹음하면 재밌는 이야기를 카드로 모아 줘요",
                     memo = "오늘 수다부터 녹음해 볼까요?",
-                    buttonText = "녹음하러 가기",
-                    onButton = onRecord,
+                    buttonText = "글로 만들기",
+                    onButton = onWrite,
+                    secondaryText = "녹음하기",
+                    onSecondary = onRecord,
                 )
-                else -> CardList(state, vm, seenBefore, onCard)
+                else -> {
+                    CardList(state, vm, seenBefore, onCard)
+                    // 오른쪽 아래에 떠 있는 버튼. 목록을 내려도 그 자리에 있어요
+                    WriteButton(onWrite, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                }
             }
         }
     }
@@ -161,7 +170,8 @@ private fun CardList(state: LibraryViewModel.State, vm: LibraryViewModel, seenBe
     val groups = remember(shown) { shown.groupBy { localDay(it.recordedAt ?: it.createdAt) }.toList() }
 
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        // 아래는 떠 있는 "글로 만들기" 버튼(높이 46 + 여백)이 마지막 카드를 가리지 않게 더 비워요
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + 46.dp + 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         groups.forEach { (day, cards) ->
@@ -202,7 +212,11 @@ private fun GridCard(card: CardSummary, isNew: Boolean, onClick: () -> Unit, mod
                 .clickable(onClick = onClick)
                 .padding(12.dp),
         ) {
-            KindChip(card.kind, onCard = true)
+            // 글 카드는 종류 칩 옆에 출처 꼬리표("글"·"블로그")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                KindChip(card.kind, onCard = true)
+                SourceTag(card.source)
+            }
             Spacer(Modifier.height(8.dp))
             Text(card.summary, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.ExtraBold, color = LologColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
@@ -220,6 +234,20 @@ private fun GridCard(card: CardSummary, isNew: Boolean, onClick: () -> Unit, mod
             }
         }
         if (isNew) PenMemo("새로!", Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = (-8).dp), angle = 3f)
+    }
+}
+
+/** 떠 있는 코랄 알약 "✎ 글로 만들기"(글로 만들기 시안 1번) */
+@Composable
+private fun WriteButton(onClick: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier.height(46.dp).shadow(6.dp, LologShape.pill).clip(LologShape.pill).background(LologColors.Accent)
+            .clickable(onClick = onClick).padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Edit, null, tint = LologColors.Paper, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("글로 만들기", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Paper)
     }
 }
 

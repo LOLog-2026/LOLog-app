@@ -132,6 +132,19 @@ class RemoteLologRepository(
         call { api.updateNotice(id, NoticeUpdateDto(title, body)).toModel() }
     override suspend fun deleteNotice(id: Long) = call { api.deleteNotice(id) }
 
+    // 글로 카드 만들기(texts.md 6장, LOLog-api PR #73·#74)
+    override suspend fun createText(input: TextInput): Long = call {
+        api.createText(TextCreateDto(input.title, input.body, input.place, input.situation)).textId
+    }
+    override suspend fun text(id: Long): TextDetail = call { api.text(id).toModel() }
+    override suspend fun checkBlog(url: String): BlogCheck = call { api.checkBlog(BlogCheckRequestDto(url)).toModel() }
+    override suspend fun addBlog(url: String, categories: List<String>): Blog = call { api.addBlog(BlogCreateDto(url, categories)).toModel() }
+    override suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog =
+        call { api.updateBlog(id, BlogUpdateDto(categories)).toModel() }
+    override suspend fun blogs(): List<Blog> = call { api.blogs().blogs.map { it.toModel() } }
+    override suspend fun deleteBlog(id: Long): Unit = call { api.deleteBlog(id) }
+    override suspend fun blogPosts(id: Long, cursor: String?): BlogPostPage = call { api.blogPosts(id, cursor).toModel() }
+
     override suspend fun registerFcmToken(token: String) = call {
         api.putFcmToken(FcmTokenDto(token))
         tokens.fcmToken = token

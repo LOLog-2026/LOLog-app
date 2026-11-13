@@ -326,10 +326,11 @@ private fun Progress(comic: ComicDetail, card: CardDetail?, modifier: Modifier) 
     }
 }
 
+/** 단계 알약 줄. 쇼츠 만드는 화면(VideoScreen)도 [steps]만 바꿔 같이 써요 */
 @Composable
-private fun StepPills(now: Int) {
+internal fun StepPills(now: Int, steps: List<String> = STEPS) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        STEPS.forEachIndexed { i, label ->
+        steps.forEachIndexed { i, label ->
             if (i > 0) Text("›", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(horizontal = 3.dp))
             // 지난 단계 코랄, 지금 단계 연한 코랄, 남은 단계 흰 바탕 회색 글자
             val (bg, fg) = when {
@@ -357,9 +358,10 @@ private const val REPLAY_PAUSE_MS = 2_000L
 /**
  * 그동안 대화 다시 보기: 말풍선이 카톡처럼 하나씩 올라와요(백엔드 변경 없음, 카드 대사는 이미 받아 옴).
  * 다 나오면 2초 쉬고 처음부터. DONE·FAILED가 되면 멈추고, 휴대폰 "애니메이션 줄이기"면 재생 없이 전부 보여요.
+ * 쇼츠 만드는 화면(VideoScreen)도 같이 써요.
  */
 @Composable
-private fun ConversationReplay(card: CardDetail, running: Boolean) {
+internal fun ConversationReplay(card: CardDetail, running: Boolean) {
     val context = LocalContext.current
     val reduceMotion = remember {
         android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
@@ -576,7 +578,7 @@ private fun ShareSheet(
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("만화 내보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             ShareRow(Icons.Outlined.Download, "갤러리에 저장 (PNG)") {
-                withBytes { if (ComicExport.saveToGallery(context, it, name)) "갤러리에 저장했어요" else "저장하지 못했어요" }
+                withBytes { if (ComicExport.saveToGallery(context, it, name)) "저장했어요" else "저장하지 못했어요" }
             }
             ShareRow(Icons.Outlined.ChatBubbleOutline, "카카오톡으로 보내기") {
                 withBytes { ComicExport.share(context, ComicExport.shareUri(context, it, name), ComicExport.KAKAO); null }
@@ -591,8 +593,9 @@ private fun ShareSheet(
     }
 }
 
+/** 내보내기 시트 한 줄. 쇼츠 내보내기 시트(VideoScreen)도 같은 줄을 써요 */
 @Composable
-private fun ShareRow(icon: ImageVector, title: String, onClick: () -> Unit) {
+internal fun ShareRow(icon: ImageVector, title: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),

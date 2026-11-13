@@ -57,19 +57,22 @@ fun errorText(e: Throwable): String {
     return when (ex.code) {
         ErrorCodes.COMIC_LIMIT -> "이 카드는 ${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
         ErrorCodes.ACCOUNT_EXISTS -> "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요"
-        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 계정에 연결된 소셜 계정이에요"
+        // 계정 합치기가 없어서 방법(탈퇴 뒤 연결)까지 알려요(requirements FR-AUTH-06, 11-13)
+        ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 LOLog 계정에 연결된 소셜 계정이에요. 그 계정을 탈퇴한 뒤 연결할 수 있어요"
         ErrorCodes.CARD_NOT_FOUND, ErrorCodes.COMIC_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_CREDENTIALS -> "이메일 또는 비밀번호가 맞지 않아요"
         ErrorCodes.ACCOUNT_SUSPENDED -> "정지된 계정이에요."
         ErrorCodes.ACCOUNT_BANNED -> "이 계정으로는 가입하거나 연결할 수 없어요"
-        ErrorCodes.LAST_LOGIN_METHOD -> "로그인할 방법이 이것 하나라 끊을 수 없어요"
+        // functional-spec FR-AUTH-06 예외 문장 그대로
+        ErrorCodes.LAST_LOGIN_METHOD -> "다른 로그인 방법을 먼저 연결해 주세요"
         ErrorCodes.FORBIDDEN -> "관리자만 할 수 있어요"
         ErrorCodes.INVALID_REQUEST, ErrorCodes.VALIDATION_FAILED -> "입력한 내용을 확인해 주세요"
         ErrorCodes.UNKNOWN_SPEAKER -> "화자를 다시 골라 주세요"
         ErrorCodes.RECORDING_NOT_FOUND -> "지워졌거나 찾을 수 없어요"
         ErrorCodes.INVALID_TOKEN, ErrorCodes.UNAUTHORIZED -> "다시 로그인해 주세요"
         ErrorCodes.INTERNAL_ERROR -> "잠시 후 다시 시도해 주세요"
-        ErrorCodes.CARD_LOCKED -> "만화를 만드는 중이에요"
+        // 서버는 만화를 그리는 중과 쇼츠 목소리를 만드는 중 둘 다 이 코드라 둘 다 맞는 문구로(앱이 정함)
+        ErrorCodes.CARD_LOCKED -> "이 카드로 만화나 쇼츠를 만드는 중이에요"
         ErrorCodes.COMIC_IN_PROGRESS -> "지금 그리는 만화가 끝나면 다시 그릴 수 있어요"
         ErrorCodes.VIDEO_IN_PROGRESS -> "지금 만드는 쇼츠가 끝나면 다시 만들 수 있어요"
         ErrorCodes.VIDEO_LIMIT -> "이 카드로는 쇼츠를 ${VIDEO_LIMIT_PER_CARD}번까지 만들 수 있어요"
@@ -162,6 +165,9 @@ fun EmptyState(
     onButton: () -> Unit,
     modifier: Modifier = Modifier,
     primary: Boolean = true,
+    /** 있으면 버튼 두 개: 왼쪽 흰 보조 버튼(이 글자) + 오른쪽 코랄 [buttonText] */
+    secondaryText: String? = null,
+    onSecondary: () -> Unit = {},
 ) {
     Column(
         modifier.fillMaxSize().padding(24.dp),
@@ -177,7 +183,12 @@ fun EmptyState(
         Spacer(Modifier.height(14.dp))
         PenMemo(memo)
         Spacer(Modifier.height(14.dp))
-        if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
+        if (secondaryText != null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GhostButton(secondaryText, onSecondary, modifier = Modifier.weight(1f).height(44.dp))
+                PrimaryButton(buttonText, onButton, modifier = Modifier.weight(1f).height(44.dp))
+            }
+        } else if (primary) PrimaryButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
         else GhostButton(buttonText, onButton, modifier = Modifier.widthIn(min = 140.dp).height(44.dp))
     }
 }

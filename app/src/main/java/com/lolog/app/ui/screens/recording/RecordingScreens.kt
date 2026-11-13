@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +61,28 @@ import kotlinx.coroutines.launch
 
 // ── 05 녹음 중 · 파형 ──────────────────────────────
 
+/** 동의 창·모바일 데이터 창에서 녹음을 취소하고 홈으로 돌아갈 때 홈 스낵바 문구 */
+const val RECORDING_NOT_STARTED = "녹음을 시작하지 않았어요"
+
+/** 녹음 동의 창 문구(LOLog-docs functional-spec FR-REC-10) */
+internal object RecordingConsent {
+    const val TITLE = "녹음하기 전에 알려 주세요"
+    const val CONFIRM = "동의받음"
+    private const val ASK = "함께 대화하는 사람들에게 녹음한다고 알리고 동의를 받아 주세요."
+
+    /** "음성도 저장"을 켰는지에 따라 본문이 달라요 */
+    fun body(saveAudio: Boolean): String =
+        if (saveAudio) "$ASK 대화는 폰 안에서 글자로 바뀌어 서버에 올라가요. 음성도 저장해서 카드에 담긴 부분만 남기고 나머지는 7일 뒤에 지워요."
+        else "$ASK 대화는 폰 안에서 글자로 바뀌어 서버에 올라가고, 음성은 폰 밖으로 나가지 않아요."
+}
+
 @Composable
-fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
+fun RecordingScreen(
+    onBack: () -> Unit,
+    onFinished: (Long) -> Unit,
+    /** 동의 창을 취소하거나 동의 창·모바일 데이터 창을 뒤로 가기·창 밖 누르기로 닫음 = 녹음 취소. 홈으로 돌아가 "녹음을 시작하지 않았어요" */
+    onNotStarted: () -> Unit = onBack,
+) {
     val container = LocalContainer.current
     val recorder = container.recorder
     val state by recorder.state.collectAsState()
@@ -87,11 +108,14 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
     }
     // 들어왔을 때의 상태. 지난 녹음의 Uploaded·UploadFailed가 남아 있으면 새 녹음을 시작해요
     val entered = remember { recorder.state.value }
-    LaunchedEffect(Unit) {
-        if (entered !is RecordingState.Recording && entered !is RecordingState.Uploading) {
-            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            if (granted) begin() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
+    // 새 녹음이면 들어올 때마다 동의 창부터 띄워요(FR-REC-10). 마이크 권한 요청·모바일 데이터 창은 동의한 다음이에요
+    var askConsent by rememberSaveable {
+        mutableStateOf(entered !is RecordingState.Recording && entered !is RecordingState.Uploading)
+    }
+    fun consented() {
+        askConsent = false
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (granted) begin() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
     // 약속: "업로드 완료"를 받으면 그 녹음 ID로 분석 중 화면
     LaunchedEffect(state) {
@@ -214,8 +238,20 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
         }
     }
 
+    if (askConsent) {
+        // 취소·뒤로 가기·창 밖 누르기 모두 녹음 취소예요
+        LologDialog(
+            title = RecordingConsent.TITLE,
+            body = RecordingConsent.body(container.saveAudio),
+            confirmText = RecordingConsent.CONFIRM,
+            onConfirm = ::consented,
+            onDismiss = { askConsent = false; onNotStarted() },
+        )
+    }
+
     if (askNetwork) {
-        // 문구·버튼은 audio.md 1장 "모바일 데이터 창" 그대로. 창 밖을 눌러 닫으면 데이터를 쓰지 않는 "Wi-Fi에서 올리기"로 봐요
+        // 문구·버튼은 audio.md 1장 "모바일 데이터 창" 그대로.
+        // 뒤로가기·창 밖을 눌러 닫으면 녹음 취소로 보고 녹음을 시작하지 않은 채 돌아가요
         LologDialog(
             title = "모바일 데이터를 쓰고 있어요.",
             body = "녹음한 음성을 지금 올릴까요, Wi-Fi에 연결되면 올릴까요?",
@@ -223,6 +259,7 @@ fun RecordingScreen(onBack: () -> Unit, onFinished: (Long) -> Unit) {
             dismissText = "Wi-Fi에서 올리기",
             onConfirm = { askNetwork = false; recorder.start(AudioSave.ANY_NETWORK) },
             onDismiss = { askNetwork = false; recorder.start(AudioSave.WIFI_ONLY) },
+            onDismissRequest = { askNetwork = false; onNotStarted() },
         )
     }
 

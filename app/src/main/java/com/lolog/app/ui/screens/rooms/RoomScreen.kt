@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -55,6 +56,8 @@ import com.lolog.app.util.ComicExport
 import com.lolog.app.util.dayLabel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -79,6 +82,9 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
         val pickOwner: Boolean = false,
         /** 올릴 수 있는 내 만화(완성된 것만). null = 불러오는 중 */
         val myComics: List<ComicSummary>? = null,
+        /** 내 만화 다음 쪽(GET /api/comics의 nextCursor). null이면 끝 */
+        val myComicsCursor: String? = null,
+        val myComicsLoadingMore: Boolean = false,
     )
 
     private val _state = MutableStateFlow(State())
@@ -166,20 +172,38 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
     fun chatSeen() = _state.update { it.copy(chatDot = false) }
 
     fun loadMyComics() = viewModelScope.launch {
-        _state.update { it.copy(myComics = null) }
+        _state.update { it.copy(myComics = null, myComicsCursor = null, myComicsLoadingMore = false) }
         try {
-            val list = repo.comics(size = 50).comics.filter { it.status.stage == ComicStage.DONE }
-            _state.update { it.copy(myComics = list) }
+            val (list, cursor) = doneComics(null)
+            _state.update { it.copy(myComics = list, myComicsCursor = cursor) }
         } catch (e: Throwable) {
             _state.update { it.copy(myComics = emptyList(), snackbar = errorText(e)) }
         }
     }
 
+    /** 시트 끝까지 내리면 다음 쪽(다른 목록 화면처럼 무한 스크롤). 실패하면 조용히 멈추고 다시 내리면 또 받아요 */
+    fun loadMoreMyComics() {
+        val st = _state.value
+        val cursor = st.myComicsCursor ?: return
+        if (st.myComicsLoadingMore || st.myComics == null) return
+        _state.update { it.copy(myComicsLoadingMore = true) }
+        viewModelScope.launch {
+            runCatching { doneComics(cursor) }
+                .onSuccess { (list, next) ->
+                    _state.update { s -> s.copy(myComics = (s.myComics.orEmpty() + list).distinctBy { it.id }, myComicsCursor = next, myComicsLoadingMore = false) }
+                }
+                .onFailure { _state.update { it.copy(myComicsLoadingMore = false) } }
+        }
+    }
+
+    private suspend fun doneComics(from: String?) = doneComicsPage(from) { c -> repo.comics(cursor = c, size = MY_COMICS_PAGE) }
+
     fun post(comicId: Long) = act("만화를 올렸어요") { rooms.postComic(roomId, comicId) }
     fun remove(post: RoomPost, onDone: () -> Unit) = act("방에서 내렸어요") { rooms.removePost(post.id); onDone() }
     fun toggleLike(post: RoomPost) = act { rooms.toggleLike(post.id) }
 
-    fun send(postId: Long?, text: String, onSent: () -> Unit) {
+    /** [onPostGone]: 댓글을 달 만화가 방에서 내려졌음(ROOM_POST_NOT_FOUND). 띠는 지금 문구 그대로 */
+    fun send(postId: Long?, text: String, onPostGone: () -> Unit = {}, onSent: () -> Unit) {
         if (text.isBlank() || _state.value.sending) return
         viewModelScope.launch {
             _state.update { it.copy(sending = true) }
@@ -189,6 +213,11 @@ class RoomViewModel(private val rooms: RoomRepository, private val repo: LologRe
                 _state.update { it.copy(sending = false) }
                 onSent()
             } catch (e: Throwable) {
+                if ((e as? LologException)?.code == RoomErrorCodes.ROOM_POST_NOT_FOUND) {
+                    onPostGone()
+                    // 내려진 만화가 격자에 남지 않게 만화·대화를 다시 받아요
+                    runCatching { refresh() }
+                }
                 fail(e)
             }
         }
@@ -363,6 +392,9 @@ fun RoomScreen(
     var zoom by remember { mutableStateOf<RoomPost?>(null) }
     var pressed by remember { mutableStateOf<Pressed?>(null) }
     var replyTo by remember { mutableStateOf<RoomPost?>(null) }
+    // 댓글 창을 연 만화. 오류 띠는 창 위에 보이도록 창 안 띠로 띄워요
+    var commentPost by remember { mutableStateOf<RoomPost?>(null) }
+    val sheetSnackbar = remember { SnackbarHostState() }
     var menu by remember { mutableStateOf(false) }
     var members by remember { mutableStateOf(false) }
     var askLeave by remember { mutableStateOf(false) }
@@ -382,7 +414,9 @@ fun RoomScreen(
     LaunchedEffect(state.pickOwner) { if (state.pickOwner) { askLeave = false; pickOwner = true; vm.ownerPicked() } }
     // 초대를 보내고 돌아오면 기다리는 초대가 바뀌어서 방을 다시 받아요
     LaunchedEffect(message) { message?.let { onMessageShown(); vm.reloadRoom(); snackbar.showSnackbar(it) } }
-    LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
+    LaunchedEffect(state.snackbar) {
+        state.snackbar?.let { (if (commentPost != null) sheetSnackbar else snackbar).showSnackbar(it); vm.toast(null) }
+    }
     LaunchedEffect(tab) { if (tab == 2) vm.chatSeen() }
     BackHandler(enabled = pressed != null) { pressed = null }
 
@@ -394,7 +428,7 @@ fun RoomScreen(
         vm.toast(
             when {
                 bytes == null -> "이미지를 받지 못했어요"
-                ComicExport.saveToGallery(context, bytes, "lolog_room_${post.id}") -> "갤러리에 저장했어요"
+                ComicExport.saveToGallery(context, bytes, "lolog_room_${post.id}") -> "저장했어요"
                 else -> "저장하지 못했어요"
             },
         )
@@ -479,7 +513,8 @@ fun RoomScreen(
                     room = r, post = post, bounds = pr.bounds,
                     onDismiss = { pressed = null },
                     onLike = { pressed = null; vm.toggleLike(post) },
-                    onComment = { pressed = null; replyTo = post; tab = 2 },
+                    // 대화 탭으로 넘기지 않고 이 만화 댓글 창을 열어요
+                    onComment = { pressed = null; commentPost = post },
                     onSave = { pressed = null; save(post) },
                     onZoom = { pressed = null; zoom = post },
                     onRemove = { pressed = null; askRemove = post },
@@ -491,12 +526,36 @@ fun RoomScreen(
     // 22 누르면 크게
     zoom?.let { z ->
         val post = latest(z) ?: z
-        room?.let { r -> ComicPopup(r, post, onLike = { vm.toggleLike(post) }, onClose = { zoom = null }) }
+        room?.let { r -> ComicPopup(r, post, onLike = { vm.toggleLike(post) }, onComments = { commentPost = post }, onClose = { zoom = null }) }
+    }
+
+    // 만화 댓글 창(팝업 위). 받아 둔 방 대화에서 이 만화 댓글만 골라 보여 줘요
+    commentPost?.let { c ->
+        val post = latest(c) ?: c
+        room?.let { r ->
+            RoomCommentSheet(
+                room = r,
+                post = post,
+                messages = state.messages,
+                hasOlder = state.olderCursor != null,
+                loadingOlder = state.loadingOlder,
+                onLoadOlder = vm::loadOlder,
+                sending = state.sending,
+                onSend = { text, done ->
+                    // 만화가 내려졌으면 창과 팝업을 닫아요
+                    vm.send(post.id, text, onPostGone = { commentPost = null; zoom = null }) { done() }
+                },
+                snackbar = sheetSnackbar,
+                onDismiss = { commentPost = null },
+            )
+        }
     }
 
     if (picking) {
         PickComicSheet(
             comics = state.myComics,
+            loadingMore = state.myComicsLoadingMore,
+            onLoadMore = vm::loadMoreMyComics,
             posted = state.posts.filter { it.author.isMe }.map { it.comicId }.toSet(),
             onPick = { picking = false; vm.post(it) },
             onDismiss = { picking = false },
@@ -944,9 +1003,43 @@ internal fun LikeCount(post: RoomPost, iconSize: Int, textSize: Int = 11) {
 /** 방 안 멤버 순서(동그라미 색). 나간 멤버면 0 */
 internal fun Room.memberIndex(m: RoomMember): Int = members.indexOfFirst { it.userId == m.userId }.coerceAtLeast(0)
 
-/** "+ 내 만화 올리기" 시트: 완성된 내 만화만, 이미 올린 건 회색 "올림" */
+/** 올릴 만화 고르기: 한 쪽 크기(전에 한 번에 받던 50개 그대로)와, 완성된 만화를 찾을 때까지 이어 받을 최대 쪽 수 */
+private const val MY_COMICS_PAGE = 50
+internal const val MY_COMICS_MAX_PAGES = 5
+
+/**
+ * 완성된 만화만 골라 한 쪽과 다음 cursor. 한 쪽이 다 그리는 중·실패라 비면 완성된 게 나올 때까지(최대 [MY_COMICS_MAX_PAGES]쪽) 이어 받아요.
+ * 그래야 뒤 쪽에 완성된 만화가 있는데도 "아직 완성된 만화가 없어요"가 뜨는 일이 없어요
+ */
+internal suspend fun doneComicsPage(from: String?, fetch: suspend (String?) -> ComicPage): Pair<List<ComicSummary>, String?> {
+    var cursor = from
+    repeat(MY_COMICS_MAX_PAGES) {
+        val p = fetch(cursor)
+        val done = p.comics.filter { it.status.stage == ComicStage.DONE }
+        cursor = p.nextCursor
+        if (done.isNotEmpty() || cursor == null) return done to cursor
+    }
+    return emptyList<ComicSummary>() to cursor
+}
+
+/** "+ 내 만화 올리기" 시트: 완성된 내 만화만, 이미 올린 건 회색 "올림". 끝까지 내리면 다음 쪽을 더 받아요 */
 @Composable
-private fun PickComicSheet(comics: List<ComicSummary>?, posted: Set<Long>, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+private fun PickComicSheet(
+    comics: List<ComicSummary>?,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    posted: Set<Long>,
+    onPick: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val listState = rememberLazyListState()
+    // 끝에서 3줄 안쪽까지 내려오면 다음 쪽(알림함·관리자 목록과 같은 방식)
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last >= listState.layoutInfo.totalItemsCount - 3
+        }.distinctUntilChanged().filter { it }.collect { onLoadMore() }
+    }
     LologSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text("내 만화 올리기", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
@@ -957,7 +1050,7 @@ private fun PickComicSheet(comics: List<ComicSummary>?, posted: Set<Long>, onPic
                     "아직 완성된 만화가 없어요", fontSize = 14.sp, color = LologColors.Muted,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                else -> LazyColumn(Modifier.heightIn(max = 420.dp), state = listState) {
                     items(comics, key = { it.id }) { c ->
                         val done = c.id in posted
                         Row(
@@ -981,6 +1074,7 @@ private fun PickComicSheet(comics: List<ComicSummary>?, posted: Set<Long>, onPic
                             }
                         }
                     }
+                    if (loadingMore) item { LoadMoreDots() }
                 }
             }
         }

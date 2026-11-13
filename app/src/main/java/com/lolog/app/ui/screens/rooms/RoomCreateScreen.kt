@@ -20,8 +20,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Friend
 import com.lolog.app.data.model.RoomRules
+import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.data.repo.RoomRepository
 import com.lolog.app.ui.components.*
@@ -68,7 +70,17 @@ class RoomCreateViewModel(private val rooms: RoomRepository, private val repo: L
                 val room = rooms.createRoom(name, memberIds)
                 _state.update { it.copy(creating = false, createdId = room.id, invitedCount = memberIds.distinct().size) }
             } catch (e: Throwable) {
-                _state.update { it.copy(creating = false, snackbar = errorText(e)) }
+                // 문구는 rooms.md 오류 표에 없어서 앱이 정함. 서버 message는 띄우지 않아요(api-dto ErrorResponse)
+                when ((e as? LologException)?.code) {
+                    // 친구 화면(친구 추가·받은 요청)과 같은 문구
+                    ErrorCodes.PROFILE_REQUIRED -> _state.update { it.copy(creating = false, snackbar = "닉네임을 먼저 정해 주세요") }
+                    // 고르는 사이에 친구가 끊겼어요. 친구 목록을 다시 받아 없어진 사람은 고른 것에서 빠져요
+                    ErrorCodes.USER_NOT_FOUND -> {
+                        _state.update { it.copy(creating = false, snackbar = "친구가 아닌 사람이 있어요. 다시 골라 주세요") }
+                        load()
+                    }
+                    else -> _state.update { it.copy(creating = false, snackbar = errorText(e)) }
+                }
             }
         }
     }
@@ -89,6 +101,8 @@ fun RoomCreateScreen(onBack: () -> Unit, onCreated: (roomId: Long, invited: Int)
     val maxPick = RoomRules.MEMBER_MAX - 1
 
     LaunchedEffect(state.createdId) { state.createdId?.let { onCreated(it, state.invitedCount) } }
+    // 친구 목록을 다시 받으면 이제 친구가 아닌 사람은 고른 것에서 빼요(404 USER_NOT_FOUND 뒤)
+    LaunchedEffect(state.friends) { state.friends?.let { f -> picked = picked.filter { id -> f.any { it.userId == id } } } }
     LaunchedEffect(state.snackbar) { state.snackbar?.let { snackbar.showSnackbar(it); vm.toast(null) } }
 
     Scaffold(

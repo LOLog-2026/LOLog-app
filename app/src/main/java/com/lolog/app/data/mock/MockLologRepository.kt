@@ -378,6 +378,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     // ── 카드 ──
     override suspend fun cards(cursor: String?, size: Int, sort: SortOrder): CardPage = lock.withLock {
         net()
+        settleTexts()
         val (page, next) = mockPage(cardStore, cursor, size, sort)
         CardPage(page.map { it.toSummary() }, next)
     }
@@ -404,6 +405,8 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         // 만화 그리는 중에는 지우기도 막아요 (11/5 프론트 확정)
         if (card.withLiveComics().locked) throw LologException(ErrorCodes.CARD_LOCKED, "만화를 만드는 중이에요")
         cardStore.remove(card)
+        // 글 카드면 서버처럼 그 글도 지워요(texts.md 2장). 가져온 글 목록에는 "카드 지움"으로 남아요
+        texts.cardDeleted(id)
         // 카드를 지워도 만화는 남겨요(FR-LIB-03). 만화에는 cardDeleted 표시
         deletedCards[id] = card.summary
         Unit
@@ -429,6 +432,7 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         preview = lines.getOrNull(1)?.text ?: lines.firstOrNull()?.text,
         lineCount = lines.size,
         hasAudio = audio.status == AudioStatus.READY,
+        source = source, textId = textId,
     )
 
     // ── 만화 ──
@@ -636,6 +640,35 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
     override suspend fun updateNotice(id: Long, title: String?, body: String?) =
         lock.withLock { net(); inboxBook.updateNotice(loggedInAsAdmin, id, title, body) }
     override suspend fun deleteNotice(id: Long) = lock.withLock { net(); inboxBook.deleteNotice(loggedInAsAdmin, id) }
+
+    // ── 글로 카드 만들기 (MockTexts, texts.md) ──
+    private val texts = MockTexts(newId = { nextId++ }, addCard = { cardStore.add(0, it) })
+
+    /** 직접 쓴 글 카드가 생기면 서버처럼 CARDS_CREATED { textId, cardCount 1 } 푸시를 보내요(texts.md 6장). 푸시가 점도 켜요 */
+    private suspend fun settleTexts() {
+        texts.settle().forEach { textId -> push(PushPayload(PushType.CARDS_CREATED, textId = textId, cardCount = 1)) }
+    }
+
+    override suspend fun createText(input: TextInput): Long = lock.withLock {
+        net(500)
+        texts.create(input)
+    }.also {
+        scope.launch {
+            delay(MockTexts.MAKE_MS)
+            lock.withLock { settleTexts() }
+        }
+    }
+
+    override suspend fun text(id: Long): TextDetail = lock.withLock { net(150); settleTexts(); texts.get(id) }
+    override suspend fun checkBlog(url: String): BlogCheck = lock.withLock { net(600); texts.check(url) }
+    override suspend fun addBlog(url: String, categories: List<String>): Blog = lock.withLock {
+        net(600)
+        texts.add(url, categories).also { newKinds += BadgeKind.CARDS }
+    }
+    override suspend fun updateBlogCategories(id: Long, categories: List<String>): Blog = lock.withLock { net(); texts.update(id, categories) }
+    override suspend fun blogs(): List<Blog> = lock.withLock { net(250); texts.list() }
+    override suspend fun deleteBlog(id: Long) = lock.withLock { net(); texts.delete(id) }
+    override suspend fun blogPosts(id: Long, cursor: String?): BlogPostPage = lock.withLock { net(250); texts.posts(id, cursor) }
 
     // ── 기기 ──
     override suspend fun registerFcmToken(token: String) { net(100); tokens.fcmToken = token }

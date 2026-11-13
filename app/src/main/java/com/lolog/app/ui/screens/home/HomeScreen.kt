@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.IconButton
@@ -24,12 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.lolog.app.data.model.CardSource
 import com.lolog.app.data.model.CardSummary
 import com.lolog.app.BuildConfig
 import com.lolog.app.data.model.ComicStatus
@@ -39,6 +41,7 @@ import com.lolog.app.data.model.RecordingStatus
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.recording.AudioUpload
 import com.lolog.app.recording.RecordingState
+import com.lolog.app.ui.badges.NewDot
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -150,14 +153,16 @@ fun HomeScreen(
     onRecord: () -> Unit,
     onCard: (Long) -> Unit,
     onLibrary: () -> Unit,
-    /** "4컷만화" 숫자 칸을 누르면 내 만화 탭으로 */
+    /** "컨텐츠" 숫자 칸을 누르면 쇼츠 화면의 "4컷" 탭으로 */
     onComics: () -> Unit,
-    onSettings: () -> Unit,
     /** 종 버튼 → 알림함 */
     onInbox: () -> Unit = {},
     /** 방금 끝낸 녹음 ID (녹음 화면에서 끝내고 돌아오면 들어와요) */
     finishedRecordingId: Long? = null,
     onFinishedShown: () -> Unit = {},
+    /** 다른 화면에서 돌아올 때 아래 띠에 한 번 보여 줄 문구(녹음 취소 등) */
+    message: String? = null,
+    onMessageShown: () -> Unit = {},
 ) {
     val container = LocalContainer.current
     val repo = container.repository
@@ -188,6 +193,9 @@ fun HomeScreen(
         onFinishedShown()
         snackbar.showSnackbar("녹음을 끝냈어요. 정리되면 알려 드릴게요")
     }
+    // 값을 비우면 이 효과가 다시 돌아 띠가 끊기므로 띠는 화면 범위에서 띄워요
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(message) { message?.let { onMessageShown(); scope.launch { snackbar.showSnackbar(it) } } }
     val status = analysis?.progress?.status
     // 올리는 중(아직 상태 없음)·받음·찾는 중이면 "정리하고 있어요"
     val searching = analysis != null && status != RecordingStatus.DONE && status != RecordingStatus.FAILED
@@ -201,7 +209,7 @@ fun HomeScreen(
         Modifier.fillMaxSize().noteLines().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 종 · 설정 톱니
+        // 위쪽 줄: 왼쪽 로고(마크 + 글자), 오른쪽 종(설정은 아래 탭)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.width(32.dp))
             Spacer(Modifier.width(8.dp))
@@ -217,9 +225,6 @@ fun HomeScreen(
                         )
                     }
                 }
-            }
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Outlined.Settings, contentDescription = "설정", tint = LologColors.Ink)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -250,7 +255,7 @@ fun HomeScreen(
             Spacer(Modifier.height(12.dp))
         }
         val newCards = analysis?.progress?.takeIf { it.status == RecordingStatus.DONE }?.cardCount ?: 0
-        StatBox(state.cardCount, state.comicCount, newCards, onLibrary, onComics)
+        StatBox(state.cardCount, state.comicCount, newCards, badges.cards, onLibrary, onComics)
         Spacer(Modifier.height(18.dp))
         if (state.recent.isEmpty()) {
             EmptyCards()
@@ -384,23 +389,29 @@ private fun RecordButton(onClick: () -> Unit) {
     ) { Icon(Icons.Default.Mic, contentDescription = "녹음 시작", tint = LologColors.Paper, modifier = Modifier.size(32.dp)) }
 }
 
-/** 숫자 칸: Canvas 상자 하나를 세로 선으로 반 나눔. 각 칸은 이름(왼쪽) · 숫자+단위(오른쪽) 가로 한 줄 */
+/**
+ * 숫자 칸: Canvas 상자 하나를 세로 선으로 반 나눔. 각 칸은 이름(왼쪽) · 숫자+단위(오른쪽) 가로 한 줄.
+ * "에피소드" 칸이 에피소드 화면 입구예요. [newEpisode]면 이름 옆에 새 소식 점
+ */
 @Composable
-private fun StatBox(cards: String, comics: String, plus: Int, onLibrary: () -> Unit, onComics: () -> Unit) {
+private fun StatBox(cards: String, comics: String, plus: Int, newEpisode: Boolean, onLibrary: () -> Unit, onComics: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp)).background(LologColors.Canvas),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatCell("이야기 카드", cards, "장", plus, Modifier.weight(1f).clickable(onClick = onLibrary))
+        StatCell("에피소드", cards, "장", plus, Modifier.weight(1f).clickable(onClick = onLibrary), dot = newEpisode)
         Box(Modifier.padding(vertical = 14.dp).width(1.dp).fillMaxHeight().background(LologColors.Line))
-        StatCell("4컷만화", comics, "편", 0, Modifier.weight(1f).clickable(onClick = onComics))
+        StatCell("컨텐츠", comics, "편", 0, Modifier.weight(1f).clickable(onClick = onComics))
     }
 }
 
 @Composable
-private fun StatCell(label: String, value: String, unit: String, plus: Int, modifier: Modifier) {
+private fun StatCell(label: String, value: String, unit: String, plus: Int, modifier: Modifier, dot: Boolean = false) {
     Row(modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            if (dot) NewDot(Modifier.padding(start = 4.dp).semantics { contentDescription = "새 소식 있음" })
+        }
         Text(value, style = LologText.stat, maxLines = 1)
         Spacer(Modifier.width(2.dp))
         Text(unit, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Bottom).padding(bottom = 3.dp))
@@ -448,14 +459,17 @@ private fun FrontCard(card: CardSummary, isNew: Boolean, swipeHint: Boolean, onC
         Modifier.fillMaxWidth().softCard(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 글 카드는 에피소드 목록처럼 종류 칩 옆에 출처 꼬리표("글"·"블로그")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             KindChip(card.kind)
+            SourceTag(card.source)
             Spacer(Modifier.weight(1f))
             if (isNew) PenMemo("새로!", angle = 3f)
         }
         Text(card.summary, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         val meta = listOfNotNull(
-            dayLabel(card.recordedAt ?: card.createdAt).ifBlank { null }?.let { "$it 녹음" },
+            // 글 카드의 날짜는 녹음 날짜가 아니라 쓴 날이라(texts.md 2장) "녹음"을 붙이지 않아요(카드 자세히와 같음)
+            dayLabel(card.recordedAt ?: card.createdAt).ifBlank { null }?.let { if (card.source == CardSource.RECORDING) "$it 녹음" else it },
             card.place?.takeIf { it.isNotBlank() },
             if (swipeHint) "밀어서 넘기기 →" else null,
         ).joinToString(" · ")

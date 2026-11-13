@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.lolog.app.data.model.FriendRules
 import com.lolog.app.ui.theme.LologColors
 
 /*
@@ -24,6 +25,9 @@ import com.lolog.app.ui.theme.LologColors
 
 /** 내가 차단한 사람에게 친구 요청을 보냈을 때(USER_BLOCKED). 친구 추가와 방 멤버 시트가 같이 써요 */
 internal const val USER_BLOCKED_TEXT = "차단한 사람이에요. 설정의 \"차단한 사람\"에서 풀고 보내 주세요"
+
+/** 나나 상대의 친구가 이미 100명일 때(FRIEND_LIMIT). 친구 추가와 받은 요청 수락이 같이 써요 */
+internal val FRIEND_LIMIT_TEXT = "친구는 ${FriendRules.FRIEND_MAX}명까지예요"
 
 /** 친구 동그라미 그림 */
 @Composable

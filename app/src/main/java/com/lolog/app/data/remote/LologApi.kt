@@ -73,6 +73,16 @@ interface MainApi {
     @GET("api/videos")
     suspend fun videos(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): VideoPageDto
     @GET("api/videos/{id}") suspend fun video(@Path("id") id: Long): VideoDto
+
+    // 글로 카드 만들기 (texts.md 6장)
+    @POST("api/texts") suspend fun createText(@Body body: TextCreateDto): TextAcceptedDto
+    @GET("api/texts/{id}") suspend fun text(@Path("id") id: Long): TextDto
+    @POST("api/blogs/check") suspend fun checkBlog(@Body body: BlogCheckRequestDto): BlogCheckDto
+    @POST("api/blogs") suspend fun addBlog(@Body body: BlogCreateDto): BlogDto
+    @GET("api/blogs") suspend fun blogs(): BlogListDto
+    @PATCH("api/blogs/{id}") suspend fun updateBlog(@Path("id") id: Long, @Body body: BlogUpdateDto): BlogDto
+    @DELETE("api/blogs/{id}") suspend fun deleteBlog(@Path("id") id: Long)
+    @GET("api/blogs/{id}/posts") suspend fun blogPosts(@Path("id") id: Long, @Query("cursor") cursor: String?): BlogPostPageDto
     @DELETE("api/videos/{id}") suspend fun deleteVideo(@Path("id") id: Long)
     @GET("api/comics")
     suspend fun comics(@Query("cursor") cursor: String?, @Query("size") size: Int, @Query("sort") sort: String? = null): ComicPageDto

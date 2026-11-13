@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lolog.app.data.model.CardKind
+import com.lolog.app.data.model.CardSource
 import com.lolog.app.data.model.ComicStage
 import com.lolog.app.ui.theme.LologColors
 import com.lolog.app.ui.theme.LologShape
@@ -182,6 +183,25 @@ fun KindChip(kind: CardKind, modifier: Modifier = Modifier, height: Dp = 22.dp, 
             fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = kind.text(),
         )
     }
+}
+
+/** 글 카드 꼬리표 색(글로 만들기 시안 1·5·9번). 녹음 카드는 꼬리표가 없어요 */
+private val WrittenTagBg = Color(0xFFE8ECFB)
+private val BlogTagBg = Color(0xFFE3F5EF)
+private val BlogTagText = Color(0xFF1F8A6B)
+
+/** 카드 출처 꼬리표: 직접 쓴 글 "글"(연한 파랑 · Pen), 블로그 글 "블로그"(연한 초록). 녹음이면 아무것도 안 그려요 */
+@Composable
+fun SourceTag(source: CardSource, modifier: Modifier = Modifier, height: Dp = 22.dp) {
+    val (label, bg, fg) = when (source) {
+        CardSource.RECORDING -> return
+        CardSource.WRITTEN -> Triple("글", WrittenTagBg, LologColors.Pen)
+        CardSource.BLOG -> Triple("블로그", BlogTagBg, BlogTagText)
+    }
+    Box(
+        modifier.clip(LologShape.pill).background(bg).height(height).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg) }
 }
 
 /** 보관함 필터 칩 */

@@ -64,6 +64,13 @@ object ErrorCodes {
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
     // 관리자 (LOLog-docs spec/admin.md 7장)
     const val FORBIDDEN = "FORBIDDEN" // 403 관리자가 아닌데 관리자 주소를 부름
+    // 글로 카드 만들기 (LOLog-docs PR #62 texts.md 6장)
+    const val TEXT_TOO_LONG = "TEXT_TOO_LONG"   // 400 직접 쓴 글 본문이 길이 상한(임시 2,000자)을 넘음
+    const val INVALID_BLOG = "INVALID_BLOG"     // 400 블로그 주소로 RSS를 찾지 못함, 내부 주소
+    const val TEXT_NOT_FOUND = "TEXT_NOT_FOUND" // 404 없는 글, 내 글이 아님(카드를 지우면 글도 지워져요)
+    const val BLOG_NOT_FOUND = "BLOG_NOT_FOUND" // 404 없는 블로그, 내 블로그가 아님
+    const val BLOG_EXISTS = "BLOG_EXISTS"       // 409 같은 RSS 주소를 이미 연결함
+    const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -85,10 +92,14 @@ const val PASSWORD_MIN = 8
 const val PASSWORD_MAX = 64
 const val PASSWORD_MAX_BYTES = 72
 fun isValidPassword(pw: String): Boolean =
-    pw.length in PASSWORD_MIN..PASSWORD_MAX &&
-        pw.toByteArray(Charsets.UTF_8).size <= PASSWORD_MAX_BYTES &&
-        pw.any { it in 'a'..'z' || it in 'A'..'Z' } && // isLetter()는 한글도 문자로 쳐서 영문만 봐요
-        pw.any { it in '0'..'9' }
+    pw.length in PASSWORD_MIN..PASSWORD_MAX && passwordFitsBytes(pw) && passwordHasLetterAndDigit(pw)
+
+/** 영문(a~z, A~Z)과 숫자(0~9)를 모두 넣었는지. isLetter()·isDigit()는 한글·다른 나라 숫자도 쳐서 쓰지 않아요. 화면 규칙 줄도 이 값으로 그려요 */
+fun passwordHasLetterAndDigit(pw: String): Boolean =
+    pw.any { it in 'a'..'z' || it in 'A'..'Z' } && pw.any { it in '0'..'9' }
+
+/** UTF-8로 72바이트 이하인지. 한글은 한 글자가 3바이트라 64자 안이어도 넘을 수 있어요 */
+fun passwordFitsBytes(pw: String): Boolean = pw.toByteArray(Charsets.UTF_8).size <= PASSWORD_MAX_BYTES
 
 /** 소셜 로그인은 구글·네이버만(LOLog-docs #35). 카카오는 이메일 동의항목에 비즈 앱 심사가 필요해 뺐어요 */
 enum class SocialProvider(val label: String) { GOOGLE("Google"), NAVER("네이버") }
@@ -215,6 +226,10 @@ data class CardSummary(
     val lineCount: Int? = null,
     /** 들을 수 있는 음성이 있으면 목록에 작은 표시(replay.md 2장) */
     val hasAudio: Boolean = false,
+    /** 카드 출처(texts.md 6장). 서버가 아직 안 채우면 녹음 */
+    val source: CardSource = CardSource.RECORDING,
+    /** 글 카드(WRITTEN·BLOG)만 있어요 */
+    val textId: Long? = null,
 )
 
 /** 카드 구간 음성의 상태(replay.md 1장) */
@@ -258,11 +273,20 @@ data class CardDetail(
     val audio: CardAudio = CardAudio(),
     /** 이 카드로 만든 쇼츠(최근 것이 앞). 지운 쇼츠는 없어요 */
     val videos: List<VideoRef> = emptyList(),
+    /** 카드 출처(texts.md 6장). 서버가 아직 안 채우면 녹음 */
+    val source: CardSource = CardSource.RECORDING,
+    /** 글 카드(WRITTEN·BLOG)만 있어요. 원문 보기는 GET /api/texts/{textId} */
+    val textId: Long? = null,
+    /** 블로그 글이 길어 앞부분으로 만들었으면 true(texts.md 2장, 초안) */
+    val truncated: Boolean = false,
+    /** 서버가 센 쇼츠 남은 횟수(0~2, 지운 쇼츠도 셈. 정함 11-13). 없으면 아래 videoRemaining이 계산 */
+    val serverVideoRemaining: Int? = null,
 ) {
     /**
-     * 쇼츠를 더 만들 수 있는 횟수(앱 계산). 서버는 지운 쇼츠도 세지만 앱은 모르니, 넘치면 서버의 409 VIDEO_LIMIT로 알려요
+     * 쇼츠를 더 만들 수 있는 횟수. 서버 값(videoRemaining, 지운 쇼츠도 셈)을 쓰고, 예전 서버처럼 없으면 앱이 videos[]로 세요
      */
-    val videoRemaining: Int get() = (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
+    val videoRemaining: Int get() = serverVideoRemaining
+        ?: (VIDEO_LIMIT_PER_CARD - videos.count { it.status != VideoStatus.FAILED }).coerceAtLeast(0)
 
     /** 그 카드로 만드는 중인 쇼츠가 있음(409 VIDEO_IN_PROGRESS) */
     val videoInProgress: Boolean get() = videos.any { it.status.inProgress }
@@ -308,6 +332,79 @@ data class CardEdit(
         get() = speakers == null && lines == null && place == null && characters == null &&
             newSpeakers == null && removeSpeakers == null
 }
+
+// ── 글로 카드 만들기 (LOLog-docs PR #62 spec/texts.md, LOLog-api PR #73·#74) ──
+
+/** 카드 출처(texts.md 6장 source): 녹음 · 직접 쓴 글 · 블로그 글 */
+enum class CardSource { RECORDING, WRITTEN, BLOG }
+
+/**
+ * 직접 쓴 글 본문 길이 상한(texts.md 2장, 임시 정함 11-12). 숫자는 AI 담당이 정하고, 그 전까지 서버도 2,000자로 막아요.
+ * 서버는 글자(코드포인트) 수로 세서 앱도 [textLength]로 세요
+ */
+const val TEXT_BODY_MAX = 2000
+
+/** 블로그 카테고리 이름 1~30자(texts.md 4장) */
+const val BLOG_CATEGORY_MAX = 30
+
+/** 서버와 같게 글자(코드포인트) 수로 세요. 이모지 하나도 1자예요 */
+fun textLength(s: String): Int = s.codePointCount(0, s.length)
+
+/** POST /api/texts 보내는 것. place·situation은 선택이라 비면 null */
+data class TextInput(val title: String, val body: String, val place: String?, val situation: String?)
+
+/** 글 → 카드 상태(texts.md 2장 "상태 보기") */
+enum class TextStatus { QUEUED, DONE, FAILED }
+
+/**
+ * GET /api/texts/{id}. 블로그 글이면 body 대신 link·blogTitle(카드가 생기면 서버가 본문을 지워요).
+ * blogTitle은 가져올 때 복사한 블로그 이름이라 연결을 끊어도 남아요. cardId는 DONE일 때만 있어요
+ */
+data class TextDetail(
+    val textId: Long,
+    val source: CardSource,
+    val status: TextStatus,
+    val cardId: Long?,
+    val title: String,
+    val body: String?,
+    val place: String?,
+    val situation: String?,
+    val link: String?,
+    val truncated: Boolean,
+    val createdAt: String,
+    val blogTitle: String? = null,
+)
+
+/** POST /api/blogs/check: 링크로 찾은 RSS 주소와 피드에 나온 카테고리(저장 안 함) */
+data class BlogCheck(val feedUrl: String, val categories: List<String>)
+
+/** 연결한 블로그(texts.md 6장 블로그 응답). title은 RSS의 블로그 이름. categories가 비면 전부 가져와요 */
+data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>)
+
+/** 화면의 플랫폼 표시(N·T 동그라미)용. 서버는 플랫폼을 저장·응답하지 않아서(texts.md 4장) 앱이 주소로 정해요 */
+enum class BlogPlatform { NAVER, TISTORY, OTHER }
+
+fun blogPlatform(url: String): BlogPlatform {
+    val host = url.trim().lowercase().substringAfter("://").substringBefore('/').substringBefore('?')
+    return when {
+        host == "naver.com" || host.endsWith(".naver.com") -> BlogPlatform.NAVER
+        host.endsWith(".tistory.com") -> BlogPlatform.TISTORY
+        else -> BlogPlatform.OTHER
+    }
+}
+
+/** GET /api/blogs/{id}/posts 한 줄. 글마다 바로 카드로 만들어져요 */
+data class BlogPost(
+    val title: String,
+    val link: String,
+    val category: String?,
+    val publishedAt: String?,
+    val cardId: Long?,
+    /** 카드를 지운 글은 cardId·status가 둘 다 null이에요. 화면은 "카드 지움"(texts.md 2장) */
+    val status: TextStatus?,
+)
+
+data class BlogPostPage(val posts: List<BlogPost>, val nextCursor: String?)
 
 // ── 만화 ──────────────────────────────────────────────
 
@@ -446,6 +543,8 @@ enum class PushType {
 data class PushPayload(
     val type: PushType,
     val recordingId: Long? = null,
+    /** CARDS_CREATED(직접 쓴 글): recordingId 대신 글 ID가 와요(texts.md 6장 푸시). 블로그 글은 푸시가 없어요 */
+    val textId: Long? = null,
     /** CARDS_CREATED: 새로 생긴 카드 수 */
     val cardCount: Int? = null,
     /** 명세에 없음(제안): 새 카드 번호들. 오면 1개일 때 그 카드로 바로 가요 */

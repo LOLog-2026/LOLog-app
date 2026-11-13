@@ -149,8 +149,8 @@ data class CardSummaryDto(
     val kind: String? = null,
     val summary: String = "",
     val recordedAt: String? = null,
-    val startMs: Long = 0,
-    val endMs: Long = 0,
+    val startMs: Long? = null, // 글 카드는 null(texts.md 6장)
+    val endMs: Long? = null,
     val comicCount: Int = 0, // 실패한 것 빼고, 만드는 중 포함
     val createdAt: String = "",
     // 목록에 "장소 · 대사 N개"를 보여 줘요. lineCount는 명세상 필수지만 서버가 빼도 화면이 깨지지 않게 null을 받아요
@@ -158,6 +158,10 @@ data class CardSummaryDto(
     val lineCount: Int? = null,
     /** 들을 수 있는 카드 구간 음성이 있으면 true(audio.status가 READY). 서버가 안 보내면 false(replay.md 4장) */
     val hasAudio: Boolean = false,
+    /** RECORDING · WRITTEN · BLOG(texts.md 6장). 없으면 녹음 */
+    val source: String? = null,
+    /** 글 카드만 있어요 */
+    val textId: Long? = null,
 )
 
 @Serializable
@@ -172,8 +176,8 @@ data class CardDetailDto(
     val summary: String = "",
     val place: String? = null,
     val recordedAt: String? = null,
-    val startMs: Long = 0,
-    val endMs: Long = 0,
+    val startMs: Long? = null, // 글 카드는 null(texts.md 6장)
+    val endMs: Long? = null,
     val speakers: List<SpeakerDto> = emptyList(),
     val lines: List<LineDto> = emptyList(),
     val comics: List<ComicRefDto> = emptyList(), // 최신순
@@ -181,6 +185,10 @@ data class CardDetailDto(
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
     val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
     val videos: List<VideoRefDto> = emptyList(), // 이 카드로 만든 쇼츠(video.md 2장), 최근 것이 앞
+    val videoRemaining: Int? = null, // 쇼츠를 더 만들 수 있는 횟수(0~2). 지운 쇼츠도 셈. 없으면 앱이 videos에서 계산
+    val source: String? = null, // RECORDING · WRITTEN · BLOG(texts.md 6장). 없으면 녹음
+    val textId: Long? = null, // 글 카드만 있어요. 원문은 GET /api/texts/{textId}
+    val truncated: Boolean = false, // 블로그 글이 길어 앞부분으로 만들었음
 )
 
 /** CardAudio — CardDetail.audio. url·durationMs는 READY일 때만 와요 */
@@ -417,3 +425,64 @@ data class NoticeDto(
     val createdAt: String = "",
     val updatedAt: String = "",
 )
+
+// ── 글로 카드 만들기 (LOLog-docs PR #62 texts.md 6장) ──
+
+/** POST /api/texts. place·situation은 비면 null */
+@Serializable
+data class TextCreateDto(val title: String, val body: String, val place: String? = null, val situation: String? = null)
+
+/** 202 { textId, status } */
+@Serializable
+data class TextAcceptedDto(val textId: Long, val status: String? = null)
+
+/** GET /api/texts/{id}. 블로그 글이면 body 대신 link·blogTitle */
+@Serializable
+data class TextDto(
+    val textId: Long,
+    val source: String? = null,
+    val status: String? = null,
+    val cardId: Long? = null,
+    val title: String = "",
+    val body: String? = null,
+    val place: String? = null,
+    val situation: String? = null,
+    val link: String? = null,
+    val blogTitle: String? = null,
+    val truncated: Boolean = false,
+    val createdAt: String = "",
+)
+
+@Serializable
+data class BlogCheckRequestDto(val url: String)
+
+/** POST /api/blogs/check → { feedUrl, categories[] } */
+@Serializable
+data class BlogCheckDto(val feedUrl: String = "", val categories: List<String> = emptyList())
+
+@Serializable
+data class BlogCreateDto(val url: String, val categories: List<String>)
+
+@Serializable
+data class BlogUpdateDto(val categories: List<String>)
+
+/** 블로그 응답 { id, siteUrl, title, categories } */
+@Serializable
+data class BlogDto(val id: Long, val siteUrl: String = "", val title: String? = null, val categories: List<String> = emptyList())
+
+@Serializable
+data class BlogListDto(val blogs: List<BlogDto> = emptyList())
+
+/** 가져온 글 한 줄. 카드를 지운 글은 cardId·status가 null */
+@Serializable
+data class BlogPostDto(
+    val title: String = "",
+    val link: String = "",
+    val category: String? = null,
+    val publishedAt: String? = null,
+    val cardId: Long? = null,
+    val status: String? = null,
+)
+
+@Serializable
+data class BlogPostPageDto(val posts: List<BlogPostDto> = emptyList(), val nextCursor: String? = null)

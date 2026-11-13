@@ -149,6 +149,18 @@ class AdminScreensTest {
     }
 
     @Test
+    fun `내가 관리자에서 빠졌으면 서버 message와 상관없이 관리자만 할 수 있다고 알린다`() = test {
+        var admin = true
+        val vm = AdminUsersViewModel(MockAdmin(isAdmin = { admin }, netMs = 0, clock = { now }))
+        vm.setSort(AdminUserSort.OLDEST); advanceUntilIdle()
+        vm.open(vm.state.value.users.first { it.userId == 2L })
+        vm.askSuspend(); vm.setReason("시험")
+        admin = false // 목록을 받은 뒤 관리자에서 빠짐 → 403 FORBIDDEN
+        vm.suspendUser { now }; advanceUntilIdle()
+        assertEquals("관리자만 할 수 있어요", vm.state.value.snackbar)
+    }
+
+    @Test
     fun `탈퇴시키면 목록에서 빠지고 보낸 의견은 탈퇴한 사용자로 남는다`() = test {
         val repo = mock()
         val vm = AdminUsersViewModel(repo)

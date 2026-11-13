@@ -83,7 +83,7 @@ class BadgesTest {
 
     @Test
     fun `마지막 로그인 방법·막힌 계정은 안내 문구가 있다`() {
-        assertEquals("로그인할 방법이 이것 하나라 끊을 수 없어요", errorText(LologException(ErrorCodes.LAST_LOGIN_METHOD)))
+        assertEquals("다른 로그인 방법을 먼저 연결해 주세요", errorText(LologException(ErrorCodes.LAST_LOGIN_METHOD)))
         assertEquals("이 계정으로는 가입하거나 연결할 수 없어요", errorText(LologException(ErrorCodes.ACCOUNT_BANNED)))
     }
 }

@@ -52,8 +52,9 @@ class InboxTextsTest {
         // 명세의 초대 푸시에는 닉네임이 없어요
         assertEquals("\"주말 카레팟\" 방에 초대받았어요", noti("ROOM_INVITE", "roomName" to "주말 카레팟").line().title)
 
-        val comment = noti("ROOM_COMMENT", "roomId" to "1", "postId" to "3", "nickname" to "서연", "roomName" to "과팀플")
-        assertEquals(InboxLine("서연님이 내 만화에 댓글을 달았어요", "과팀플"), comment.line())
+        // 서버는 roomName을 안 보내요(PushService.roomComment). 둘째 줄이 비지 않아요
+        val comment = noti("ROOM_COMMENT", "roomId" to "1", "postId" to "3", "nickname" to "서연")
+        assertEquals(InboxLine("서연님이 내 만화에 댓글을 달았어요", "방에서 확인해 보세요"), comment.line())
         assertEquals(RoomTarget.Chat(1), comment.roomTarget())
 
         val gone = noti("ROOM_DISBANDED", "roomName" to "고3 동창")
