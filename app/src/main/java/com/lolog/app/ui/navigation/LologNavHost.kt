@@ -24,6 +24,7 @@ import com.lolog.app.AppContainer
 import com.lolog.app.data.model.InboxItem
 import com.lolog.app.data.model.PushPayload
 import com.lolog.app.data.model.FriendRequestDirection
+import com.lolog.app.ui.components.LIBRARY_NAME
 import com.lolog.app.ui.components.LologDialog
 import com.lolog.app.ui.components.OfflineBar
 import com.lolog.app.ui.components.rememberIsOnline
@@ -166,19 +167,19 @@ object Routes {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-// 아래 탭 4개: 쇼츠 · 홈 · 친구 · 설정. 에피소드는 홈 "에피소드" 숫자 칸으로 들어가요
+// 아래 탭 5개: 에피소드 · 컨텐츠 · 홈 · 친구 · 설정(홈이 가운데). 홈 "에피소드" 숫자 칸으로도 에피소드에 가요
 private val tabs = listOf(
-    Tab(Routes.COMICS, "쇼츠", Icons.Outlined.SmartDisplay),
+    Tab(Routes.LIBRARY, LIBRARY_NAME, Icons.Outlined.Style),
+    Tab(Routes.COMICS, "컨텐츠", Icons.Outlined.GridView),
     Tab(Routes.HOME, "홈", Icons.Outlined.Home),
     Tab(Routes.FRIENDS, "친구", Icons.Outlined.People),
     Tab(Routes.SETTINGS, "설정", Icons.Outlined.Settings),
 )
 
-/** 에피소드 화면은 아래 탭에 없지만 탭을 보여 주고 홈이 켜진 것으로 그려요 */
-private val tabBarRoutes = tabs.map { it.route } + Routes.LIBRARY
+private val tabBarRoutes = tabs.map { it.route }
 
-/** 아래 탭에서 켜 보일 탭. 에피소드 화면이면 홈 */
-internal fun selectedTab(current: String?): String? = if (current == Routes.LIBRARY) Routes.HOME else current
+/** 아래 탭에서 켜 보일 탭 */
+internal fun selectedTab(current: String?): String? = current
 
 /** 탭 사이 이동: 스택을 쌓지 않고 상태를 남겨 둬요 */
 fun NavHostController.goTab(route: String) {
@@ -685,8 +686,9 @@ private fun BottomTabs(current: String?, receivedCount: Int, badges: Badges, onT
                 onClick = { onTab(tab.route) },
                 icon = {
                     val count = if (tab.route == Routes.FRIENDS) receivedCount else 0
-                    // 숫자가 없으면 새 소식 점(쇼츠: 만화·쇼츠, 친구: 캐릭터·방). 새 카드 점은 홈 "에피소드" 칸에
+                    // 숫자가 없으면 새 소식 점(에피소드: 새 카드, 컨텐츠: 만화·쇼츠, 친구: 캐릭터·방). 홈 "에피소드" 칸에도 새 카드 점이 있어요
                     val dot = when (tab.route) {
+                        Routes.LIBRARY -> badges.cards
                         Routes.COMICS -> badges.comics
                         Routes.FRIENDS -> badges.friendsTab
                         else -> false
