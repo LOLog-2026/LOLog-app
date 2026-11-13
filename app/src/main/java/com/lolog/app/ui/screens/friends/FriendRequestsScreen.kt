@@ -77,7 +77,12 @@ class FriendRequestsViewModel(private val repo: LologRepository) : ViewModel() {
     }
 
     private fun failed(id: Long, e: Throwable) = _state.update {
-        val msg = if ((e as? LologException)?.code == ErrorCodes.PROFILE_REQUIRED) "닉네임을 먼저 정해 주세요" else errorText(e)
+        val msg = when ((e as? LologException)?.code) {
+            ErrorCodes.PROFILE_REQUIRED -> "닉네임을 먼저 정해 주세요"
+            // 친구 추가 화면과 같은 문구(나나 상대가 이미 100명)
+            ErrorCodes.FRIEND_LIMIT -> FRIEND_LIMIT_TEXT
+            else -> errorText(e)
+        }
         // 이미 없어진 요청이면 목록에서도 빼요
         if ((e as? LologException)?.code == ErrorCodes.FRIEND_REQUEST_NOT_FOUND) {
             it.copy(received = it.received.filterNot { r -> r.id == id }, sent = it.sent.filterNot { r -> r.id == id }, busy = it.busy - id, snackbar = msg)

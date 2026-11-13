@@ -176,6 +176,8 @@ fun FriendsScreen(
     var query by remember { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<Friend?>(null) }
     var confirm by remember { mutableStateOf<Pair<Friend, Boolean>?>(null) } // (친구, 차단이면 true)
+    // 친구 끊기 창의 "차단도 할까요?" 체크(friends.md 1장 6번·차단). 창을 열 때마다 꺼진 채로 시작해요
+    var alsoBlock by remember(confirm) { mutableStateOf(false) }
     var highlight by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
@@ -355,15 +357,20 @@ fun FriendsScreen(
     }
 
     // 탭 화면 바탕의 기본 글자색이 회색이라 확인 창 제목은 Ink로
-    confirm?.let { (f, block) -> CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
+    confirm?.let { (f, blockOnly) -> CompositionLocalProvider(LocalContentColor provides LologColors.Ink) {
+        val block = blockOnly || alsoBlock
         LologDialog(
-            title = if (block) "${f.nickname}님을 차단할까요?" else "${f.nickname}님과 친구를 끊을까요?",
+            title = if (blockOnly) "${f.nickname}님을 차단할까요?" else "${f.nickname}님과 친구를 끊을까요?",
             body = if (block) {
                 "친구에서 빠지고, ${f.nickname}님은 내 코드로 요청을 보낼 수 없어요. 차단한 건 ${f.nickname}님에게 알리지 않아요."
             } else {
                 "서로의 친구 목록에서 빠져요. 나중에 다시 친구 요청을 보낼 수 있어요."
             },
-            confirmText = if (block) "차단하기" else "친구 끊기",
+            confirmText = when {
+                blockOnly -> "차단하기"
+                alsoBlock -> "끊고 차단하기"
+                else -> "친구 끊기"
+            },
             danger = true,
             loading = state.busy || blockState.busy,
             onConfirm = {
@@ -376,6 +383,23 @@ fun FriendsScreen(
                 }
             },
             onDismiss = { if (!state.busy && !blockState.busy) confirm = null },
+            content = if (blockOnly) null else {
+                {
+                    // 끊을 때 "차단도 할까요?"를 물어요. 고르면 POST /api/blocks 한 번으로 끊기와 차단이 같이 돼요(friends.md 차단)
+                    Row(
+                        Modifier.fillMaxWidth().clip(LologShape.sm)
+                            .clickable(enabled = !state.busy && !blockState.busy) { alsoBlock = !alsoBlock },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = alsoBlock, onCheckedChange = { alsoBlock = it },
+                            enabled = !state.busy && !blockState.busy,
+                            colors = CheckboxDefaults.colors(checkedColor = LologColors.Accent, uncheckedColor = LologColors.Line, checkmarkColor = LologColors.Paper),
+                        )
+                        Text("차단도 할까요?", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+                    }
+                }
+            },
         )
     } }
 

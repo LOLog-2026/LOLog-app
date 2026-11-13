@@ -18,14 +18,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.PASSWORD_MAX
-import com.lolog.app.data.model.PASSWORD_MIN
 import com.lolog.app.data.model.isValidPassword
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.screens.start.LabeledField
-import com.lolog.app.ui.screens.start.RuleLine
+import com.lolog.app.ui.screens.start.PasswordRuleLines
 import com.lolog.app.ui.theme.LologColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,10 +92,8 @@ fun PasswordChangeScreen(onBack: () -> Unit, onDone: (message: String) -> Unit) 
     LaunchedEffect(state.currentWrong) { if (state.currentWrong) current = "" }
 
     // 규칙과 버튼 조건은 가입 화면과 같아요
-    val lengthOk = password.length in PASSWORD_MIN..PASSWORD_MAX
-    val mixOk = password.any { it.isLetter() } && password.any { it.isDigit() }
     val confirmOk = confirm.isNotEmpty() && confirm == password
-    val allOk = current.isNotEmpty() && lengthOk && mixOk && confirmOk
+    val allOk = current.isNotEmpty() && isValidPassword(password) && confirmOk
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -120,8 +117,7 @@ fun PasswordChangeScreen(onBack: () -> Unit, onDone: (message: String) -> Unit) 
                     error = state.passwordError, enabled = !state.loading,
                     counter = if (password.isNotEmpty()) "${password.length} / $PASSWORD_MAX" else null,
                 )
-                RuleLine(if (password.isEmpty() || lengthOk) "8자 이상" else "8자 이상 (지금 ${password.length}자)", lengthOk, password.isNotEmpty())
-                RuleLine("영문과 숫자 모두 포함", mixOk, password.isNotEmpty())
+                PasswordRuleLines(password)
                 Spacer(Modifier.height(2.dp))
                 LabeledField(
                     "새 비밀번호 확인", confirm, { confirm = it.take(PASSWORD_MAX) },
