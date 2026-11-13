@@ -66,6 +66,23 @@ class VideoTest {
     }
 
     @Test
+    fun 서버가_videoRemaining을_주면_지운_쇼츠도_센_그_값을_쓴다() {
+        // 실패 1 + 완성 1이 보이지만, 지운 쇼츠 1개까지 세면 남은 횟수는 0
+        val card = LologJson.decodeFromString(
+            CardDetailDto.serializer(),
+            """{"id":1,"kind":"웃김","summary":"s","createdAt":"c","videoRemaining":0,
+               "videos":[{"id":9,"status":"DONE"},{"id":8,"status":"FAILED"}]}""",
+        ).toModel()
+        assertEquals(0, card.videoRemaining)
+        // 예전 서버처럼 없으면 앱이 센다
+        val old = LologJson.decodeFromString(
+            CardDetailDto.serializer(),
+            """{"id":1,"kind":"웃김","summary":"s","createdAt":"c","videos":[{"id":9,"status":"DONE"}]}""",
+        ).toModel()
+        assertEquals(1, old.videoRemaining)
+    }
+
+    @Test
     fun 카드는_대기_목소리_때만_잠기고_그림_단계는_안_잠긴다() {
         assertTrue(card(VideoStatus.QUEUED).videoLocked)
         assertTrue(card(VideoStatus.VOICE).videoLocked)

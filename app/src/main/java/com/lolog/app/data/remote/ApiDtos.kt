@@ -185,6 +185,7 @@ data class CardDetailDto(
     val comicRemaining: Int? = null, // 이 카드로 더 만들 수 있는 횟수(0~3). 명세상 필수, 없으면 앱이 comics에서 실패를 빼고 계산
     val audio: CardAudioDto? = null, // 카드 구간 음성(replay.md 4장). 명세상 필수, 없으면 NONE으로 봐요
     val videos: List<VideoRefDto> = emptyList(), // 이 카드로 만든 쇼츠(video.md 2장), 최근 것이 앞
+    val videoRemaining: Int? = null, // 쇼츠를 더 만들 수 있는 횟수(0~2). 지운 쇼츠도 셈. 없으면 앱이 videos에서 계산
     val source: String? = null, // RECORDING · WRITTEN · BLOG(texts.md 6장). 없으면 녹음
     val textId: Long? = null, // 글 카드만 있어요. 원문은 GET /api/texts/{textId}
     val truncated: Boolean = false, // 블로그 글이 길어 앞부분으로 만들었음
