@@ -274,7 +274,7 @@ fun BlogTab(vm: TextBlogViewModel, onCard: (Long) -> Unit, modifier: Modifier = 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("가져온 글", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
                         Spacer(Modifier.weight(1f))
-                        Text("새 글은 저절로 카드가 돼요", fontSize = 11.sp, color = LologColors.Muted)
+                        Text("새 글은 저절로 에피소드가 돼요", fontSize = 11.sp, color = LologColors.Muted)
                     }
                     Spacer(Modifier.height(6.dp))
                     when {
@@ -341,7 +341,7 @@ fun BlogTab(vm: TextBlogViewModel, onCard: (Long) -> Unit, modifier: Modifier = 
     askDelete?.let { blog ->
         LologDialog(
             title = "블로그 연결을 끊을까요?",
-            body = "이미 만든 카드는 남아요",
+            body = "이미 만든 에피소드는 남아요",
             confirmText = "연결 끊기",
             danger = true,
             loading = state.busy,
@@ -394,7 +394,7 @@ private fun ConnectForm(form: BlogForm, vm: TextBlogViewModel, showEmpty: Boolea
                 Text("연결한 블로그가 없어요", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "블로그를 연결하면, 고른 카테고리의 새 글이 저절로 이야기 카드가 돼요.",
+                    "블로그를 연결하면, 고른 카테고리의 새 글이 저절로 에피소드가 돼요.",
                     fontSize = 12.5.sp, lineHeight = 19.sp, color = LologColors.Muted, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 24.dp),
                 )
@@ -523,10 +523,10 @@ private fun PostRow(post: BlogPost, onClick: (() -> Unit)?) {
 @Composable
 private fun PostStatus(status: TextStatus?) {
     val (label, bg, fg) = when (status) {
-        TextStatus.DONE -> Triple("카드 만듦", LologColors.MemorySoft, LologColors.MemoryText)
+        TextStatus.DONE -> Triple("에피소드 만듦", LologColors.MemorySoft, LologColors.MemoryText)
         TextStatus.QUEUED -> Triple("만드는 중", LologColors.AccentSoft, LologColors.Accent)
         TextStatus.FAILED -> Triple("실패", LologColors.RecSoft, LologColors.Rec)
-        null -> Triple("카드 지움", LologColors.Canvas, LologColors.Muted)
+        null -> Triple("에피소드 지움", LologColors.Canvas, LologColors.Muted)
     }
     Text(
         label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg,

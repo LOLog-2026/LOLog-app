@@ -118,7 +118,7 @@ internal fun textErrorText(e: Throwable): String {
     ErrorCodes.INVALID_BLOG -> "블로그를 찾지 못했어요. 주소를 확인해 주세요"
     ErrorCodes.BLOG_EXISTS -> "이미 연결한 블로그예요"
     ErrorCodes.BLOG_NOT_FOUND -> "블로그를 찾지 못했어요. 이미 연결을 끊었을 수 있어요"
-    ErrorCodes.TEXT_NOT_FOUND -> "글을 찾지 못했어요. 카드를 지웠을 수 있어요"
+    ErrorCodes.TEXT_NOT_FOUND -> "글을 찾지 못했어요. 에피소드를 지웠을 수 있어요"
     ErrorCodes.INVALID_REQUEST -> when (ex.field) {
         "title" -> "제목을 써 주세요"
         "body" -> "본문을 써 주세요"
@@ -200,14 +200,14 @@ private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, mo
             if (state.placeTooLong) FieldError("장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요")
             Spacer(Modifier.height(12.dp))
             // 상황은 AI에 배경으로만 넘기고 카드에는 저장하지 않아요(texts.md 3장)
-            FieldLabel("상황", note = "선택 · 카드엔 안 남아요")
+            FieldLabel("상황", note = "선택 · 에피소드엔 안 남아요")
             InputBox(state.situation, vm::setSituation, "언제 · 누구와 · 왜", enabled = !state.sending)
         }
         Column(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            PrimaryButton("카드 만들기", vm::send, enabled = state.canSend, loading = state.sending)
+            PrimaryButton("에피소드 만들기", vm::send, enabled = state.canSend, loading = state.sending)
             if (!state.canSend && !state.sending) {
                 val hint = when {
                     state.tooLong -> "본문을 ${"%,d".format(TEXT_BODY_MAX)}자 안으로 줄이면 만들 수 있어요"

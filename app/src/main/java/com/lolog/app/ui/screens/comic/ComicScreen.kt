@@ -443,7 +443,7 @@ private fun Viewer(
                 ) {
                     Icon(Icons.Outlined.Info, null, tint = LologColors.Muted, modifier = Modifier.size(16.dp).padding(top = 2.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("원래 카드는 지워졌어요. 다시 그리기와 원본 카드 보기는 할 수 없어요.", fontSize = 13.sp, color = LologColors.Muted, lineHeight = 19.sp)
+                    Text("원래 에피소드는 지워졌어요. 다시 그리기와 원본 에피소드 보기는 할 수 없어요.", fontSize = 13.sp, color = LologColors.Muted, lineHeight = 19.sp)
                 }
             }
             PenMemo("만화를 누르면 크게 볼 수 있어요", angle = 0f)
@@ -475,7 +475,7 @@ private fun Viewer(
                     Modifier.clip(LologShape.pill).clickable { onCard(comic.cardId) }.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("원본 카드 보기", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Accent)
+                    Text("원본 에피소드 보기", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Accent)
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = LologColors.Accent)
                 }
             }
@@ -635,13 +635,13 @@ private fun Failed(comic: ComicDetail, left: Int?, busy: Boolean, onRetry: () ->
         Spacer(Modifier.weight(1f))
         PrimaryButton(
             when {
-                comic.cardDeleted -> "원래 카드가 지워져서 다시 그릴 수 없어요"
+                comic.cardDeleted -> "원래 에피소드가 지워져서 다시 그릴 수 없어요"
                 left == null -> "다시 시도"
                 left > 0 -> "다시 시도 · ${left}번 남음"
                 else -> "${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
             },
             onRetry, loading = busy, enabled = !comic.cardDeleted && (left == null || left > 0),
         )
-        if (!comic.cardDeleted) GhostButton("카드 고치기", onEdit)
+        if (!comic.cardDeleted) GhostButton("에피소드 고치기", onEdit)
     }
 }

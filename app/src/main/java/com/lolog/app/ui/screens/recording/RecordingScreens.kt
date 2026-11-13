@@ -72,7 +72,7 @@ internal object RecordingConsent {
 
     /** "음성도 저장"을 켰는지에 따라 본문이 달라요 */
     fun body(saveAudio: Boolean): String =
-        if (saveAudio) "$ASK 대화는 폰 안에서 글자로 바뀌어 서버에 올라가요. 음성도 저장해서 카드에 담긴 부분만 남기고 나머지는 7일 뒤에 지워요."
+        if (saveAudio) "$ASK 대화는 폰 안에서 글자로 바뀌어 서버에 올라가요. 음성도 저장해서 에피소드에 담긴 부분만 남기고 나머지는 7일 뒤에 지워요."
         else "$ASK 대화는 폰 안에서 글자로 바뀌어 서버에 올라가고, 음성은 폰 밖으로 나가지 않아요."
 }
 
@@ -218,7 +218,7 @@ fun RecordingScreen(
             Spacer(Modifier.width(4.dp))
             // 문구는 audio.md 1장 "안내 문구" 표 그대로
             Text(
-                if (audioSaved) "카드에 담긴 음성만 남고, 나머지는 7일 뒤에 지워져요" else "음성 파일은 올리지 않아요",
+                if (audioSaved) "에피소드에 담긴 음성만 남고, 나머지는 7일 뒤에 지워져요" else "음성 파일은 올리지 않아요",
                 fontSize = 11.sp, color = LologColors.Muted,
             )
         }
@@ -400,7 +400,7 @@ private fun Analyzing(status: RecordingProgress?, onLibrary: () -> Unit) {
     val done = s == RecordingStatus.DONE
     val detecting = s == RecordingStatus.DETECTING
     Column(Modifier.fillMaxSize().noteLines().navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        LologTopBar(if (done) "카드로 정리했어요" else "이야기 찾는 중")
+        LologTopBar(if (done) "에피소드로 정리했어요" else "이야기 찾는 중")
         Column(Modifier.fillMaxWidth().softCard().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("대화", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text("음성 파일은 올리지 않아요", fontSize = 12.sp, color = LologColors.Muted)
@@ -414,15 +414,15 @@ private fun Analyzing(status: RecordingProgress?, onLibrary: () -> Unit) {
                     when { done -> StepState.DONE; detecting -> StepState.NOW; else -> StepState.WAIT },
                 ),
                 StepItem(
-                    "카드로 정리 완료",
-                    if (done) "카드 ${status!!.cardCount}개를 ${LIBRARY_NAME}에 넣었어요" else "찾은 카드 수를 알려 드리고 ${LIBRARY_NAME}에 넣어요",
+                    "에피소드로 정리 완료",
+                    if (done) "에피소드 ${status!!.cardCount}개를 만들었어요" else "찾은 이야기는 ${LIBRARY_NAME}로 만들어 알려 드려요",
                     if (done) StepState.DONE else StepState.WAIT,
                 ),
             ),
         )
         Spacer(Modifier.weight(1f))
         if (done) PrimaryButton("${LIBRARY_NAME}에서 보기", onLibrary)
-        else PrivacyNote("앱을 닫아도 계속 진행돼요. 카드가 생기면 알림으로 알려 드려요.")
+        else PrivacyNote("앱을 닫아도 계속 진행돼요. 에피소드가 생기면 알림으로 알려 드려요.")
     }
 }
 
@@ -449,7 +449,7 @@ private fun NoStory(failed: Boolean, onHome: () -> Unit) {
             Text("여러 번 시도했지만 이번 녹음은 정리하지 못했어요.\n다음 녹음부터 다시 찾아볼게요.", fontSize = 14.sp, color = LologColors.Muted, textAlign = TextAlign.Center)
         } else {
             Text("이번 대화에서는", fontSize = 16.sp, color = LologColors.Muted)
-            Text("카드로 남길 이야기를 못 찾았어요", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("에피소드로 남길 이야기를 못 찾았어요", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             Text("웃긴 일이나 기억할 만한 순간이 생길 때 다시 녹음해 보세요.", fontSize = 14.sp, color = LologColors.Muted, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))

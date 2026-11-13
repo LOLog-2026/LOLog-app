@@ -280,7 +280,7 @@ fun ProfileCharacterScreen(
     if (askDelete) {
         LologDialog(
             title = "내 캐릭터를 지울까요?",
-            body = "내 카드와 친구들 카드의 화자에 붙어 있던 내 캐릭터도 빠져요. 이미 만든 만화는 그대로예요.",
+            body = "내 에피소드와 친구들 에피소드의 화자에 붙어 있던 내 캐릭터도 빠져요. 이미 만든 만화는 그대로예요.",
             confirmText = "지우기",
             danger = true,
             loading = state.busy,

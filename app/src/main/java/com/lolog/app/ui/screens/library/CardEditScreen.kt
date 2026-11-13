@@ -203,7 +203,7 @@ class CardEditViewModel(private val repo: LologRepository, private val id: Long)
     private fun saveErrorText(e: LologException, p: CardEdit): String = when {
         e.code == ErrorCodes.SPEAKER_LIMIT -> "화자는 ${SPEAKER_MAX}명까지예요"
         e.code == ErrorCodes.SPEAKER_HAS_LINES -> "대사가 남아 있는 화자는 뺄 수 없어요"
-        e.code == ErrorCodes.UNKNOWN_SPEAKER -> "화자 정보가 바뀌었어요. 카드를 다시 불러올게요"
+        e.code == ErrorCodes.UNKNOWN_SPEAKER -> "화자 정보가 바뀌었어요. 에피소드를 다시 불러올게요"
         e.code == ErrorCodes.INVALID_REQUEST && p.newSpeakers != null && e.field?.startsWith("speakers") != false ->
             "새 화자에게 대사를 하나 이상 넣어 주세요"
         else -> errorText(e)
@@ -247,7 +247,7 @@ fun CardEditScreen(
             Column(Modifier.background(LologColors.Paper).statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = leave) { Icon(Icons.Default.Close, "닫기") }
-                    Text("카드 고치기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("에피소드 고치기", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     SaveChip(enabled = vm.canSave, loading = state.saving, onClick = vm::save)
                 }
                 HorizontalDivider(thickness = 1.dp, color = LologColors.Line)
@@ -256,7 +256,7 @@ fun CardEditScreen(
     ) { pad ->
         val original = state.original
         if (original == null) {
-            if (state.loadError != null) ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
+            if (state.loadError != null) ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "에피소드를 불러오지 못했어요")
             else SkeletonList(Modifier.padding(pad), count = 3)
             return@Scaffold
         }
