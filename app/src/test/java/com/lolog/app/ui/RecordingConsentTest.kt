@@ -26,6 +26,6 @@ class RecordingConsentTest {
     @Test
     fun 제목과_버튼() {
         assertEquals("녹음하기 전에 알려 주세요", RecordingConsent.TITLE)
-        assertEquals("동의를 받았어요", RecordingConsent.CONFIRM)
+        assertEquals("동의받음", RecordingConsent.CONFIRM)
     }
 }
