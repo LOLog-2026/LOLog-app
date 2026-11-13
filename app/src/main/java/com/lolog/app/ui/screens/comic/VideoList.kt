@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -15,8 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +45,6 @@ import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.components.EmptyState
 import com.lolog.app.ui.components.LIBRARY_NAME
-import com.lolog.app.ui.components.LoadMoreDots
 import com.lolog.app.ui.components.ListErrorState
 import com.lolog.app.ui.components.SkeletonList
 import com.lolog.app.ui.components.TypingDots
@@ -65,59 +61,72 @@ import kotlinx.coroutines.launch
 
 /*
  * 컨텐츠 › 미디어 탭: 내 쇼츠 목록(LOLog-docs video.md 2장 GET /api/videos).
- * 4컷 탭과 같은 모양이에요: 한 편씩 옆으로 넘기고, 정렬은 최신순·오래된순, 끝 쪽에 닿으면 다음 20개.
- * 만드는 중인 게 있으면 5초마다 새로 받아요.
+ * 4컷 탭과 같은 모양이에요: 2열 격자 + 아래 숫자 쪽 줄(한 쪽 6편), 정렬은 최신순·오래된순.
+ * 서버에 page·totalCount가 없어 cursor로 끝까지 받아 쪽을 나눠요(임시, ContentPaging.kt).
+ * 보이는 쪽에 만드는 중인 게 있으면 5초마다 확인해요.
  */
 
 class VideoListViewModel(private val repo: LologRepository) : ViewModel() {
     data class State(
         val videos: List<VideoSummary> = emptyList(),
-        val nextCursor: String? = null,
         val loading: Boolean = true,
-        val loadingMore: Boolean = false,
+        /** 당겨서 새로 고침 중 */
+        val refreshing: Boolean = false,
         val error: String? = null,
+        val toast: String? = null,
         val sort: SortOrder = SortOrder.NEWEST,
+        /** 보고 있는 쪽(1부터). 4컷 탭과 따로 기억해요 */
+        val page: Int = 1,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
-    fun refresh() = viewModelScope.launch {
+    /**
+     * GET /api/videos?size=50(&sort=oldest)를 nextCursor가 없을 때까지 받아 앱에서 쪽을 나눠요.
+     * 서버에 page·totalCount 생기면 그 쪽만 받도록 바꿀 것(임시)
+     */
+    fun refresh(pull: Boolean = false) = viewModelScope.launch {
         val sort = _state.value.sort
+        if (pull) _state.update { it.copy(refreshing = true) }
         try {
-            val p = repo.videos(null, 20, sort)
-            _state.update { if (it.sort != sort) it else it.copy(videos = p.videos, nextCursor = p.nextCursor, loading = false, error = null) }
+            val videos = fetchAll { cursor -> repo.videos(cursor, CONTENT_FETCH_SIZE, sort).let { it.videos to it.nextCursor } }
+            _state.update {
+                if (it.sort != sort) it
+                else it.copy(videos = videos, page = clampPage(it.page, videos.size), loading = false, refreshing = false, error = null)
+            }
         } catch (e: LologException) {
-            _state.update { if (it.sort != sort) it else it.copy(loading = false, error = errorText(e)) }
+            // 받아 둔 목록이 있으면 그대로 두고 띠로만 알려요
+            _state.update {
+                if (it.sort != sort) it
+                else it.copy(loading = false, refreshing = false, error = errorText(e), toast = if (pull && it.videos.isNotEmpty()) errorText(e) else it.toast)
+            }
         }
     }
 
-    fun loadMore() {
-        val st = _state.value
-        val cursor = st.nextCursor ?: return
-        if (st.loadingMore) return
-        _state.update { it.copy(loadingMore = true) }
-        viewModelScope.launch {
-            // 다음 쪽도 처음과 같은 sort로(video.md 2장)
-            runCatching { repo.videos(cursor, 20, st.sort) }
-                .onSuccess { p -> _state.update { if (it.sort != st.sort) it else it.copy(videos = it.videos + p.videos, nextCursor = p.nextCursor, loadingMore = false) } }
-                .onFailure { _state.update { if (it.sort != st.sort) it else it.copy(loadingMore = false) } }
-        }
-    }
-
+    /** 정렬을 바꾸면 목록을 비우고 1쪽부터 다시 받아요 */
     fun setSort(sort: SortOrder) {
         if (sort == _state.value.sort) return
-        _state.update { it.copy(sort = sort, videos = emptyList(), nextCursor = null, loading = true, loadingMore = false, error = null) }
+        _state.update { it.copy(sort = sort, videos = emptyList(), page = 1, loading = true, refreshing = false, error = null) }
         refresh()
     }
 
-    /** 처음 보일 때와 만드는 중인 게 있는 동안 5초마다 */
-    suspend fun watch() {
+    fun setPage(page: Int) = _state.update { it.copy(page = clampPage(page, it.videos.size)) }
+
+    fun toastShown() = _state.update { it.copy(toast = null) }
+
+    /**
+     * 보이는 쪽에 만드는 중인 쇼츠가 있으면 5초마다 GET /api/videos/{id}로 확인해요.
+     * 끝난 게 있으면 목록을 다시 받아요. 보이는 쪽에 만드는 중이 없으면 멈춰요
+     */
+    suspend fun watchVisible() {
         while (true) {
-            refresh().join()
             val st = _state.value
-            if (!st.loading && st.videos.none { it.status.inProgress }) break
+            val ids = pageSlice(st.videos, st.page).filter { it.status.inProgress }.map { it.id }
+            if (st.loading || ids.isEmpty()) return
             delay(5_000)
+            val done = ids.any { id -> runCatching { !repo.video(id).status.inProgress }.getOrDefault(false) }
+            if (done) refresh().join()
         }
     }
 
@@ -133,11 +142,10 @@ class VideoListViewModel(private val repo: LologRepository) : ViewModel() {
 
 @Composable
 internal fun VideoTab(vm: VideoListViewModel, state: VideoListViewModel.State, onVideo: (Long) -> Unit, onLibrary: () -> Unit) {
-    LaunchedEffect(Unit) { vm.watch() }
-    val pager = key(state.sort) { rememberPagerState { state.videos.size } }
-    LaunchedEffect(pager.currentPage, state.videos.size) {
-        if (state.videos.isNotEmpty() && pager.currentPage >= state.videos.size - 1) vm.loadMore()
-    }
+    LaunchedEffect(Unit) { vm.refresh() }
+    // 보이는 쪽에 만드는 중인 쇼츠가 바뀔 때마다 다시 지켜봐요
+    val watching = pageSlice(state.videos, state.page).filter { it.status.inProgress }.map { it.id }
+    LaunchedEffect(watching, state.loading) { vm.watchVisible() }
     when {
         state.loading -> SkeletonList(count = 4)
         state.error != null && state.videos.isEmpty() -> ListErrorState(onRetry = { vm.refresh() })
@@ -150,31 +158,34 @@ internal fun VideoTab(vm: VideoListViewModel, state: VideoListViewModel.State, o
             onButton = onLibrary,
             primary = false,
         )
-        else -> Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
-            HorizontalPager(
-                pager,
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                pageSpacing = 12.dp,
-                verticalAlignment = Alignment.Top,
-            ) { page ->
-                val v = state.videos[page]
-                VideoPage(v, onClick = { onVideo(v.id) }, onImageError = vm::imageFailed)
-            }
-            Spacer(Modifier.height(14.dp))
-            PageDots(state.videos.size, pager.currentPage)
-            if (state.loadingMore) LoadMoreDots()
+        // 2열 격자 + 아래 숫자 쪽 줄(11/13 시안 6·7번)
+        else -> ContentGrid(
+            items = state.videos, page = state.page, onPage = vm::setPage,
+            refreshing = state.refreshing, onRefresh = { vm.refresh(pull = true) },
+            key = { it.id },
+        ) { v ->
+            VideoCell(v, onClick = { onVideo(v.id) }, onImageError = vm::imageFailed)
         }
     }
 }
 
-/** 한 장: 4컷 탭과 같은 흰 카드. 위는 첫 장면 그림(완성일 때) 위에 재생 표시, 아래 제목·날짜·상태 칩 */
+/** 영상 길이 "0:28" */
+internal fun durationText(ms: Long): String {
+    val sec = ms / 1000
+    return "${sec / 60}:${(sec % 60).toString().padStart(2, '0')}"
+}
+
+/**
+ * 격자 칸 하나: 흰 둥근 카드(14dp). 위는 세로로 긴 썸네일 + 가운데 ▶ 동그라미 + 오른쪽 아래 길이,
+ * 아래 제목 1줄, 날짜 + 상태 칩
+ */
 @Composable
-private fun VideoPage(v: VideoSummary, onClick: () -> Unit, onImageError: () -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
+private fun VideoCell(v: VideoSummary, onClick: () -> Unit, onImageError: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Column(Modifier.fillMaxWidth().softCard(shape).clickable(onClick = onClick)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(1f).padding(start = 16.dp, end = 16.dp, top = 16.dp)
-                .clip(RoundedCornerShape(12.dp)).background(LologColors.Canvas),
+            Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp).aspectRatio(9f / 13f)
+                .clip(RoundedCornerShape(10.dp)).background(LologColors.Canvas),
         ) {
             when {
                 v.status == VideoStatus.DONE && v.thumbnailUrl != null -> {
@@ -183,38 +194,43 @@ private fun VideoPage(v: VideoSummary, onClick: () -> Unit, onImageError: () -> 
                         modifier = Modifier.fillMaxSize(), onError = { onImageError() },
                     )
                     Box(
-                        Modifier.align(Alignment.Center).size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+                        Modifier.align(Alignment.Center).size(38.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp)) }
+                    ) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
                 }
                 v.status == VideoStatus.FAILED -> Text(
-                    "에피소드에서 다시 만들 수 있어요", fontSize = 12.5.sp, color = LologColors.Muted, modifier = Modifier.align(Alignment.Center),
+                    "에피소드에서 다시 만들 수 있어요", fontSize = 11.sp, color = LologColors.Muted, textAlign = TextAlign.Center,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 10.dp),
                 )
-                v.status.inProgress -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 6.dp) }
-                else -> Icon(Icons.Outlined.SmartDisplay, null, tint = LologColors.Muted, modifier = Modifier.align(Alignment.Center).size(28.dp))
+                v.status.inProgress -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 5.dp) }
+                else -> Icon(Icons.Outlined.SmartDisplay, null, tint = LologColors.Muted, modifier = Modifier.align(Alignment.Center).size(26.dp))
             }
-            Box(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.25f)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, LologColors.Paper.copy(alpha = 0.6f)))),
-            )
-        }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+            // 길이는 있을 때만 오른쪽 아래 검은 알약
+            if (v.status == VideoStatus.DONE) v.durationMs?.let { ms ->
                 Text(
-                    v.cardSummary.ifBlank { "쇼츠" }, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    durationText(ms), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(LologShape.pill)
+                        .background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 6.dp, vertical = 2.dp),
                 )
+            }
+        }
+        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 10.dp)) {
+            Text(
+                v.cardSummary.ifBlank { "쇼츠" }, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     when {
                         v.status.inProgress -> "방금"
-                        else -> shortDate(v.createdAt) + (v.durationMs?.let { " · ${it / 1000}초" } ?: "") +
-                            if (v.cardId == null) " · 원래 에피소드 지워짐" else ""
+                        else -> shortDate(v.createdAt) + if (v.cardId == null) " · 원래 에피소드 지워짐" else ""
                     },
-                    fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontSize = 10.5.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(4.dp))
+                VideoStateChip(v.status)
             }
-            Spacer(Modifier.width(8.dp))
-            VideoStateChip(v.status)
         }
     }
 }
@@ -228,7 +244,7 @@ private fun VideoStateChip(status: VideoStatus) {
         else -> Triple("만드는 중", LologColors.AccentSoft, LologColors.Accent)
     }
     Text(
-        label, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = fg,
-        modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1,
+        modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }

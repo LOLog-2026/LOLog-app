@@ -164,6 +164,7 @@ fun ComicListScreen(
     }
     LaunchedEffect(state.openComicId) { state.openComicId?.let { vm.consumed(); onComic(it) } }
     LaunchedEffect(state.toast) { state.toast?.let { vm.consumed(); snackbar.showSnackbar(it) } }
+    LaunchedEffect(videoState.toast) { videoState.toast?.let { videoVm.toastShown(); snackbar.showSnackbar(it) } }
     // 휴대폰 뒤로 가기도 ←와 같게 홈 탭으로
     BackHandler(onBack = onBack)
     // 위 탭: 0 = 쇼츠, 1 = 4컷. 처음엔 쇼츠
@@ -268,21 +269,4 @@ private fun StateChip(stage: ComicStage) {
         label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1,
         modifier = Modifier.clip(LologShape.pill).background(bg).padding(horizontal = 8.dp, vertical = 3.dp),
     )
-}
-
-/** 쪽 표시 점: 지금 쪽은 코랄 긴 막대. 많으면 지금 쪽 주변 7개만 */
-@Composable
-internal fun PageDots(count: Int, current: Int) {
-    val window = 7
-    val start = (current - window / 2).coerceIn(0, (count - window).coerceAtLeast(0))
-    val end = (start + window).coerceAtMost(count)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        for (i in start until end) {
-            val on = i == current
-            Box(
-                Modifier.padding(horizontal = 3.dp).height(6.dp).width(if (on) 20.dp else 6.dp)
-                    .clip(LologShape.pill).background(if (on) LologColors.Accent else LologColors.Line),
-            )
-        }
-    }
 }

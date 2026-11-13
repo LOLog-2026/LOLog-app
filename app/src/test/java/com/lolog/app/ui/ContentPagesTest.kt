@@ -4,9 +4,14 @@ import com.lolog.app.data.model.ComicPage
 import com.lolog.app.data.model.ComicStatus
 import com.lolog.app.data.model.ComicSummary
 import com.lolog.app.data.model.SortOrder
+import com.lolog.app.data.model.VideoPage
+import com.lolog.app.data.model.VideoStatus
+import com.lolog.app.data.model.VideoSummary
 import com.lolog.app.data.repo.LologRepository
 import com.lolog.app.ui.screens.comic.CONTENT_PAGE_SIZE
 import com.lolog.app.ui.screens.comic.ComicListViewModel
+import com.lolog.app.ui.screens.comic.VideoListViewModel
+import com.lolog.app.ui.screens.comic.durationText
 import com.lolog.app.ui.screens.comic.clampPage
 import com.lolog.app.ui.screens.comic.fetchAll
 import com.lolog.app.ui.screens.comic.pageCount
@@ -28,7 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** 컨텐츠 목록 쪽 나누기: 한 쪽 6편, 끝까지 받기, 정렬 바꾸면 1쪽. */
+/** 컨텐츠(4컷·쇼츠) 목록 쪽 나누기: 한 쪽 6편, 끝까지 받기, 정렬 바꾸면 1쪽. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContentPagesTest {
 
@@ -135,7 +140,26 @@ class ContentPagesTest {
         assertEquals(7, vm.state.value.page)
     }
 
-    /** comics()만 답하는 가짜 저장소. 다른 함수는 부르지 않아요 */
+    @Test
+    fun 쇼츠도_정렬을_바꾸면_1쪽으로() = runTest {
+        val vm = VideoListViewModel(repo(18))
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(18, vm.state.value.videos.size)
+        vm.setPage(2)
+        assertEquals(2, vm.state.value.page)
+        vm.setSort(SortOrder.OLDEST)
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.page)
+    }
+
+    @Test
+    fun 쇼츠_길이() {
+        assertEquals("0:28", durationText(28_400))
+        assertEquals("1:05", durationText(65_000))
+    }
+
+    /** comics()·videos()만 답하는 가짜 저장소. 다른 함수는 부르지 않아요 */
     private fun repo(total: Int, sizes: MutableList<Int> = mutableListOf()): LologRepository {
         val unused = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(LologRepository::class.java)) { _, m, _ ->
             throw UnsupportedOperationException(m.name)
@@ -147,6 +171,13 @@ class ContentPagesTest {
                 val from = cursor?.toInt() ?: 0
                 val to = (from + size).coerceAtMost(all.size)
                 return ComicPage(all.subList(from, to), if (to < all.size) "$to" else null)
+            }
+
+            override suspend fun videos(cursor: String?, size: Int, sort: SortOrder): VideoPage {
+                val videos = (1..total).map { VideoSummary(it.toLong(), it.toLong(), "쇼츠 $it", VideoStatus.DONE, createdAt = "2026-11-13T00:00:00Z") }
+                val from = cursor?.toInt() ?: 0
+                val to = (from + size).coerceAtMost(videos.size)
+                return VideoPage(videos.subList(from, to), if (to < videos.size) "$to" else null)
             }
         }
     }
