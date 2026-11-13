@@ -79,7 +79,7 @@ val SEARCHING_LINES = listOf(
     "재밌는 이야기 찾는 중…",
     "웃긴 순간을 골라내는 중…",
     "누가 무슨 말을 했는지 나누는 중…",
-    "카드 제목을 짓는 중…",
+    "에피소드 제목을 짓는 중…",
 )
 private const val SEARCHING_LINE_MS = 4_000L
 private const val SEARCHING_SUB = "다 되면 알려 드릴게요. 앱을 닫아도 돼요"
@@ -128,7 +128,7 @@ class HomeViewModel(private val repo: LologRepository) : ViewModel() {
                 }
                 val st = _analysis.value?.progress?.status
                 if (st == RecordingStatus.DONE || st == RecordingStatus.FAILED) {
-                    load() // 숫자와 "방금 들어온 카드"를 새로
+                    load() // 숫자와 "방금 들어온 에피소드"를 새로
                     break
                 }
                 delay(interval)
@@ -260,13 +260,13 @@ fun HomeScreen(
         if (state.recent.isEmpty()) {
             EmptyCards()
         } else {
-            Text("방금 들어온 카드", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted)
+            Text("방금 들어온 에피소드", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = LologColors.Muted)
             Spacer(Modifier.height(10.dp))
             RecentStack(state.recent, isNew = { EpisodeSeen.isNewSince(it.createdAt, seenAt) }, onCard = onCard)
             Spacer(Modifier.height(10.dp))
             // 안내만 하는 손글씨(누르는 동작 없음)
             Text(
-                "또 녹음하면 카드가 더 쌓여요 ↑",
+                "또 녹음하면 에피소드가 더 쌓여요 ↑",
                 style = LologText.memo.copy(fontSize = 18.sp),
                 modifier = Modifier.align(Alignment.End).rotate(-2f),
             )
@@ -294,7 +294,7 @@ private fun AnalysisStrip(a: HomeViewModel.Analysis, searching: Boolean, onLibra
             StatusStrip(searching = true, title = SEARCHING_LINES[i], sub = SEARCHING_SUB)
         }
         p?.status == RecordingStatus.DONE && p.cardCount > 0 ->
-            StatusStrip(searching = false, title = "카드 ${p.cardCount}개를 ${LIBRARY_NAME}에 넣었어요", onView = onLibrary)
+            StatusStrip(searching = false, title = "에피소드 ${p.cardCount}개를 만들었어요", onView = onLibrary)
         p?.status == RecordingStatus.DONE -> Strip(
             title = "이번엔 재밌는 이야기가 없었어요", body = "다음 수다를 기대해요",
             bg = LologColors.Canvas, border = LologColors.Line,
@@ -399,7 +399,7 @@ private fun StatBox(cards: String, comics: String, plus: Int, newEpisode: Boolea
         Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp)).background(LologColors.Canvas),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatCell("에피소드", cards, "장", plus, Modifier.weight(1f).clickable(onClick = onLibrary), dot = newEpisode)
+        StatCell("에피소드", cards, "개", plus, Modifier.weight(1f).clickable(onClick = onLibrary), dot = newEpisode)
         Box(Modifier.padding(vertical = 14.dp).width(1.dp).fillMaxHeight().background(LologColors.Line))
         StatCell("컨텐츠", comics, "편", 0, Modifier.weight(1f).clickable(onClick = onComics))
     }
@@ -431,7 +431,7 @@ private fun EmptyCards() {
             )
         },
         contentAlignment = Alignment.Center,
-    ) { PenMemo("카드가 곧 여기 쌓여요", angle = 0f) }
+    ) { PenMemo("에피소드가 곧 여기 쌓여요", angle = 0f) }
 }
 
 /**

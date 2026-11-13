@@ -138,7 +138,7 @@ class CardDetailViewModel(private val repo: LologRepository, private val id: Lon
             _state.update { it.copy(busy = false, deleted = true) }
         } catch (e: LologException) {
             // 공용 ③ 가벼운 실패: 아래 스낵바 + 다시 시도
-            _state.update { it.copy(busy = false, deleteFailed = true, toast = if (e.code == ErrorCodes.CARD_LOCKED) errorText(e) else "카드를 지우지 못했어요") }
+            _state.update { it.copy(busy = false, deleteFailed = true, toast = if (e.code == ErrorCodes.CARD_LOCKED) errorText(e) else "에피소드를 지우지 못했어요") }
         }
     }
 
@@ -267,7 +267,7 @@ fun CardDetailScreen(
         topBar = {
             CardTopBar(card, onBack) {
                 IconButton(onClick = onEdit, enabled = card != null && !card.locked && !card.videoLocked) {
-                    Icon(Icons.Outlined.Edit, "카드 고치기", modifier = Modifier.size(21.dp))
+                    Icon(Icons.Outlined.Edit, "에피소드 고치기", modifier = Modifier.size(21.dp))
                 }
                 Box {
                     IconButton(onClick = { menu = true }, enabled = card != null) { Icon(Icons.Default.MoreVert, "더 보기") }
@@ -277,7 +277,7 @@ fun CardDetailScreen(
                             leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = if (locked) LologColors.Muted else LologColors.Rec) },
                             text = {
                                 Column {
-                                    Text("카드 지우기", color = if (locked) LologColors.Muted else LologColors.Rec)
+                                    Text("에피소드 지우기", color = if (locked) LologColors.Muted else LologColors.Rec)
                                     if (locked) Text(
                                         if (card?.locked == true) "만화를 다 그린 뒤에 지울 수 있어요" else "쇼츠 목소리를 다 만든 뒤에 지울 수 있어요",
                                         fontSize = 11.sp, color = LologColors.Muted,
@@ -295,7 +295,7 @@ fun CardDetailScreen(
     ) { pad ->
         when {
             state.loading -> SkeletonList(Modifier.padding(pad), count = 3)
-            card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "카드를 불러오지 못했어요")
+            card == null -> ListErrorState(onRetry = { vm.load() }, modifier = Modifier.padding(pad), title = "에피소드를 불러오지 못했어요")
             else -> CardBody(
                 card, state.comics, state.busy, onComic, onRetry = { vm.requestComic() }, Modifier.padding(pad),
                 blogName = state.blogName,
@@ -328,8 +328,8 @@ fun CardDetailScreen(
     }
     if (askDelete) {
         LologDialog(
-            title = "이 카드를 지울까요?",
-            body = "지운 카드는 되돌릴 수 없어요. 이 카드로 만든 만화는 '컨텐츠'에 그대로 남아요.",
+            title = "이 에피소드를 지울까요?",
+            body = "지운 에피소드는 되돌릴 수 없어요. 이 에피소드로 만든 만화는 '컨텐츠'에 그대로 남아요.",
             confirmText = "지우기",
             danger = true,
             loading = state.busy,
@@ -384,7 +384,7 @@ private fun BottomActions(card: CardDetail, busy: Boolean, onDraw: () -> Unit) {
             card.locked -> LockNote("만화 그리는 중엔 고치거나 지울 수 없어요")
             card.videoLocked -> LockNote("쇼츠 목소리를 만드는 중엔 고치거나 지울 수 없어요")
             else -> Text(
-                "이 카드로 만든 4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번 · 쇼츠 ${VIDEO_LIMIT_PER_CARD - card.videoRemaining} / ${VIDEO_LIMIT_PER_CARD}번",
+                "이 에피소드로 만든 4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번 · 쇼츠 ${VIDEO_LIMIT_PER_CARD - card.videoRemaining} / ${VIDEO_LIMIT_PER_CARD}번",
                 fontSize = 11.sp, color = LologColors.Muted,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp),
             )
@@ -444,7 +444,7 @@ private fun CardBody(
         if (card.comics.isNotEmpty() || card.videos.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("이 카드로 만든 컨텐츠", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("이 에피소드로 만든 컨텐츠", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
                     "4컷 ${card.used} / ${COMIC_LIMIT_PER_CARD}번 · 쇼츠 ${VIDEO_LIMIT_PER_CARD - card.videoRemaining} / ${VIDEO_LIMIT_PER_CARD}번",
                     fontSize = 12.sp, color = LologColors.Muted,
@@ -589,7 +589,7 @@ internal fun shortsRows(videos: List<VideoRef>): List<ShortsRowText> =
     videos.sortedBy { it.id }.mapIndexed { i, v ->
         val (sub, mark) = when (v.status) {
             VideoStatus.DONE -> "완료" to ShortsMark.DONE
-            VideoStatus.FAILED -> "실패 · 카드에서 다시 만들 수 있어요" to ShortsMark.FAILED
+            VideoStatus.FAILED -> "실패 · 에피소드에서 다시 만들 수 있어요" to ShortsMark.FAILED
             VideoStatus.VOICE -> "목소리 만드는 중 · 몇 분 걸려요" to ShortsMark.MAKING
             VideoStatus.DRAWING -> "그림 만드는 중 · 몇 분 걸려요" to ShortsMark.MAKING
             VideoStatus.QUEUED, VideoStatus.UNKNOWN -> "곧 만들기 시작해요" to ShortsMark.MAKING
@@ -665,11 +665,11 @@ private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onComic: () -> Un
     var video by remember { mutableStateOf(!comicOk && videoOk) }
     LologSheet(onDismiss = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("이 카드로 무엇을 만들까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 4.dp))
+            Text("이 에피소드로 무엇을 만들까요?", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 4.dp))
             ContentOption(
                 title = "4컷 만화",
                 body = "세로 4칸 그림. 보통 몇 분 걸려요.",
-                note = if (card.locked) "지금 그리는 만화가 있어요" else "이 카드로 ${COMIC_LIMIT_PER_CARD}번 중 ${card.remaining}번 남음",
+                note = if (card.locked) "지금 그리는 만화가 있어요" else "이 에피소드로 ${COMIC_LIMIT_PER_CARD}번 중 ${card.remaining}번 남음",
                 selected = comicOk && !video,
                 enabled = comicOk,
                 offLabel = if (card.locked) "그리는 중" else "다 씀",
@@ -679,7 +679,7 @@ private fun ComicRequestSheet(card: CardDetail, busy: Boolean, onComic: () -> Un
             ContentOption(
                 title = "쇼츠",
                 body = "대사를 목소리로 읽는 30초 안팎의 세로 영상. 몇 분 걸려요.",
-                note = if (card.videoInProgress) "지금 만드는 쇼츠가 있어요" else "이 카드로 ${VIDEO_LIMIT_PER_CARD}번 중 ${card.videoRemaining}번 남음",
+                note = if (card.videoInProgress) "지금 만드는 쇼츠가 있어요" else "이 에피소드로 ${VIDEO_LIMIT_PER_CARD}번 중 ${card.videoRemaining}번 남음",
                 selected = videoOk && video,
                 enabled = videoOk,
                 offLabel = if (card.videoInProgress) "만드는 중" else "다 씀",

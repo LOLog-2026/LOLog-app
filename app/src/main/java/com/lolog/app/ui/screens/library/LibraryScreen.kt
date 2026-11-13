@@ -141,8 +141,8 @@ fun LibraryScreen(onCard: (Long) -> Unit, onRecord: () -> Unit, onBack: () -> Un
                 // 카드가 없으면 녹음하기 · 글로 만들기 두 버튼(글로 만들기 시안 1번)
                 state.cards.isEmpty() -> EmptyState(
                     icon = Icons.Outlined.Style,
-                    title = "아직 카드가 없어요",
-                    body = "대화를 녹음하면 재밌는 이야기를 카드로 모아 줘요",
+                    title = "아직 에피소드가 없어요",
+                    body = "대화를 녹음하면 재밌는 이야기를 에피소드로 모아 줘요",
                     memo = "오늘 수다부터 녹음해 볼까요?",
                     buttonText = "글로 만들기",
                     onButton = onWrite,
@@ -179,7 +179,7 @@ private fun CardList(state: LibraryViewModel.State, vm: LibraryViewModel, seenBe
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
                     Text(day?.let { dayWithWeek(it) } ?: "날짜 없음", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
                     Spacer(Modifier.width(6.dp))
-                    Text("카드 ${cards.size}개", fontSize = 11.sp, color = LologColors.Muted)
+                    Text("에피소드 ${cards.size}개", fontSize = 11.sp, color = LologColors.Muted)
                 }
             }
             items(cards.chunked(2), key = { row -> row.first().id }) { row ->

@@ -16,7 +16,7 @@ data class InboxLine(val title: String, val sub: String)
 /** 줄 왼쪽 작은 둥근 네모 표시. 색은 InboxScreen에서 정해요 */
 enum class InboxBadge(val label: String) {
     NOTICE("공지"),
-    CARDS("카드"),
+    CARDS("에피소드"),
     COMIC("만화"),
     CHARACTER("캐릭터"),
     FRIEND("친구"),
@@ -56,13 +56,13 @@ fun InboxItem.line(): InboxLine = when (this) {
     is InboxItem.Notice -> InboxLine(title, body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty())
     is InboxItem.Notification -> when (type) {
         "CARDS_CREATED" -> InboxLine(
-            data["cardCount"]?.toIntOrNull()?.let { "이야기 카드 ${it}장이 생겼어요" } ?: "이야기 카드가 생겼어요",
-            if (data.containsKey("textId")) "쓴 글로 카드를 만들었어요" else "녹음에서 재밌는 순간을 찾았어요",
+            data["cardCount"]?.toIntOrNull()?.let { "에피소드 ${it}개가 생겼어요" } ?: "에피소드가 생겼어요",
+            if (data.containsKey("textId")) "쓴 글로 에피소드를 만들었어요" else "녹음에서 재밌는 순간을 찾았어요",
         )
         "COMIC_DONE" -> InboxLine("4컷만화가 다 그려졌어요", "눌러서 볼 수 있어요")
         "COMIC_FAILED" -> InboxLine("4컷만화를 그리지 못했어요", "다시 그려 볼 수 있어요")
         "VIDEO_DONE" -> InboxLine("쇼츠가 완성됐어요", "눌러서 볼 수 있어요")
-        "VIDEO_FAILED" -> InboxLine("쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요")
+        "VIDEO_FAILED" -> InboxLine("쇼츠를 만들지 못했어요", "에피소드에서 다시 만들 수 있어요")
         "PROFILE_CHARACTER_READY" -> InboxLine("내 캐릭터 그림이 생겼어요", "친구들이 화자 그림으로 쓸 수 있어요")
         "PROFILE_CHARACTER_FAILED" -> InboxLine("내 캐릭터를 만들지 못했어요", "사진을 다시 골라 주세요")
         "FRIEND_REQUEST" -> InboxLine(

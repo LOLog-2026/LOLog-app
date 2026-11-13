@@ -257,7 +257,7 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
     if (expired) {
         LologDialog(
             title = "다시 로그인해 주세요",
-            body = "로그인한 지 오래돼서 안전을 위해 로그아웃됐어요. 모아 둔 카드와 만화는 그대로 있어요.",
+            body = "로그인한 지 오래돼서 안전을 위해 로그아웃됐어요. 모아 둔 에피소드와 만화는 그대로 있어요.",
             confirmText = "로그인하기",
             dismissText = "닫기",
             onConfirm = { container.tokens.expiredShown(); nav.resetTo(Routes.LOGIN) },

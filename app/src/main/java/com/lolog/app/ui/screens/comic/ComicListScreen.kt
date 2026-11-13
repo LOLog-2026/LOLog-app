@@ -188,8 +188,8 @@ fun ComicListScreen(
                     state.comics.isEmpty() -> EmptyState(
                         icon = Icons.Outlined.GridView,
                         title = "아직 만화가 없어요",
-                        body = "${LIBRARY_NAME}에서 카드를 골라 4컷만화로 만들어 보세요",
-                        memo = "카드 하나면 충분해요 ✎",
+                        body = "${LIBRARY_NAME}를 하나 골라 4컷만화로 만들어 보세요",
+                        memo = "에피소드 하나면 충분해요 ✎",
                         buttonText = "$LIBRARY_NAME 가기",
                         onButton = onLibrary,
                         primary = false,
@@ -247,7 +247,7 @@ private fun ComicPage(c: ComicSummary, onClick: () -> Unit, onRetry: () -> Unit,
                 Text(
                     when {
                         stage == ComicStage.WAITING || stage == ComicStage.MAKING -> "방금"
-                        else -> shortDate(c.createdAt) + if (c.cardDeleted) " · 원래 카드 지워짐" else ""
+                        else -> shortDate(c.createdAt) + if (c.cardDeleted) " · 원래 에피소드 지워짐" else ""
                     },
                     fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )

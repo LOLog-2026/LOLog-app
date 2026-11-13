@@ -49,7 +49,7 @@ class SpecCheck1113Test {
 
     @Test
     fun 카드_잠김은_만화와_쇼츠_둘_다_맞는_문구다() {
-        assertEquals("이 카드로 만화나 쇼츠를 만드는 중이에요", errorText(LologException(ErrorCodes.CARD_LOCKED)))
+        assertEquals("이 에피소드로 만화나 쇼츠를 만드는 중이에요", errorText(LologException(ErrorCodes.CARD_LOCKED)))
     }
 
     @Test

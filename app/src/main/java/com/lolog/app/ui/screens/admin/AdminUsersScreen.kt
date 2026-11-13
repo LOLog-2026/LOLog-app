@@ -339,7 +339,7 @@ fun AdminUsersScreen(onBack: () -> Unit) {
     if (state.confirmWithdraw) {
         LologDialog(
             title = "이 계정을 탈퇴시킬까요?",
-            body = "카드·만화·친구 등 모든 데이터가 지워지고 되돌릴 수 없어요. 이 이메일과 연결된 소셜 계정으로는 다시 가입할 수 없어요.",
+            body = "에피소드·만화·친구 등 모든 데이터가 지워지고 되돌릴 수 없어요. 이 이메일과 연결된 소셜 계정으로는 다시 가입할 수 없어요.",
             confirmText = "탈퇴시키기",
             onConfirm = vm::withdraw,
             onDismiss = vm::cancelDialogs,

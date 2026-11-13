@@ -8,7 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 카드 자세히 "이 카드로 만든 컨텐츠"의 쇼츠 줄 문구가 상태에 맞게 나오는지 본다. */
+/** 카드 자세히 "이 에피소드로 만든 컨텐츠"의 쇼츠 줄 문구가 상태에 맞게 나오는지 본다. */
 class CardShortsRowsTest {
 
     @Test
@@ -35,7 +35,7 @@ class CardShortsRowsTest {
                 "목소리 만드는 중 · 몇 분 걸려요",
                 "그림 만드는 중 · 몇 분 걸려요",
                 "완료",
-                "실패 · 카드에서 다시 만들 수 있어요",
+                "실패 · 에피소드에서 다시 만들 수 있어요",
             ),
             rows.map { it.sub },
         )

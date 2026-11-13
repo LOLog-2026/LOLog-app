@@ -144,7 +144,7 @@ internal fun VideoTab(vm: VideoListViewModel, state: VideoListViewModel.State, o
         state.videos.isEmpty() -> EmptyState(
             icon = Icons.Outlined.SmartDisplay,
             title = "아직 쇼츠가 없어요",
-            body = "카드에서 컨텐츠 만들기 › 쇼츠를 고르면 여기에 모여요",
+            body = "에피소드에서 컨텐츠 만들기 › 쇼츠를 고르면 여기에 모여요",
             memo = "대사를 목소리로 읽어 줘요 ✎",
             buttonText = "$LIBRARY_NAME 가기",
             onButton = onLibrary,
@@ -188,7 +188,7 @@ private fun VideoPage(v: VideoSummary, onClick: () -> Unit, onImageError: () -> 
                     ) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp)) }
                 }
                 v.status == VideoStatus.FAILED -> Text(
-                    "카드에서 다시 만들 수 있어요", fontSize = 12.5.sp, color = LologColors.Muted, modifier = Modifier.align(Alignment.Center),
+                    "에피소드에서 다시 만들 수 있어요", fontSize = 12.5.sp, color = LologColors.Muted, modifier = Modifier.align(Alignment.Center),
                 )
                 v.status.inProgress -> Box(Modifier.align(Alignment.Center)) { TypingDots(dot = 6.dp) }
                 else -> Icon(Icons.Outlined.SmartDisplay, null, tint = LologColors.Muted, modifier = Modifier.align(Alignment.Center).size(28.dp))
@@ -208,7 +208,7 @@ private fun VideoPage(v: VideoSummary, onClick: () -> Unit, onImageError: () -> 
                     when {
                         v.status.inProgress -> "방금"
                         else -> shortDate(v.createdAt) + (v.durationMs?.let { " · ${it / 1000}초" } ?: "") +
-                            if (v.cardId == null) " · 원래 카드 지워짐" else ""
+                            if (v.cardId == null) " · 원래 에피소드 지워짐" else ""
                     },
                     fontSize = 11.sp, color = LologColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
