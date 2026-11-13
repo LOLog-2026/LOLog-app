@@ -67,7 +67,7 @@ const val RECORDING_NOT_STARTED = "녹음을 시작하지 않았어요"
 /** 녹음 동의 창 문구(LOLog-docs functional-spec FR-REC-10) */
 internal object RecordingConsent {
     const val TITLE = "녹음하기 전에 알려 주세요"
-    const val CONFIRM = "동의를 받았어요"
+    const val CONFIRM = "동의받음"
     private const val ASK = "함께 대화하는 사람들에게 녹음한다고 알리고 동의를 받아 주세요."
 
     /** "음성도 저장"을 켰는지에 따라 본문이 달라요 */
