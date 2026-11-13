@@ -91,7 +91,7 @@ fun TextMakingScreen(textId: Long, onBack: () -> Unit, onDone: (cardId: Long) ->
 
     Scaffold(
         containerColor = LologColors.Paper,
-        topBar = { LologTopBar("카드 만들기", onBack) },
+        topBar = { LologTopBar("에피소드 만들기", onBack) },
         bottomBar = {
             Column(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -130,7 +130,7 @@ private fun Making(text: TextDetail, modifier: Modifier) {
                 Spacer(Modifier.height(12.dp))
             }
             Text(
-                if (failed) "만들지 못했어요" else "글로 카드를 만들고 있어요",
+                if (failed) "만들지 못했어요" else "글로 에피소드를 만들고 있어요",
                 fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = if (failed) LologColors.Rec else LologColors.Ink,
             )
             Spacer(Modifier.height(4.dp))

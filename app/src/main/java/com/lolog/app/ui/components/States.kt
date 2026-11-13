@@ -55,7 +55,7 @@ import com.lolog.app.ui.theme.LologColors
 fun errorText(e: Throwable): String {
     val ex = e as? LologException ?: return "잠시 후 다시 시도해 주세요"
     return when (ex.code) {
-        ErrorCodes.COMIC_LIMIT -> "이 카드는 ${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
+        ErrorCodes.COMIC_LIMIT -> "이 에피소드는 ${COMIC_LIMIT_PER_CARD}번 다 그렸어요"
         ErrorCodes.ACCOUNT_EXISTS -> "이미 가입된 계정이에요. 처음 가입한 방법으로 로그인해 주세요"
         // 계정 합치기가 없어서 방법(탈퇴 뒤 연결)까지 알려요(requirements FR-AUTH-06, 11-13)
         ErrorCodes.SOCIAL_ALREADY_LINKED -> "이미 다른 LOLog 계정에 연결된 소셜 계정이에요. 그 계정을 탈퇴한 뒤 연결할 수 있어요"
@@ -72,10 +72,10 @@ fun errorText(e: Throwable): String {
         ErrorCodes.INVALID_TOKEN, ErrorCodes.UNAUTHORIZED -> "다시 로그인해 주세요"
         ErrorCodes.INTERNAL_ERROR -> "잠시 후 다시 시도해 주세요"
         // 서버는 만화를 그리는 중과 쇼츠 목소리를 만드는 중 둘 다 이 코드라 둘 다 맞는 문구로(앱이 정함)
-        ErrorCodes.CARD_LOCKED -> "이 카드로 만화나 쇼츠를 만드는 중이에요"
+        ErrorCodes.CARD_LOCKED -> "이 에피소드로 만화나 쇼츠를 만드는 중이에요"
         ErrorCodes.COMIC_IN_PROGRESS -> "지금 그리는 만화가 끝나면 다시 그릴 수 있어요"
         ErrorCodes.VIDEO_IN_PROGRESS -> "지금 만드는 쇼츠가 끝나면 다시 만들 수 있어요"
-        ErrorCodes.VIDEO_LIMIT -> "이 카드로는 쇼츠를 ${VIDEO_LIMIT_PER_CARD}번까지 만들 수 있어요"
+        ErrorCodes.VIDEO_LIMIT -> "이 에피소드로는 쇼츠를 ${VIDEO_LIMIT_PER_CARD}번까지 만들 수 있어요"
         ErrorCodes.VIDEO_NOT_FOUND -> "지워졌거나 찾을 수 없는 쇼츠예요"
         ErrorCodes.TOKEN_EXPIRED -> "다시 로그인해 주세요"
         ErrorCodes.NETWORK -> "인터넷 연결을 확인하고 다시 시도해 주세요"

@@ -271,7 +271,7 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
                     button = "다시 시도", onButton = vm::retryPlay,
                 )
                 else -> Message(
-                    "쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요. 실패는 횟수에 안 세요.",
+                    "쇼츠를 만들지 못했어요", "에피소드에서 다시 만들 수 있어요. 실패는 횟수에 안 세요.",
                 )
             }
         }
@@ -314,7 +314,7 @@ fun VideoScreen(videoId: Long, onBack: () -> Unit, onDeleted: () -> Unit) {
     if (askDelete) {
         LologDialog(
             title = "이 쇼츠를 지울까요?",
-            body = "지워도 이 카드로 만들 수 있는 횟수는 돌아오지 않아요.",
+            body = "지워도 이 에피소드로 만들 수 있는 횟수는 돌아오지 않아요.",
             confirmText = "지우기",
             danger = true,
             loading = state.busy,

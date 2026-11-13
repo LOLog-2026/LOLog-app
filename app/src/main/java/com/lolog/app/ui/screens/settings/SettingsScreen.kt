@@ -270,7 +270,7 @@ fun SettingsScreen(
             // 오류 신고·의견 보내기(admin.md 5장). 관리자가 아니어도 보여요
             SettingsRow("의견 보내기", trailing = "오류 신고 · 의견", onClick = onFeedback)
             SettingsRow("로그아웃") { askLogout = true }
-            SettingsRow("탈퇴하고 모든 카드 지우기", danger = true) { askWithdraw = true }
+            SettingsRow("탈퇴하고 모든 에피소드 지우기", danger = true) { askWithdraw = true }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -278,7 +278,7 @@ fun SettingsScreen(
     askUnlink?.let { p ->
         LologDialog(
             title = "${p.label} 연결을 끊을까요?",
-            body = "다음부터 ${p.label}로는 이 계정에 로그인할 수 없어요. 카드와 만화는 그대로 있어요.",
+            body = "다음부터 ${p.label}로는 이 계정에 로그인할 수 없어요. 에피소드와 만화는 그대로 있어요.",
             confirmText = "끊기",
             danger = true,
             onConfirm = { askUnlink = null; vm.unlink(p) },
@@ -294,7 +294,7 @@ fun SettingsScreen(
                 recording?.audioSaved == true -> "녹음 중이에요. 로그아웃하면 녹음이 멈춰요. 글은 올리고, 올리지 못한 음성은 지워져요."
                 recording != null -> "녹음 중이에요. 로그아웃하면 녹음이 멈추고, 지금까지 녹음한 내용은 올린 뒤 로그아웃돼요"
                 unsent -> "아직 올리지 못한 녹음이 있어요. 로그아웃하면 지워져요."
-                else -> "이 폰에서는 알림이 오지 않아요. 카드와 만화는 그대로 남아 있어요."
+                else -> "이 폰에서는 알림이 오지 않아요. 에피소드와 만화는 그대로 남아 있어요."
             },
             confirmText = "로그아웃",
             loading = state.busy,
@@ -304,8 +304,8 @@ fun SettingsScreen(
     }
     if (askWithdraw) {
         LologDialog(
-            title = "탈퇴하고 모든 카드를 지울까요?",
-            body = "모은 이야기 카드와 4컷만화가 모두 지워지고 되돌릴 수 없어요. 연결된 소셜 계정도 함께 끊겨요.",
+            title = "탈퇴하고 모든 에피소드를 지울까요?",
+            body = "모은 에피소드와 4컷만화가 모두 지워지고 되돌릴 수 없어요. 연결된 소셜 계정도 함께 끊겨요.",
             confirmText = "탈퇴하기",
             danger = true,
             loading = state.busy,

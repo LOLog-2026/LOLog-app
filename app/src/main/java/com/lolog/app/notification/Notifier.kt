@@ -31,12 +31,12 @@ class Notifier(private val context: Context) {
         val (channel, title, body) = when (payload.type) {
             // 직접 쓴 글의 카드면 textId가 와요(texts.md 6장 푸시)
             PushType.CARDS_CREATED -> if (payload.textId != null) {
-                Triple(NotificationChannels.PUSH, "새 이야기 카드 1개", "쓴 글로 카드를 만들었어요")
+                Triple(NotificationChannels.PUSH, "새 에피소드 1개", "쓴 글로 에피소드를 만들었어요")
             } else {
-                Triple(NotificationChannels.PUSH, "새 이야기 카드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
+                Triple(NotificationChannels.PUSH, "새 에피소드 ${payload.cardCount ?: payload.cardIds.size}개", "방금 녹음에서 재밌는 순간을 찾았어요")
             }
             PushType.COMIC_DONE -> Triple(NotificationChannels.PUSH, "4컷만화가 완성됐어요 🎉", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
-            PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 만들지 못했어요", "다시 그리거나 카드를 고쳐 볼 수 있어요.")
+            PushType.COMIC_FAILED -> Triple(NotificationChannels.PUSH, "만화를 만들지 못했어요", "다시 그리거나 에피소드를 고쳐 볼 수 있어요.")
             // 실패 제목은 api-dto 푸시 표 그대로. 완성 문구는 명세에 없어서 정했어요
             PushType.PROFILE_CHARACTER_READY -> Triple(NotificationChannels.PUSH, "내 캐릭터가 완성됐어요", "이제 친구가 내 캐릭터를 만화에 쓸 수 있어요.")
             PushType.PROFILE_CHARACTER_FAILED -> Triple(NotificationChannels.PUSH, "캐릭터를 만들지 못했어요", "다른 사진으로 다시 만들어 볼 수 있어요.")
@@ -56,7 +56,7 @@ class Notifier(private val context: Context) {
             )
             // 쇼츠(video.md 2장). 문구에 대사를 넣지 않아요(FR-NOTI-03)
             PushType.VIDEO_DONE -> Triple(NotificationChannels.PUSH, "쇼츠가 완성됐어요 🎬", cardTitle?.let { "\"$it\"를 지금 볼 수 있어요." } ?: "지금 볼 수 있어요.")
-            PushType.VIDEO_FAILED -> Triple(NotificationChannels.PUSH, "쇼츠를 만들지 못했어요", "카드에서 다시 만들 수 있어요.")
+            PushType.VIDEO_FAILED -> Triple(NotificationChannels.PUSH, "쇼츠를 만들지 못했어요", "에피소드에서 다시 만들 수 있어요.")
             PushType.ROOM_DISBANDED -> Triple(
                 NotificationChannels.PUSH, payload.roomName?.let { "\"$it\" 방이 해산됐어요" } ?: "방이 해산됐어요",
                 "방의 만화와 대화가 지워졌어요",
