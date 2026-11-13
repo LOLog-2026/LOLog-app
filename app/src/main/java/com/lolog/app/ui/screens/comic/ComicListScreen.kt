@@ -173,7 +173,7 @@ fun ComicListScreen(
             // 위 칸: 흰 바탕 제목 줄 + "쇼츠 / 4컷" 탭(아래 1dp 선은 탭이 그려요). 맨 위에 고정, 아래만 넘어가요
             Column(Modifier.fillMaxWidth().background(LologColors.Paper)) {
                 // 정렬은 탭마다 따로(4컷·쇼츠 목록 모두 latest·oldest)
-                LologTopBar("쇼츠", onBack = onBack, actions = {
+                LologTopBar("컨텐츠", onBack = onBack, actions = {
                     if (tab == 0) SortMenu(videoState.sort, videoVm::setSort) else SortMenu(state.sort, vm::setSort)
                 })
                 ContentTabs(listOf("쇼츠", "4컷"), tab, { tab = it })
