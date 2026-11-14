@@ -92,7 +92,7 @@ interface MainApi {
     // 친구·프로필·차단 (LOLog-docs spec/friends.md 2장)
     @GET("api/me/profile") suspend fun profile(): ProfileResponse
     @PATCH("api/me/profile") suspend fun updateProfile(@Body body: ProfileUpdateRequest): ProfileResponse
-    /** 사진을 올려 프로필 캐릭터 만들기·다시 만들기(characters.md 4장). multipart photo(JPEG·PNG, 10MB 이하). 202 PROCESSING */
+    /** 사진을 올려 프로필 캐릭터 만들기·다시 만들기(characters.md 4장). multipart photo(JPEG·PNG, 5MB 이하). 202 PROCESSING */
     @Multipart
     @PUT("api/me/profile/character")
     suspend fun uploadProfileCharacter(@Part photo: MultipartBody.Part): ProfileCharacterDto

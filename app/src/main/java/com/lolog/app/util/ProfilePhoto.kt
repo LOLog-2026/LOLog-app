@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * 프로필 캐릭터 사진 준비(characters.md 3장).
- *  - 고른 사진을 긴 변 1600px 이하 JPEG로 바꿔요. 서버는 JPEG·PNG 10MB까지만 받고, 폰 사진(HEIC 등)도 그대로 올릴 수 있게요
+ *  - 고른 사진을 긴 변 1600px 이하 JPEG로 바꿔요. 서버는 JPEG·PNG 5MB까지만 받고, 폰 사진(HEIC 등)도 그대로 올릴 수 있게요
  *  - 올리기 전에 폰 안에서 얼굴이 한 명만 보이는지 확인해요(ML Kit 얼굴 감지, 모델 내장). 서버와 워커는 얼굴을 따로 보지 않아요
  */
 object ProfilePhoto {

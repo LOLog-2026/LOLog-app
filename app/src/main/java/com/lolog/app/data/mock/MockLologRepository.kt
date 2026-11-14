@@ -185,7 +185,7 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 내 프로필: 처음엔 캐릭터 없음(시안 15), 내 회원 ID는 "1"
  *  - 프로필 캐릭터 만들기: 사진을 올리면 PROCESSING, 4초 뒤 READY(그림은 기본 화자 young-f-02를 빌려 씀) + 푸시 PROFILE_CHARACTER_READY.
  *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
- *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
+ *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 5MB 넘음 → 413
  *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
  *  - 기본 화자 목소리(FR-CHAR-03): -01·-02로 끝나는 12명만 가짜 voiceUrl, 나머지는 null
  *  - 내 목소리 고르기(FR-CHAR-04): 저장하면 내 프로필 캐릭터의 voice가 바뀌어요(다시 만들어도 그대로).
