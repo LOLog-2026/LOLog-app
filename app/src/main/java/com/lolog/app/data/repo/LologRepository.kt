@@ -100,12 +100,12 @@ interface LologRepository {
     /** 프로필 캐릭터 응답의 voiceClone. 만든 적이 없으면 null */
     suspend fun getVoiceClone(): VoiceClone?
     /**
-     * PUT .../voice-clone multipart { audio, text, consent=true } → 202 PROCESSING. 다시 올리면 바꿔요.
-     * 명세의 PUT에는 친구 쇼츠 동의가 없어서, shareWithFriends는 올린 뒤 서버 값과 다를 때 PATCH로 맞춰요.
-     * file은 m4a, text는 읽은 문장(워커의 ref_text). 만드는 중이면 409 VOICE_CLONE_IN_PROGRESS,
+     * PUT .../voice-clone multipart { audio, consent=true } → 202 PROCESSING. 다시 올리면 바꿔요.
+     * 읽은 문장은 하나로 정해져 있어 보내지 않아요(서버가 저장). 명세의 PUT에는 친구 쇼츠 동의가 없어서,
+     * shareWithFriends는 올린 뒤 서버 값과 다를 때 PATCH로 맞춰요. file은 m4a. 만드는 중이면 409 VOICE_CLONE_IN_PROGRESS,
      * 대화 녹음 중이면 409 RECORDING_IN_PROGRESS, 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND
      */
-    suspend fun uploadVoiceClone(file: java.io.File, text: String, shareWithFriends: Boolean)
+    suspend fun uploadVoiceClone(file: java.io.File, shareWithFriends: Boolean)
     /** PATCH .../voice-clone { shareWithFriends }: 친구 쇼츠 동의만 바꿔요. 내 목소리가 없으면 404 VOICE_CLONE_NOT_FOUND */
     suspend fun setVoiceCloneShare(shareWithFriends: Boolean)
     /** DELETE .../voice-clone: 녹음도 같이 지워요. 프로필 캐릭터 목소리가 "self"였으면 안 고름(null)으로 돌아가요 */

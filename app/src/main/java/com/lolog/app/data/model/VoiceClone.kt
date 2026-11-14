@@ -24,7 +24,8 @@ data class VoiceClone(
 const val MY_VOICE_ID = "self"
 
 /**
- * 내 목소리를 만들 때 읽는 문장. 올릴 때 text로 같이 보내요(워커의 ref_text).
- * 임시: 민주 님이 정하면 바꿀 것(보통 속도로 읽어 5초가 넘는 문장)
+ * 내 목소리를 만들 때 읽는 문장(characters.md "내 목소리" 녹음, 정함 11-14). 40글자라 보통 빠르기로 6~8초예요.
+ * 문장이 하나라 앱은 보내지 않고, 서버가 같은 글자를 저장해 워커의 ref_text로 줘요.
+ * 서버(LOLog-api VoiceCloneService.RECORD_SENTENCE)·ai(voice_clone.py RECORD_SENTENCE)와 글자가 같아야 해요. 바꾸면 셋 다 바꿔요
  */
-const val VOICE_CLONE_SENTENCE = "오늘 저녁엔 친구들이랑 떡볶이 먹으러 가기로 했어. 비 오면 집에서 영화 보자."
+const val VOICE_CLONE_SENTENCE = "오늘 친구랑 카페에 갔는데, 주문을 잘못해서 둘이 한참 웃었어요. 그래도 덕분에 즐거운 하루였어요."

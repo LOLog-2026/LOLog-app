@@ -27,11 +27,10 @@ internal class MockVoiceClone(private val nowMs: () -> Long = System::currentTim
         return clone
     }
 
-    fun upload(bytes: Long, text: String, shareWithFriends: Boolean) {
+    fun upload(bytes: Long, shareWithFriends: Boolean) {
         if (get()?.status == VoiceCloneStatus.PROCESSING) throw LologException(ErrorCodes.VOICE_CLONE_IN_PROGRESS, "내 목소리를 만드는 중이에요")
         if (bytes <= 0) throw LologException(ErrorCodes.INVALID_REQUEST, "녹음이 없어요")
         if (bytes > MAX_BYTES) throw LologException(ErrorCodes.PAYLOAD_TOO_LARGE, "녹음이 너무 커요")
-        if (text.isBlank()) throw LologException(ErrorCodes.INVALID_REQUEST, "읽은 문장이 없어요")
         willFail = bytes < FAIL_BELOW_BYTES
         // 다시 녹음하면 미리 듣기는 새로 만들어요
         clone = VoiceClone(VoiceCloneStatus.PROCESSING, shareWithFriends = shareWithFriends)

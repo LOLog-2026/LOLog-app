@@ -19,7 +19,7 @@ class MockVoiceCloneTest {
     private val clone = MockVoiceClone { now }
 
     private fun code(block: () -> Unit): String = try { block(); "" } catch (e: LologException) { e.code }
-    private fun upload(bytes: Long = 100_000, share: Boolean = false) = clone.upload(bytes, "읽은 문장", share)
+    private fun upload(bytes: Long = 100_000, share: Boolean = false) = clone.upload(bytes, share)
     private fun friendsWithCharacter() = MockFriends().apply {
         uploadCharacter(1); finishCharacter(failed = false, thumbnailUrl = "x")
     }
@@ -62,9 +62,9 @@ class MockVoiceCloneTest {
     }
 
     @Test
-    fun 너무_큰_녹음과_빈_문장은_거절한다() {
+    fun 너무_크거나_빈_녹음은_거절한다() {
         assertEquals(ErrorCodes.PAYLOAD_TOO_LARGE, code { upload(bytes = MockVoiceClone.MAX_BYTES + 1) })
-        assertEquals(ErrorCodes.INVALID_REQUEST, code { clone.upload(100_000, " ", false) })
+        assertEquals(ErrorCodes.INVALID_REQUEST, code { upload(bytes = 0) })
     }
 
     @Test

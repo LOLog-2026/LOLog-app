@@ -57,7 +57,8 @@ class VoiceCloneTest {
 
     @Test
     fun 읽을_문장은_하나이고_만드는_중_문구에_시간을_적지_않는다() {
-        assertTrue(VOICE_CLONE_SENTENCE.isNotBlank())
+        // 서버·ai의 RECORD_SENTENCE와 글자가 같아야 해요(띄어쓰기·문장부호까지)
+        assertEquals("오늘 친구랑 카페에 갔는데, 주문을 잘못해서 둘이 한참 웃었어요. 그래도 덕분에 즐거운 하루였어요.", VOICE_CLONE_SENTENCE)
         assertFalse(VOICE_CLONE_MAKING.contains("분"))
     }
 }

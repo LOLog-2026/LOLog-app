@@ -101,14 +101,13 @@ interface MainApi {
     /** 프로필 캐릭터 목소리 고르기(characters.md FR-CHAR-04, 초안). 본문은 ApiMapper.voiceBody(). 204 */
     @PATCH("api/me/profile/character/voice") suspend fun setProfileCharacterVoice(@Body body: JsonObject)
     /**
-     * 내 목소리 녹음 올리기·다시 올리기(characters.md "내 목소리"). multipart audio(wav·m4a, 4MB 이하) + text(읽은 문장) + consent=true.
+     * 내 목소리 녹음 올리기·다시 올리기(characters.md "내 목소리"). multipart audio(wav·m4a, 4MB 이하) + consent=true. 읽은 문장은 서버가 정해진 글자로 저장해요.
      * 202 ProfileCharacterResponse(voiceClone PROCESSING)
      */
     @Multipart
     @PUT("api/me/profile/character/voice-clone")
     suspend fun uploadVoiceClone(
         @Part audio: MultipartBody.Part,
-        @Part("text") text: RequestBody,
         @Part("consent") consent: RequestBody,
     ): ProfileCharacterDto
     /** 친구 쇼츠 동의(③)만 바꾸기. 204. 내 목소리가 없으면 404 VOICE_CLONE_NOT_FOUND */
