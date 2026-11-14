@@ -65,14 +65,15 @@ import java.io.File
  * 내 목소리 만들기(시안 11/13 2~7). 한 화면 안에서 단계를 바꿔요: INTRO 알림·동의 → READ 문장 읽기 → REVIEW 다시 듣기 → MAKING 만드는 중
  *  - 동의 ①②는 필수, ③(친구 쇼츠)은 선택. 체크 안 하면 친구 쇼츠엔 기본 목소리(팀 확인 필요)
  *  - 문장마다 마이크를 눌러 녹음, 네모를 누르면 끝. 15초면 저절로 끝나요
- *  - 1초 미만이면 "조금 더 길게", 소리가 작으면(또는 VOICE_TOO_QUIET) "소리가 작아요" → 다시 녹음
+ *  - 1초 미만이면 "조금 더 길게", 소리가 작으면 "소리가 작아요" → 다시 녹음
+ *  - 문장 파일은 기기에만 두고, "내 목소리 만들기"에서 PUT 한 번(임시: 첫 문장 녹음만 보내요. 다음에 문장 하나로 바꿔요)
  *  - 녹음은 VoiceSampleRecorder(MediaRecorder, m4a)로 cacheDir에만. 만들기를 시작했거나 화면을 나가면 지워요
  *  - 대화 녹음 중에는 마이크 버튼을 꺼요(마이크를 같이 못 써요)
  *  명세 없음, 목업만(실제 서버는 NOT_READY)
  */
 
 /** 동의 ①(내 목소리만)과 ②(쇼츠에 씀)를 모두 체크해야 "동의하고 녹음하기"가 켜져요. ③(친구 쇼츠)은 선택 */
-internal fun introReady(ownVoiceOnly: Boolean, agreeShorts: Boolean, @Suppress("UNUSED_PARAMETER") agreeFriends: Boolean): Boolean =
+internal fun introReady(ownVoiceOnly: Boolean, agreeShorts: Boolean, @Suppress("UNUSED_PARAMETER") shareWithFriends: Boolean): Boolean =
     ownVoiceOnly && agreeShorts
 
 const val VOICE_TAKE_SHORT = "조금 더 길게 읽어 주세요"
@@ -85,7 +86,7 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
         val step: Step = Step.INTRO,
         val ownVoiceOnly: Boolean = false,
         val agreeShorts: Boolean = false,
-        val agreeFriends: Boolean = false,
+        val shareWithFriends: Boolean = false,
         /** 지금 읽는 문장(0~4) */
         val index: Int = 0,
         /** REVIEW에서 "다시"로 왔으면 이 문장만 읽고 REVIEW로 돌아가요 */
@@ -97,7 +98,7 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
         /** 빨간 글(다시 녹음) */
         val problem: String? = null,
         val uploading: Boolean = false,
-        /** 올린 문장 번호 */
+        /** 녹음한 문장 번호 */
         val done: Set<Int> = emptySet(),
         val starting: Boolean = false,
         val toast: String? = null,
@@ -114,7 +115,7 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
 
     fun setOwnVoiceOnly(v: Boolean) = _state.update { it.copy(ownVoiceOnly = v) }
     fun setAgreeShorts(v: Boolean) = _state.update { it.copy(agreeShorts = v) }
-    fun setAgreeFriends(v: Boolean) = _state.update { it.copy(agreeFriends = v) }
+    fun setShareWithFriends(v: Boolean) = _state.update { it.copy(shareWithFriends = v) }
 
     /** 동의하고 마이크 권한을 받았을 때 */
     fun beginReading() = _state.update { it.copy(step = Step.READ, index = 0, fromReview = false, problem = null) }
@@ -155,29 +156,16 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
         when (check) {
             TakeCheck.TOO_SHORT -> { f.delete(); _state.update { it.copy(problem = VOICE_TAKE_SHORT) } }
             TakeCheck.TOO_QUIET -> { f.delete(); _state.update { it.copy(problem = VOICE_TAKE_QUIET) } }
-            TakeCheck.OK -> upload(s.index, f)
+            TakeCheck.OK -> taken(s.index)
         }
     }
 
-    private fun upload(index: Int, f: File) = viewModelScope.launch {
-        _state.update { it.copy(uploading = true) }
-        try {
-            repo.uploadVoiceSample(index, f)
-            _state.update { s ->
-                val done = s.done + index
-                val next = VOICE_CLONE_SENTENCES.indices.firstOrNull { it !in done }
-                if (s.fromReview || next == null) s.copy(uploading = false, done = done, step = Step.REVIEW, fromReview = false)
-                else s.copy(uploading = false, done = done, index = next)
-            }
-        } catch (e: LologException) {
-            f.delete()
-            _state.update {
-                when (e.code) {
-                    ErrorCodes.VOICE_TOO_QUIET -> it.copy(uploading = false, problem = VOICE_TAKE_QUIET)
-                    else -> it.copy(uploading = false, toast = cloneError(e))
-                }
-            }
-        }
+    /** 문장 하나를 다 읽음: 다음 문장으로, 다 읽었으면 다시 듣기로 */
+    private fun taken(index: Int) = _state.update { s ->
+        val done = s.done + index
+        val next = VOICE_CLONE_SENTENCES.indices.firstOrNull { it !in done }
+        if (s.fromReview || next == null) s.copy(done = done, step = Step.REVIEW, fromReview = false)
+        else s.copy(done = done, index = next)
     }
 
     /** 다른 앱으로 가거나 나갈 때: 녹음 중이던 문장은 버려요 */
@@ -198,7 +186,7 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
         if (s.starting) return@launch
         _state.update { it.copy(starting = true) }
         try {
-            repo.startVoiceClone(s.agreeFriends)
+            repo.uploadVoiceClone(file(0), VOICE_CLONE_SENTENCES[0], s.shareWithFriends)
             clearFiles()
             _state.update { it.copy(starting = false, step = Step.MAKING, done = emptySet()) }
         } catch (e: LologException) {
@@ -306,7 +294,7 @@ fun VoiceCloneScreen(onBack: () -> Unit, onDone: () -> Unit) {
                 when (state.step) {
                     VoiceCloneViewModel.Step.INTRO -> PrimaryButton(
                         "동의하고 녹음하기", onClick = ::agreed,
-                        enabled = introReady(state.ownVoiceOnly, state.agreeShorts, state.agreeFriends),
+                        enabled = introReady(state.ownVoiceOnly, state.agreeShorts, state.shareWithFriends),
                     )
                     VoiceCloneViewModel.Step.READ -> MicArea(state, convoRecording, onStart = { player.stop(); vm.startTake() }, onStop = vm::stopTake)
                     VoiceCloneViewModel.Step.REVIEW -> PrimaryButton(
@@ -359,7 +347,7 @@ private fun IntroStep(state: VoiceCloneViewModel.State, vm: VoiceCloneViewModel,
         AgreeRow("내 목소리만 녹음할게요. 다른 사람 목소리는 넣지 않아요", "필수", state.ownVoiceOnly, vm::setOwnVoiceOnly)
         AgreeRow("내 목소리로 만든 소리를 쇼츠에 쓰는 데 동의해요", "필수", state.agreeShorts, vm::setAgreeShorts)
         // 선택: 체크 안 하면 친구 쇼츠에는 기본 목소리로 읽어요(팀 확인 필요)
-        AgreeRow("친구 쇼츠에도 내 목소리가 나오는 데 동의해요", "선택", state.agreeFriends, vm::setAgreeFriends)
+        AgreeRow("친구 쇼츠에도 내 목소리가 나오는 데 동의해요", "선택", state.shareWithFriends, vm::setShareWithFriends)
     }
 }
 

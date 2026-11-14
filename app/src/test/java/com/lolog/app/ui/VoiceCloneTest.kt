@@ -16,28 +16,27 @@ import org.junit.Test
 class VoiceCloneTest {
     @Test
     fun 상태에_따라_내_목소리_칸_모양이_정해진다() {
-        assertEquals(MyVoiceRowKind.MAKE, myVoiceRow(VoiceCloneStatus.NONE, recording = false))
-        assertEquals(MyVoiceRowKind.MAKE, myVoiceRow(VoiceCloneStatus.FAILED, recording = false))
-        // 못 받았거나 서버가 없으면(null) 칸은 보여요
+        // 만든 적 없거나 서버가 없으면(null) 만들기 칸
         assertEquals(MyVoiceRowKind.MAKE, myVoiceRow(null, recording = false))
-        assertEquals(MyVoiceRowKind.MAKING, myVoiceRow(VoiceCloneStatus.MAKING, recording = false))
-        assertEquals(MyVoiceRowKind.READY, myVoiceRow(VoiceCloneStatus.DONE, recording = false))
+        assertEquals(MyVoiceRowKind.MAKE, myVoiceRow(VoiceCloneStatus.FAILED, recording = false))
+        assertEquals(MyVoiceRowKind.MAKING, myVoiceRow(VoiceCloneStatus.PROCESSING, recording = false))
+        assertEquals(MyVoiceRowKind.READY, myVoiceRow(VoiceCloneStatus.READY, recording = false))
     }
 
     @Test
     fun 대화_녹음_중이면_만들기_칸만_꺼진다() {
-        assertEquals(MyVoiceRowKind.DISABLED, myVoiceRow(VoiceCloneStatus.NONE, recording = true))
+        assertEquals(MyVoiceRowKind.DISABLED, myVoiceRow(null, recording = true))
         assertEquals(MyVoiceRowKind.DISABLED, myVoiceRow(VoiceCloneStatus.FAILED, recording = true))
-        assertEquals(MyVoiceRowKind.MAKING, myVoiceRow(VoiceCloneStatus.MAKING, recording = true))
-        assertEquals(MyVoiceRowKind.READY, myVoiceRow(VoiceCloneStatus.DONE, recording = true))
+        assertEquals(MyVoiceRowKind.MAKING, myVoiceRow(VoiceCloneStatus.PROCESSING, recording = true))
+        assertEquals(MyVoiceRowKind.READY, myVoiceRow(VoiceCloneStatus.READY, recording = true))
     }
 
     @Test
     fun 필수_동의_둘을_모두_체크해야_녹음하기가_켜진다() {
-        assertTrue(introReady(ownVoiceOnly = true, agreeShorts = true, agreeFriends = false))
-        assertTrue(introReady(ownVoiceOnly = true, agreeShorts = true, agreeFriends = true))
-        assertFalse(introReady(ownVoiceOnly = true, agreeShorts = false, agreeFriends = false))
-        assertFalse(introReady(ownVoiceOnly = false, agreeShorts = false, agreeFriends = true))
+        assertTrue(introReady(ownVoiceOnly = true, agreeShorts = true, shareWithFriends = false))
+        assertTrue(introReady(ownVoiceOnly = true, agreeShorts = true, shareWithFriends = true))
+        assertFalse(introReady(ownVoiceOnly = true, agreeShorts = false, shareWithFriends = false))
+        assertFalse(introReady(ownVoiceOnly = false, agreeShorts = false, shareWithFriends = true))
     }
 
     @Test

@@ -60,8 +60,8 @@ const val VOICE_PICKED = "목소리를 골랐어요"
  *  - 맨 위 "고르지 않기"(voice = null, 쇼츠에서 알아서 골라요), 그 아래 voiceUrl이 있는 기본 화자만 한 줄씩
  *  - 처음엔 지금 저장된 값이 골라져 있고, 바뀌면 "이 목소리로 할게요"가 켜져요
  *  - 저장 PATCH → 성공하면 돌아가서 "목소리를 골랐어요"
- *  - 맨 위 "내 목소리" 칸(내 목소리 만들기 시안 1·8·9·10, MyVoiceSection.kt). 다 됐으면 voice = MY_VOICE_ID로 같은 저장 흐름.
- *    만드는 중이면 화면에 있는 동안 5초마다 상태를 다시 받아요. 명세 없음, 목업만(실제 서버는 NOT_READY)
+ *  - 맨 위 "내 목소리" 칸(내 목소리 만들기 시안 1·8·9·10, MyVoiceSection.kt). 다 됐으면 voice = "self"로 같은 저장 흐름.
+ *    만드는 중이면 화면에 있는 동안 5초마다 상태를 다시 받아요. 기준 docs PR #70(병합 전), 목업만(실제 서버는 NOT_READY)
  */
 
 class VoicePickViewModel(private val repo: LologRepository) : ViewModel() {
@@ -76,7 +76,7 @@ class VoicePickViewModel(private val repo: LologRepository) : ViewModel() {
         val saving: Boolean = false,
         val toast: String? = null,
         val done: Boolean = false,
-        /** 내 목소리(못 받았으면 null) */
+        /** 내 목소리(만든 적 없거나 못 받았으면 null) */
         val clone: VoiceClone? = null,
         /** 내 목소리 상태를 한 번이라도 받아 봤는지(성공·실패 모두). 받기 전에는 칸을 그리지 않아요 */
         val cloneLoaded: Boolean = false,
@@ -122,16 +122,24 @@ class VoicePickViewModel(private val repo: LologRepository) : ViewModel() {
     suspend fun refreshClone() {
         try {
             val c = repo.getVoiceClone()
-            _state.update { it.copy(clone = c, cloneLoaded = true, cloneNotReady = false) }
+            // 만들지 못하면 서버가 골랐던 "self"를 null로 돌려요(명세 #70)
+            val failed = c?.status == VoiceCloneStatus.FAILED
+            _state.update {
+                it.copy(
+                    clone = c, cloneLoaded = true, cloneNotReady = false,
+                    saved = if (failed) it.saved.takeUnless { v -> v == MY_VOICE_ID } else it.saved,
+                    selected = if (failed) it.selected.takeUnless { v -> v == MY_VOICE_ID } else it.selected,
+                )
+            }
         } catch (e: LologException) {
             _state.update { it.copy(cloneLoaded = true, cloneNotReady = e.code == ErrorCodes.NOT_READY) }
         }
     }
 
-    /** 내 목소리 재생 실패 때: 상태를 다시 받아 새 voiceUrl */
+    /** 내 목소리 재생 실패 때: 상태를 다시 받아 새 previewUrl */
     suspend fun freshMyVoiceUrl(): String? {
         refreshClone()
-        return _state.value.clone?.voiceUrl
+        return _state.value.clone?.previewUrl
     }
 
     /** 내 목소리 지우기. 고른 목소리가 내 목소리였으면 서버(목업)가 안 고름으로 돌려요 */
@@ -142,7 +150,7 @@ class VoicePickViewModel(private val repo: LologRepository) : ViewModel() {
             repo.deleteVoiceClone()
             _state.update {
                 it.copy(
-                    deleting = false, clone = VoiceClone(VoiceCloneStatus.NONE),
+                    deleting = false, clone = null,
                     saved = it.saved.takeUnless { v -> v == MY_VOICE_ID },
                     selected = it.selected.takeUnless { v -> v == MY_VOICE_ID },
                     toast = "내 목소리를 지웠어요",
@@ -190,7 +198,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
 
     LaunchedEffect(Unit) { vm.load() }
     // 내 목소리: 화면에 돌아올 때마다 한 번, 만드는 중이면 화면에 있는 동안 5초마다 다시 받아요
-    val making = state.clone?.status == VoiceCloneStatus.MAKING
+    val making = state.clone?.status == VoiceCloneStatus.PROCESSING
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(making, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -263,7 +271,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
                                 title = "내 목소리", titleTag = { MyRecordingTag() },
                                 subtitle = if (voice.playingId == MY_VOICE_ID) "듣는 중" else "내 녹음으로 만든 목소리",
                             ) {
-                                VoicePreviewButton(state.clone?.voiceUrl, MY_VOICE_ID, voice, freshUrl = { vm.freshMyVoiceUrl() }, compact = true)
+                                VoicePreviewButton(state.clone?.previewUrl, MY_VOICE_ID, voice, freshUrl = { vm.freshMyVoiceUrl() }, compact = true)
                                 MyVoiceMoreButton { voiceSheet = true }
                                 Spacer(Modifier.width(4.dp))
                             }

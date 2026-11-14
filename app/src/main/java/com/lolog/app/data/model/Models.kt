@@ -59,6 +59,12 @@ object ErrorCodes {
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND" // 404 프로필 캐릭터가 없는데 목소리를 고름(docs PR #59 초안)
+    // 내 목소리 (LOLog-docs PR #70 characters.md 4장, 병합 전)
+    const val RECORDING_IN_PROGRESS = "RECORDING_IN_PROGRESS"       // 409 대화 녹음 중에 내 목소리를 만듦
+    const val VOICE_CLONE_IN_PROGRESS = "VOICE_CLONE_IN_PROGRESS"   // 409 만드는 중에 또 녹음을 올림
+    const val VOICE_CLONE_NOT_READY = "VOICE_CLONE_NOT_READY"       // 409 다 만들지 않은 내 목소리("self")를 고름
+    const val VOICE_CLONE_NOT_FOUND = "VOICE_CLONE_NOT_FOUND"       // 404 내 목소리가 없는데 친구 쇼츠 동의를 바꿈
+    const val VOICE_CLONE_UNAVAILABLE = "VOICE_CLONE_UNAVAILABLE"   // 503 내 목소리 큐가 꺼져 있음
     // 알림함 (LOLog-docs PR #59 inbox.md 7장)
     const val NOTICE_NOT_FOUND = "NOTICE_NOT_FOUND"             // 404 없는 공지사항을 읽음
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
@@ -71,7 +77,6 @@ object ErrorCodes {
     const val BLOG_NOT_FOUND = "BLOG_NOT_FOUND" // 404 없는 블로그, 내 블로그가 아님
     const val BLOG_EXISTS = "BLOG_EXISTS"       // 409 같은 RSS 주소를 이미 연결함
     const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그·내 목소리 만들기)
-    const val VOICE_TOO_QUIET = "VOICE_TOO_QUIET" // 앱 목업용, 서버 미정: 내 목소리 문장 녹음 소리가 너무 작음
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"

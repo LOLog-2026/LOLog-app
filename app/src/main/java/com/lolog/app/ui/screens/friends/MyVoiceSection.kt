@@ -43,10 +43,10 @@ import com.lolog.app.ui.theme.LologShape
 /** 내 목소리 칸 모양 */
 enum class MyVoiceRowKind { MAKE, MAKING, READY, DISABLED }
 
-/** 상태(못 받았으면 null)와 대화 녹음 중인지로 칸 모양을 정해요. 다 됐으면 녹음 중에도 고를 수 있어요 */
+/** 상태(만든 적 없거나 못 받았으면 null)와 대화 녹음 중인지로 칸 모양을 정해요. 다 됐으면 녹음 중에도 고를 수 있어요 */
 internal fun myVoiceRow(status: VoiceCloneStatus?, recording: Boolean): MyVoiceRowKind = when (status) {
-    VoiceCloneStatus.DONE -> MyVoiceRowKind.READY
-    VoiceCloneStatus.MAKING -> MyVoiceRowKind.MAKING
+    VoiceCloneStatus.READY -> MyVoiceRowKind.READY
+    VoiceCloneStatus.PROCESSING -> MyVoiceRowKind.MAKING
     else -> if (recording) MyVoiceRowKind.DISABLED else MyVoiceRowKind.MAKE
 }
 

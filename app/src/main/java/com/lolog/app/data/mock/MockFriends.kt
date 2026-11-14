@@ -90,15 +90,16 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
      */
     fun setVoice(voice: String?, myVoiceReady: Boolean = false) {
         val c = character ?: fail(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
-        // 내 목소리(MY_VOICE_ID)는 다 만들었을 때만 고를 수 있어요(목업, 서버 미정)
-        val mine = voice == MY_VOICE_ID && myVoiceReady
-        if (voice != null && !mine && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
+        // 내 목소리("self")는 READY일 때만 고를 수 있어요(docs PR #70 초안: 409 VOICE_CLONE_NOT_READY)
+        if (voice == MY_VOICE_ID) {
+            if (!myVoiceReady) fail(ErrorCodes.VOICE_CLONE_NOT_READY, "내 목소리가 아직 없어요")
+        } else if (voice != null && MockCharacters.defaults.none { it.id == voice && it.voiceUrl != null }) {
             fail(ErrorCodes.UNKNOWN_CHARACTER, "없는 목소리예요")
         }
         character = c.copy(voice = voice)
     }
 
-    /** 내 목소리를 지우면: 프로필 캐릭터 목소리가 내 목소리였으면 안 고름(null)으로 */
+    /** 내 목소리를 지우거나 만들지 못하면: 프로필 캐릭터 목소리가 "self"였으면 안 고름(null)으로 */
     fun clearMyVoice() {
         val c = character ?: return
         if (c.voice == MY_VOICE_ID) character = c.copy(voice = null)
