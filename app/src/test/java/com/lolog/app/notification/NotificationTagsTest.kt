@@ -28,6 +28,8 @@ class NotificationTagsTest {
     fun 명세_표에_없는_푸시는_가까운_기능_꼬리표를_단다() {
         assertEquals("video:8", tag("type" to "VIDEO_DONE", "videoId" to "8", "cardId" to "4"))
         assertEquals("video:8", tag("type" to "VIDEO_FAILED", "videoId" to "8", "cardId" to "4"))
+        assertEquals("character", tag("type" to "VOICE_CLONE_READY"))
+        assertEquals("character", tag("type" to "VOICE_CLONE_FAILED"))
         assertEquals("character", tag("type" to "PROFILE_CHARACTER_READY"))
         assertEquals("character", tag("type" to "PROFILE_CHARACTER_FAILED"))
         // 해산 푸시는 서버가 roomId를 안 보내요

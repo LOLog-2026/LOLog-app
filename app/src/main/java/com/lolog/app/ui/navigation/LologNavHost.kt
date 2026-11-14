@@ -42,6 +42,7 @@ import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
 import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
 import com.lolog.app.ui.screens.friends.VOICE_PICKED
+import com.lolog.app.ui.screens.friends.VoiceCloneScreen
 import com.lolog.app.ui.screens.friends.VoicePickScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
@@ -62,6 +63,7 @@ import com.lolog.app.ui.screens.recording.AnalyzingScreen
 import com.lolog.app.ui.screens.recording.RECORDING_NOT_STARTED
 import com.lolog.app.ui.screens.recording.RecordingScreen
 import com.lolog.app.ui.screens.settings.PasswordChangeScreen
+import com.lolog.app.ui.screens.settings.OpenSourceLicensesScreen
 import com.lolog.app.ui.screens.settings.SettingsScreen
 import com.lolog.app.ui.screens.start.LoginScreen
 import com.lolog.app.ui.screens.start.PasswordResetScreen
@@ -118,7 +120,9 @@ object Routes {
     const val NICKNAME = "nickname"
     const val PROFILE_CHARACTER = "profile/character"
     const val VOICE_PICK = "profile/character/voice"
+    const val VOICE_CLONE = "profile/character/voice/clone"
     const val BLOCKED = "blocked"
+    const val OSS_LICENSES = "ossLicenses"
     const val SETTINGS = "settings"
     const val PASSWORD_CHANGE = "passwordChange"
     const val ADMIN = "admin"
@@ -535,9 +539,11 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                     onLoggedOut = { nav.resetTo(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.PASSWORD_CHANGE) { launchSingleTop = true } },
                     onNickname = { nav.navigate(Routes.NICKNAME) { launchSingleTop = true } },
+                    onMyCharacter = { nav.navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true } },
                     onBlocked = { nav.navigate(Routes.BLOCKED) { launchSingleTop = true } },
                     onAdmin = { nav.navigate(Routes.ADMIN) { launchSingleTop = true } },
                     onFeedback = { nav.navigate(Routes.FEEDBACK_SEND) { launchSingleTop = true } },
+                    onLicenses = { nav.navigate(Routes.OSS_LICENSES) { launchSingleTop = true } },
                     message = message,
                     onMessageShown = { entry.savedStateHandle[SETTINGS_MESSAGE] = null },
                 )
@@ -647,7 +653,12 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         nav.previousBackStackEntry?.savedStateHandle?.set(VOICE_MESSAGE, VOICE_PICKED)
                         nav.popBackStack()
                     },
+                    onMakeVoice = { nav.navigate(Routes.VOICE_CLONE) { launchSingleTop = true } },
                 )
+            }
+            // 내 목소리 만들기: 나가기·만드는 중 뒤로는 목소리 고르기로 돌아가요(만드는 중 줄이 보여요)
+            composable(Routes.VOICE_CLONE) {
+                VoiceCloneScreen(onBack = { nav.popBackStack() }, onDone = { nav.popBackStack() })
             }
             composable(Routes.NICKNAME) {
                 NicknameScreen(
@@ -663,6 +674,9 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
             }
             composable(Routes.BLOCKED) {
                 BlockedScreen(onBack = { nav.popBackStack() })
+            }
+            composable(Routes.OSS_LICENSES) {
+                OpenSourceLicensesScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.PASSWORD_CHANGE) {
                 PasswordChangeScreen(

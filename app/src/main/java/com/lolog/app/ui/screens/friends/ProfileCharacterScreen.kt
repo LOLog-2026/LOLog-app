@@ -34,6 +34,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.lolog.app.data.model.DefaultCharacter
+import com.lolog.app.data.model.MY_VOICE_ID
 import com.lolog.app.data.model.ProfileCharacter
 import com.lolog.app.data.model.ProfileCharacterStatus
 import com.lolog.app.data.repo.LologException
@@ -161,8 +162,9 @@ fun ProfileCharacterScreen(
 
     // 푸시(완성·실패)가 오면 이 화면도 바로 새로 불러요
     LaunchedEffect(Unit) { vm.load() }
-    // 다 만듦·실패 푸시가 오면 다시 받고, 내 캐릭터 새 소식 점을 꺼요(inbox.md 4장)
-    OnPush(PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED) { vm.load() }
+    // 캐릭터·내 목소리의 다 만듦·실패 푸시가 오면 다시 받고, 내 캐릭터 새 소식 점을 꺼요(inbox.md 4장).
+    // 내 목소리가 실패하면 서버가 골랐던 "self"를 비워서, 이 화면의 "내 목소리" 줄도 새로 받아야 해요
+    OnPush(*PROFILE_CHARACTER_SCREEN_PUSHES) { vm.load() }
     SeenBadge(BadgeKind.PROFILE_CHARACTER)
     LaunchedEffect(state.toast) {
         val msg = state.toast ?: return@LaunchedEffect
@@ -291,6 +293,12 @@ fun ProfileCharacterScreen(
 }
 
 /** "내 목소리" 줄(시안 5·8). 안 골랐으면 "고르기 ›", 골랐으면 label + 들어 보기 + "바꾸기 ›" */
+/** 내 캐릭터 화면이 다시 받는 푸시. 같은 점(profileCharacter)에 들어가는 푸시와 같아요 */
+internal val PROFILE_CHARACTER_SCREEN_PUSHES = arrayOf(
+    PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED,
+    PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED,
+)
+
 @Composable
 private fun MyVoiceRow(
     voiceId: String?,
@@ -309,6 +317,7 @@ private fun MyVoiceRow(
             Text(
                 when {
                     voiceId == null -> "아직 안 골랐어요. 쇼츠에서 알아서 골라 읽어요."
+                    voiceId == MY_VOICE_ID -> "내 녹음으로 만든 목소리"
                     else -> picked?.label ?: "고른 목소리가 있어요"
                 },
                 fontSize = 12.sp, color = LologColors.Muted, lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp),

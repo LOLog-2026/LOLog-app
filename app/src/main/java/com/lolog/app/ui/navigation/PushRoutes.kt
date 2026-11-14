@@ -23,6 +23,8 @@ fun NavHostController.openPush(p: PushPayload) {
         // 내 캐릭터 완성·실패 → 내 캐릭터 화면(api-dto 푸시 표: 프로필 새로고침)
         PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED ->
             navigate(Routes.PROFILE_CHARACTER) { launchSingleTop = true }
+        // 내 목소리 완성·실패 → 목소리 고르기(맨 위 "내 목소리" 칸에서 미리 듣기·다시 녹음)
+        PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED -> navigate(Routes.VOICE_PICK) { launchSingleTop = true }
         // 친구 요청 → 받은 요청 화면(friends.md 3장 "친구 화면의 받은 요청")
         PushType.FRIEND_REQUEST -> navigate(Routes.FRIEND_REQUESTS) { launchSingleTop = true }
         // 쇼츠 완성·실패 → 그 쇼츠 화면(실패면 안내가 거기 있어요). 번호가 없으면 쇼츠 탭

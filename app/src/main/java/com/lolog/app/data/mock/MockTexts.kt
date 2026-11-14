@@ -122,12 +122,18 @@ internal class MockTexts(
         val notFound = LologException(ErrorCodes.INVALID_BLOG, "블로그를 찾지 못했어요. 주소를 확인해 주세요")
         // 서버는 내부 주소를 거절해요(SSRF 막기). 목업은 흔한 내부 주소만 흉내 내요
         if (INTERNAL_HOSTS.any { it in u }) throw notFound
+        val path = u.substringAfter("://").trimEnd('/')
+        // 목업: velog·Medium은 카테고리가 없어 빈 목록, blogspot은 따로 맞추지 않은 블로그(optimized false)
+        when (blogPlatform(u)) {
+            BlogPlatform.VELOG -> return BlogCheck("https://v2.velog.io/rss/${path.substringAfter('/').substringBefore('/')}", emptyList())
+            BlogPlatform.MEDIUM -> return BlogCheck("https://medium.com/feed/${path.substringAfter('/').substringBefore('/')}", emptyList())
+            else -> if ("blogspot" in u) return BlogCheck("https://${path.substringBefore('/')}/feeds/posts/default", MOCK_CATEGORIES, optimized = false)
+        }
         val naver = when {
             "naver" in u -> true
             "tistory" in u -> false
             else -> throw notFound
         }
-        val path = u.substringAfter("://").trimEnd('/')
         val feed = if (naver) "https://rss.blog.naver.com/${path.substringAfterLast('/')}.xml" else "https://${path.substringBefore('/')}/rss"
         return BlogCheck(feed, MOCK_CATEGORIES)
     }
@@ -135,9 +141,12 @@ internal class MockTexts(
     fun add(url: String, categories: List<String>): Blog {
         val c = check(url)
         val picked = checkCategories(categories)
+        if (picked.isNotEmpty() && !blogPlatform(url).categorySelectable) {
+            throw LologException(ErrorCodes.INVALID_REQUEST, "이 블로그는 카테고리를 고를 수 없어요", "categories")
+        }
         if (c.feedUrl in feeds.values) throw LologException(ErrorCodes.BLOG_EXISTS, "이미 연결한 블로그예요")
         val title = if ("naver" in c.feedUrl) "민지의 여행일기" else "하루 기록"
-        val blog = Blog(newId(), url.trim(), title, picked)
+        val blog = Blog(newId(), url.trim(), title, picked, c.optimized)
         feeds[blog.id] = c.feedUrl
         blogs += blog
         posts[blog.id] = samplePosts(blog)
@@ -172,6 +181,9 @@ internal class MockTexts(
 
     /** 서버와 같게: 앞뒤 공백을 빼고 1~30자, 대소문자만 다른 이름도 같은 이름이라 400(field categories[i]) */
     private fun checkCategories(categories: List<String>): List<String> {
+        if (categories.size > BLOG_CATEGORY_COUNT_MAX) {
+            throw LologException(ErrorCodes.INVALID_REQUEST, "카테고리는 ${BLOG_CATEGORY_COUNT_MAX}개까지 골라요", "categories")
+        }
         val seen = mutableSetOf<String>()
         return categories.mapIndexed { i, raw ->
             val c = raw.trim()

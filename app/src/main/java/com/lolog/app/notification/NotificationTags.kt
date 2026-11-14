@@ -11,7 +11,7 @@ import com.lolog.app.data.model.PushType
  * 푸시를 띄울 때 꼬리표(tag)를 달아 두고, 그 화면을 열거나 알림함에서 누르면 같은 꼬리표 알림을 알림창에서 지워요.
  * 명세 꼬리표는 friend · room:{id} · cards · comic:{id}예요. 명세 표에 없는 것은 가장 가까운 기능에 맞췄어요(앱이 정함):
  *  - 쇼츠 완성·실패 → video:{id} (만화와 같은 컨텐츠 화면에서 지워요)
- *  - 내 캐릭터 완성·실패 → character
+ *  - 내 캐릭터 완성·실패, 내 목소리 완성·실패 → character
  *  - 방 해산 → room (서버가 roomId를 안 보내요. 방 목록을 열면 지워요)
  * 번호가 없는 푸시는 번호 없는 꼬리표(comic, video, room)를 달아요.
  */
@@ -32,7 +32,8 @@ object NotificationTags {
         PushType.CARDS_CREATED -> CARDS
         PushType.COMIC_DONE, PushType.COMIC_FAILED -> p.comicId?.let(::comic) ?: COMIC
         PushType.VIDEO_DONE, PushType.VIDEO_FAILED -> p.videoId?.let(::video) ?: VIDEO
-        PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED -> CHARACTER
+        PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED,
+        PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED -> CHARACTER
         PushType.FRIEND_REQUEST -> FRIEND
         PushType.ROOM_INVITE, PushType.ROOM_COMMENT, PushType.ROOM_DISBANDED -> p.roomId?.let(::room) ?: ROOM
     }

@@ -27,6 +27,7 @@ import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.TEXT_BODY_MAX
 import com.lolog.app.data.model.TextInput
 import com.lolog.app.data.model.TextLimits
+import com.lolog.app.data.model.BLOG_CATEGORY_COUNT_MAX
 import com.lolog.app.data.model.BLOG_CATEGORY_MAX
 import com.lolog.app.data.model.textLength
 import com.lolog.app.data.repo.LologException
@@ -124,6 +125,9 @@ internal fun textErrorText(e: Throwable): String {
         "body" -> "본문을 써 주세요"
         "place" -> "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요"
         "situation" -> "상황이 너무 길어요"
+        // field가 categories 하나면 목록 전체 문제예요(3개 넘음, 카테고리가 없는 블로그. LOLog-api #85)
+        "categories" -> if (ex.message.contains("고를 수 없")) "이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요"
+        else "카테고리는 ${BLOG_CATEGORY_COUNT_MAX}개까지 골라요"
         else -> if (ex.field?.startsWith("categories") == true) "카테고리는 1~${BLOG_CATEGORY_MAX}자, 같은 이름은 한 번만 고를 수 있어요"
         else "입력한 내용을 확인해 주세요"
     }

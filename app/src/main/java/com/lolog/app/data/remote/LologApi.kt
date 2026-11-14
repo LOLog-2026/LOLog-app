@@ -92,7 +92,7 @@ interface MainApi {
     // 친구·프로필·차단 (LOLog-docs spec/friends.md 2장)
     @GET("api/me/profile") suspend fun profile(): ProfileResponse
     @PATCH("api/me/profile") suspend fun updateProfile(@Body body: ProfileUpdateRequest): ProfileResponse
-    /** 사진을 올려 프로필 캐릭터 만들기·다시 만들기(characters.md 4장). multipart photo(JPEG·PNG, 10MB 이하). 202 PROCESSING */
+    /** 사진을 올려 프로필 캐릭터 만들기·다시 만들기(characters.md 4장). multipart photo(JPEG·PNG, 5MB 이하). 202 PROCESSING */
     @Multipart
     @PUT("api/me/profile/character")
     suspend fun uploadProfileCharacter(@Part photo: MultipartBody.Part): ProfileCharacterDto
@@ -100,6 +100,20 @@ interface MainApi {
     @DELETE("api/me/profile/character") suspend fun deleteProfileCharacter()
     /** 프로필 캐릭터 목소리 고르기(characters.md FR-CHAR-04, 초안). 본문은 ApiMapper.voiceBody(). 204 */
     @PATCH("api/me/profile/character/voice") suspend fun setProfileCharacterVoice(@Body body: JsonObject)
+    /**
+     * 내 목소리 녹음 올리기·다시 올리기(characters.md "내 목소리"). multipart audio(wav·m4a, 4MB 이하) + consent=true. 읽은 문장은 서버가 정해진 글자로 저장해요.
+     * 202 ProfileCharacterResponse(voiceClone PROCESSING)
+     */
+    @Multipart
+    @PUT("api/me/profile/character/voice-clone")
+    suspend fun uploadVoiceClone(
+        @Part audio: MultipartBody.Part,
+        @Part("consent") consent: RequestBody,
+    ): ProfileCharacterDto
+    /** 친구 쇼츠 동의(③)만 바꾸기. 204. 내 목소리가 없으면 404 VOICE_CLONE_NOT_FOUND */
+    @PATCH("api/me/profile/character/voice-clone") suspend fun setVoiceCloneShare(@Body body: VoiceCloneShareDto)
+    /** 내 목소리 지우기. 골랐던 "self"는 null로. 없어도 204 */
+    @DELETE("api/me/profile/character/voice-clone") suspend fun deleteVoiceClone()
     /** 201. 상대가 이미 나에게 요청했으면 바로 친구가 되고 status가 ACCEPTED */
     @POST("api/friend-requests") suspend fun sendFriendRequest(@Body body: FriendRequestCreate): FriendRequestResponse
     /** direction: received·sent (필수) */

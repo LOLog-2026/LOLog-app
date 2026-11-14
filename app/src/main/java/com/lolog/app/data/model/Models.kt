@@ -59,6 +59,12 @@ object ErrorCodes {
     const val CHARACTER_IN_PROGRESS = "CHARACTER_IN_PROGRESS" // 409 프로필 캐릭터를 만드는 중에 또 올림
     const val CHARACTER_LIMIT = "CHARACTER_LIMIT"         // 409 프로필 캐릭터 만들기 하루 3번(한국 시간 자정에 다시 셈)
     const val CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND" // 404 프로필 캐릭터가 없는데 목소리를 고름(docs PR #59 초안)
+    // 내 목소리 (LOLog-docs PR #70 characters.md 4장, 병합 전)
+    const val RECORDING_IN_PROGRESS = "RECORDING_IN_PROGRESS"       // 409 대화 녹음 중에 내 목소리를 만듦
+    const val VOICE_CLONE_IN_PROGRESS = "VOICE_CLONE_IN_PROGRESS"   // 409 만드는 중에 또 녹음을 올림
+    const val VOICE_CLONE_NOT_READY = "VOICE_CLONE_NOT_READY"       // 409 다 만들지 않은 내 목소리("self")를 고름
+    const val VOICE_CLONE_NOT_FOUND = "VOICE_CLONE_NOT_FOUND"       // 404 내 목소리가 없는데 친구 쇼츠 동의를 바꿈
+    const val VOICE_CLONE_UNAVAILABLE = "VOICE_CLONE_UNAVAILABLE"   // 503 내 목소리 큐가 꺼져 있음
     // 알림함 (LOLog-docs PR #59 inbox.md 7장)
     const val NOTICE_NOT_FOUND = "NOTICE_NOT_FOUND"             // 404 없는 공지사항을 읽음
     const val NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND" // 404 없거나 남의 알림을 읽음(30일 지나 지워졌을 때도)
@@ -70,7 +76,7 @@ object ErrorCodes {
     const val TEXT_NOT_FOUND = "TEXT_NOT_FOUND" // 404 없는 글, 내 글이 아님(카드를 지우면 글도 지워져요)
     const val BLOG_NOT_FOUND = "BLOG_NOT_FOUND" // 404 없는 블로그, 내 블로그가 아님
     const val BLOG_EXISTS = "BLOG_EXISTS"       // 409 같은 RSS 주소를 이미 연결함
-    const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그)
+    const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그·내 목소리 만들기)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */
     const val VALIDATION_FAILED = "VALIDATION_FAILED"
@@ -375,20 +381,40 @@ data class TextDetail(
     val blogTitle: String? = null,
 )
 
-/** POST /api/blogs/check: 링크로 찾은 RSS 주소와 피드에 나온 카테고리(저장 안 함) */
-data class BlogCheck(val feedUrl: String, val categories: List<String>)
+/**
+ * POST /api/blogs/check: 링크로 찾은 RSS 주소와 그 플랫폼 방식으로 읽은 카테고리(저장 안 함).
+ * optimized는 따로 맞춘 플랫폼(5개)이면 true, 그 밖 블로그(Other)면 false(texts.md 4장 "앱 안내"). 안 오면 true로 봐요
+ */
+data class BlogCheck(val feedUrl: String, val categories: List<String>, val optimized: Boolean = true)
 
 /** 연결한 블로그(texts.md 6장 블로그 응답). title은 RSS의 블로그 이름. categories가 비면 전부 가져와요 */
-data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>)
+data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>, val optimized: Boolean = true)
 
-/** 화면의 플랫폼 표시(N·T 동그라미)용. 서버는 플랫폼을 저장·응답하지 않아서(texts.md 4장) 앱이 주소로 정해요 */
-enum class BlogPlatform { NAVER, TISTORY, OTHER }
+/** 블로그 하나에 고르는 카테고리 수(texts.md 4장 "카테고리 고르기", 정함 11-14). 넘으면 서버가 400(field categories) */
+const val BLOG_CATEGORY_COUNT_MAX = 3
+
+/** 블로그 연결 화면 안내 문구(texts.md 4장 "앱 안내", 정함 11-14). 플랫폼 목록은 앱에 박아 둬요 */
+const val BLOG_PLATFORM_GUIDE = "네이버 블로그, 티스토리, velog, Medium, WordPress 블로그를 잘 가져와요. 다른 블로그는 연결되지 않거나 글이 일부만 들어올 수 있어요."
+
+/**
+ * 화면의 플랫폼 표시(동그라미)와 카테고리 고르기용. 서버는 플랫폼을 저장하지만 응답에 넣지 않아서(texts.md 4장) 앱이 주소로 정해요.
+ * 자기 도메인을 붙인 블로그는 서버만 알아서(피드 generator) 앱에서는 OTHER로 보여요
+ */
+enum class BlogPlatform {
+    NAVER, TISTORY, VELOG, MEDIUM, WORDPRESS, OTHER;
+
+    /** Medium·velog에는 카테고리가 없어 고를 수 없고 글을 전부 가져와요(texts.md 4장 "플랫폼별 카테고리") */
+    val categorySelectable: Boolean get() = this != VELOG && this != MEDIUM
+}
 
 fun blogPlatform(url: String): BlogPlatform {
     val host = url.trim().lowercase().substringAfter("://").substringBefore('/').substringBefore('?')
     return when {
         host == "naver.com" || host.endsWith(".naver.com") -> BlogPlatform.NAVER
         host.endsWith(".tistory.com") -> BlogPlatform.TISTORY
+        host == "velog.io" || host.endsWith(".velog.io") -> BlogPlatform.VELOG
+        host == "medium.com" || host.endsWith(".medium.com") -> BlogPlatform.MEDIUM
+        host.endsWith(".wordpress.com") -> BlogPlatform.WORDPRESS
         else -> BlogPlatform.OTHER
     }
 }
@@ -538,6 +564,8 @@ enum class PushType {
     ROOM_INVITE, ROOM_COMMENT, ROOM_DISBANDED,
     // 쇼츠(video.md 2장): 완성·실패
     VIDEO_DONE, VIDEO_FAILED,
+    // 내 목소리(characters.md 푸시): 미리 듣기를 받음·만들지 못함
+    VOICE_CLONE_READY, VOICE_CLONE_FAILED,
 }
 
 data class PushPayload(

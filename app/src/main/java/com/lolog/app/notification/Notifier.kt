@@ -40,6 +40,9 @@ class Notifier(private val context: Context) {
             // 실패 제목은 api-dto 푸시 표 그대로. 완성 문구는 명세에 없어서 정했어요
             PushType.PROFILE_CHARACTER_READY -> Triple(NotificationChannels.PUSH, "내 캐릭터가 완성됐어요", "이제 친구가 내 캐릭터를 만화에 쓸 수 있어요.")
             PushType.PROFILE_CHARACTER_FAILED -> Triple(NotificationChannels.PUSH, "캐릭터를 만들지 못했어요", "다른 사진으로 다시 만들어 볼 수 있어요.")
+            // 내 목소리 문구는 명세에 없어서 정했어요. 실패 문구는 목소리 고르기의 실패 칸과 같게 맞춰요
+            PushType.VOICE_CLONE_READY -> Triple(NotificationChannels.PUSH, "내 목소리가 만들어졌어요", "미리 들어 보고 내 캐릭터 목소리로 골라 보세요.")
+            PushType.VOICE_CLONE_FAILED -> Triple(NotificationChannels.PUSH, "내 목소리를 만들지 못했어요", "조용한 곳에서 다시 녹음해 주세요.")
             // 문구에는 닉네임만 넣어요(friends.md 3장). 예: "민수님이 친구 요청을 보냈어요"
             PushType.FRIEND_REQUEST -> Triple(
                 NotificationChannels.PUSH, "친구 요청이 왔어요",

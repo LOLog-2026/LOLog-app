@@ -146,9 +146,12 @@ fun SettingsScreen(
     onLoggedOut: () -> Unit,
     onChangePassword: () -> Unit,
     onNickname: () -> Unit,
+    /** 내 캐릭터 화면(친구 탭의 "내 캐릭터"와 같은 화면). ←를 누르면 설정으로 돌아와요 */
+    onMyCharacter: () -> Unit = {},
     onBlocked: () -> Unit,
     onAdmin: () -> Unit = {},
     onFeedback: () -> Unit = {},
+    onLicenses: () -> Unit = {},
     message: String? = null,
     onMessageShown: () -> Unit = {},
 ) {
@@ -256,7 +259,8 @@ fun SettingsScreen(
             if (state.me?.hasPassword == true) {
                 SettingsRow("비밀번호 바꾸기", onClick = onChangePassword)
             }
-            // 친구 기능 두 줄은 소셜 계정에도 보여요
+            // 내 캐릭터·친구 기능 줄은 소셜 계정·관리자 계정에도 보여요. 내 캐릭터는 닉네임이 없어도 만들 수 있어요(characters.md 3장)
+            SettingsRow("내 캐릭터", trailing = "그림 · 목소리", onClick = onMyCharacter)
             SettingsRow("닉네임 바꾸기", trailing = state.nickname ?: "정하기", onClick = onNickname)
             SettingsRow("차단한 사람", trailing = state.blockedCount?.let { "${it}명" }, onClick = onBlocked)
             // 알림 스위치는 API에 없어 안드로이드 알림 설정으로 보내요 (협의 2-5)
@@ -269,6 +273,7 @@ fun SettingsScreen(
             }
             // 오류 신고·의견 보내기(admin.md 5장). 관리자가 아니어도 보여요
             SettingsRow("의견 보내기", trailing = "오류 신고 · 의견", onClick = onFeedback)
+            SettingsRow("오픈소스 라이선스", onClick = onLicenses)
             SettingsRow("로그아웃") { askLogout = true }
             SettingsRow("탈퇴하고 모든 에피소드 지우기", danger = true) { askWithdraw = true }
             Spacer(Modifier.height(16.dp))

@@ -185,11 +185,14 @@ internal fun mockEditCard(card: CardDetail, patch: CardEdit, friends: List<Frien
  *  - 내 프로필: 처음엔 캐릭터 없음(시안 15), 내 회원 ID는 "1"
  *  - 프로필 캐릭터 만들기: 사진을 올리면 PROCESSING, 4초 뒤 READY(그림은 기본 화자 young-f-02를 빌려 씀) + 푸시 PROFILE_CHARACTER_READY.
  *    1MB보다 작은 사진은 실패(FAILED, 푸시 PROFILE_CHARACTER_FAILED)로 해서 실패 화면을 볼 수 있어요.
- *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 10MB 넘음 → 413
+ *    만드는 중에 또 → 409 CHARACTER_IN_PROGRESS, 하루 3번 넘게 → 409 CHARACTER_LIMIT, 5MB 넘음 → 413
  *    지우면 내 카드 화자에 붙은 내 캐릭터도 빠져요
  *  - 기본 화자 목소리(FR-CHAR-03): -01·-02로 끝나는 12명만 가짜 voiceUrl, 나머지는 null
  *  - 내 목소리 고르기(FR-CHAR-04): 저장하면 내 프로필 캐릭터의 voice가 바뀌어요(다시 만들어도 그대로).
  *    캐릭터 없음 → 404 CHARACTER_NOT_FOUND, 없거나 목소리 없는 기본 화자 id → 400 UNKNOWN_CHARACTER
+ *  - 내 목소리(docs PR #70, MockVoiceClone): 녹음을 올리면 PROCESSING → 5초 뒤 READY. 다 되면 voice = "self"로 고를 수 있고
+ *    (다 되기 전엔 409 VOICE_CLONE_NOT_READY), 지우거나 실패하면 고른 목소리가 "self"였으면 null.
+ *    목업 전용: 72KB(약 6초)보다 작은 녹음은 FAILED. 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND
  *  - 카드 9(고양이 줌 수업)는 처음부터 화자1에 기본 화자(young-f-01)가 붙어 있어요
  *  - 카드 고치기(PATCH)에서 그림 붙이기
  *    한 카드에서 같은 type+id를 두 화자에 → 400 DUPLICATE_CHARACTER
@@ -587,7 +590,25 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
             })
         }
     }
-    override suspend fun setProfileCharacterVoice(voice: String?) = lock.withLock { net(); friendBook.setVoice(voice) }
+    override suspend fun setProfileCharacterVoice(voice: String?) =
+        lock.withLock { net(); friendBook.setVoice(voice, myVoiceReady = voiceClone.ready()) }
+
+    // ── 내 목소리(docs PR #70, 목업만. 규칙은 MockVoiceClone 위 주석) ──
+    private val voiceClone = MockVoiceClone()
+
+    /** 명세처럼 실패하면 골랐던 "self"를 null로 돌려요 */
+    private fun currentVoiceClone(): VoiceClone? =
+        voiceClone.get().also { if (it?.status == VoiceCloneStatus.FAILED) friendBook.clearMyVoice() }
+
+    override suspend fun getVoiceClone(): VoiceClone? = lock.withLock { net(150); currentVoiceClone() }
+    override suspend fun uploadVoiceClone(file: java.io.File, shareWithFriends: Boolean) = lock.withLock {
+        net(500)
+        if (friendBook.profile().character == null) throw LologException(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
+        voiceClone.upload(file.length(), shareWithFriends)
+    }
+    override suspend fun setVoiceCloneShare(shareWithFriends: Boolean) = lock.withLock { net(); voiceClone.setShare(shareWithFriends) }
+    override suspend fun deleteVoiceClone() = lock.withLock { net(); voiceClone.delete(); friendBook.clearMyVoice() }
+
     override suspend fun sendFriendRequest(code: String): FriendRequest = lock.withLock { net(); friendBook.send(code) }
     override suspend fun requestByUserId(userId: Long): FriendRequest = lock.withLock { net(); friendBook.sendTo(userId, roomPeople(userId)) }
     override suspend fun friendRequests(direction: FriendRequestDirection): List<FriendRequest> =

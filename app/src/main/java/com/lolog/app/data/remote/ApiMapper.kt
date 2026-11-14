@@ -128,8 +128,8 @@ object ApiMapper {
         link = link?.ifBlank { null }, truncated = truncated, createdAt = createdAt, blogTitle = blogTitle?.ifBlank { null },
     )
 
-    fun BlogCheckDto.toModel() = BlogCheck(feedUrl, categories)
-    fun BlogDto.toModel() = Blog(id, siteUrl, title?.ifBlank { null }, categories)
+    fun BlogCheckDto.toModel() = BlogCheck(feedUrl, categories, optimized)
+    fun BlogDto.toModel() = Blog(id, siteUrl, title?.ifBlank { null }, categories, optimized)
     fun BlogPostDto.toModel() = BlogPost(title, link, category?.ifBlank { null }, publishedAt, cardId, textStatus(status))
     fun BlogPostPageDto.toModel() = BlogPostPage(posts.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
 
@@ -245,6 +245,12 @@ object ApiMapper {
     fun voiceBody(voice: String?): JsonObject = buildJsonObject {
         val v = voice?.trim()?.ifBlank { null }
         if (v == null) put("voice", JsonNull) else put("voice", v)
+    }
+
+    /** 모르는 상태 값이면 null(없는 것으로 봐요) */
+    fun VoiceCloneDto.toModel(): VoiceClone? {
+        val s = runCatching { VoiceCloneStatus.valueOf(status?.trim()?.uppercase().orEmpty()) }.getOrNull() ?: return null
+        return VoiceClone(s, previewUrl?.ifBlank { null }, failReason?.ifBlank { null }, shareWithFriends)
     }
 
     fun ProfileCharacterDto.toModel() =

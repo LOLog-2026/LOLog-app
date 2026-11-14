@@ -40,7 +40,9 @@ enum class BadgeKind(val path: String) {
         fun of(type: PushType): BadgeKind = when (type) {
             PushType.CARDS_CREATED -> CARDS
             PushType.COMIC_DONE, PushType.COMIC_FAILED, PushType.VIDEO_DONE, PushType.VIDEO_FAILED -> COMICS
-            PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED -> PROFILE_CHARACTER
+            // 내 목소리도 프로필 캐릭터 화면에서 만들어서 같은 점이에요(characters.md 푸시)
+            PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED,
+            PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED -> PROFILE_CHARACTER
             PushType.FRIEND_REQUEST -> FRIENDS
             PushType.ROOM_INVITE, PushType.ROOM_COMMENT, PushType.ROOM_DISBANDED -> ROOMS
         }

@@ -105,6 +105,17 @@ class RemoteLologRepository(
     override suspend fun deleteProfileCharacter() = call { api.deleteProfileCharacter() }
     override suspend fun setProfileCharacterVoice(voice: String?) =
         call { api.setProfileCharacterVoice(ApiMapper.voiceBody(voice)) }
+    // 내 목소리(characters.md "내 목소리", LOLog-api #86). 상태는 프로필 응답의 character.voiceClone이에요
+    override suspend fun getVoiceClone(): VoiceClone? = call { api.profile().character?.voiceClone?.toModel() }
+    override suspend fun uploadVoiceClone(file: java.io.File, shareWithFriends: Boolean) = call {
+        val audio = MultipartBody.Part.createFormData("audio", "voice.m4a", file.readBytes().toRequestBody("audio/mp4".toMediaType()))
+        val made = api.uploadVoiceClone(audio, "true".toRequestBody("text/plain".toMediaType()))
+        // 명세의 PUT에는 친구 쇼츠 동의가 없어요. 다시 녹음하면 서버는 예전 값을 그대로 두니, 고른 값과 다를 때만 PATCH로 맞춰요
+        val now = made.voiceClone?.shareWithFriends ?: false
+        if (now != shareWithFriends) api.setVoiceCloneShare(VoiceCloneShareDto(shareWithFriends))
+    }
+    override suspend fun setVoiceCloneShare(shareWithFriends: Boolean) = call { api.setVoiceCloneShare(VoiceCloneShareDto(shareWithFriends)) }
+    override suspend fun deleteVoiceClone() = call { api.deleteVoiceClone() }
     override suspend fun sendFriendRequest(code: String) =
         call { api.sendFriendRequest(FriendRequestCreate(friendCode = code.trim().uppercase(Locale.ROOT))).toModel() }
     override suspend fun friendRequests(direction: FriendRequestDirection) =

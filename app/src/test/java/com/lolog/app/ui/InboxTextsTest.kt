@@ -81,6 +81,9 @@ class InboxTextsTest {
         assertEquals(InboxBadge.CARDS, noti("CARDS_CREATED").badge())
         assertEquals(InboxBadge.COMIC, noti("COMIC_FAILED").badge())
         assertEquals(InboxBadge.CHARACTER, noti("PROFILE_CHARACTER_FAILED").badge())
+        assertEquals(InboxBadge.CHARACTER, noti("VOICE_CLONE_READY").badge())
+        assertEquals(InboxBadge.CHARACTER, noti("VOICE_CLONE_FAILED").badge())
+        assertEquals(InboxLine("내 목소리를 만들지 못했어요", "조용한 곳에서 다시 녹음해 주세요"), noti("VOICE_CLONE_FAILED").line())
         assertEquals(InboxBadge.FRIEND, noti("FRIEND_REQUEST").badge())
     }
 

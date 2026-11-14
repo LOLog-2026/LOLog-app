@@ -177,5 +177,28 @@ class MockTextsTest {
         assertEquals(BlogPlatform.NAVER, blogPlatform("https://m.blog.naver.com/minji/1"))
         assertEquals(BlogPlatform.TISTORY, blogPlatform("https://minji.tistory.com/rss"))
         assertEquals(BlogPlatform.OTHER, blogPlatform("https://example.com/naver.com"))
+        assertEquals(BlogPlatform.VELOG, blogPlatform("velog.io/@minji/posts"))
+        assertEquals(BlogPlatform.MEDIUM, blogPlatform("https://medium.com/@minji"))
+        assertEquals(BlogPlatform.MEDIUM, blogPlatform("https://minji.medium.com/"))
+        assertEquals(BlogPlatform.WORDPRESS, blogPlatform("https://minji.wordpress.com/2026/11/01/a"))
+        assertTrue(BlogPlatform.TISTORY.categorySelectable)
+        assertTrue(BlogPlatform.WORDPRESS.categorySelectable)
+        assertEquals(false, BlogPlatform.VELOG.categorySelectable)
+        assertEquals(false, BlogPlatform.MEDIUM.categorySelectable)
+    }
+
+    @Test
+    fun 카테고리는_3개까지이고_velog는_카테고리를_고를_수_없다() {
+        val many = error { texts.add("blog.naver.com/three", listOf("여행", "일상", "맛집", "공부")) }
+        assertEquals(ErrorCodes.INVALID_REQUEST, many?.code)
+        assertEquals("categories", many?.field)
+        assertEquals(3, texts.add("blog.naver.com/three", listOf("여행", "일상", "맛집")).categories.size)
+
+        val velog = texts.check("velog.io/@minji")
+        assertTrue(velog.categories.isEmpty())
+        assertEquals("categories", error { texts.add("velog.io/@minji", listOf("여행")) }?.field)
+        assertTrue(texts.add("velog.io/@minji", emptyList()).optimized)
+        // 따로 맞추지 않은 블로그
+        assertEquals(false, texts.check("https://minji.blogspot.com").optimized)
     }
 }
