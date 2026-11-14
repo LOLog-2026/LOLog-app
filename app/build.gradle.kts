@@ -51,8 +51,8 @@ android {
         applicationId = "com.lolog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
 
         // sherpa-onnx .so는 arm64-v8a만 넣어요(지원 님 stt/README.md)
         ndk { abiFilters += listOf("arm64-v8a") }
