@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lolog.app.data.model.BLOG_CATEGORY_COUNT_MAX
 import com.lolog.app.data.model.BLOG_CATEGORY_MAX
+import com.lolog.app.data.model.BLOG_PLATFORM_GUIDE
 import com.lolog.app.data.model.Blog
 import com.lolog.app.data.model.BlogCheck
 import com.lolog.app.data.model.BlogPlatform
@@ -50,7 +52,8 @@ import kotlinx.coroutines.launch
  *  - 연결한 블로그가 없으면: 주소 + [확인] → 블로그 줄 · 가져올 카테고리(피드 목록 + 직접 적기) · [블로그 연결]
  *  - 있으면: 블로그 카드(여럿이면 위아래로 쌓고 고른 것만 코랄 테두리) + 고른 블로그의 가져온 글 목록
  *    ⋯ → 카테고리 바꾸기 · 연결 끊기. 아래 [+ 블로그 더 연결하기]는 같은 연결 칸을 아래 창으로
- *  - 플랫폼 표시(N·T)는 서버가 주지 않아서(texts.md 4장) 블로그 주소로 정해요
+ *  - 플랫폼 표시(N·T·V·M·W)는 서버가 주지 않아서(texts.md 4장) 블로그 주소로 정해요
+ *  - 카테고리는 3개까지, Medium·velog는 카테고리가 없어 고르지 않고 전부 가져와요(texts.md 4장, LOLog-api #85)
  */
 
 /** 연결 칸(주소 확인 → 카테고리 고르기)의 상태. 빈 화면과 "더 연결하기" 창이 같이 써요 */
@@ -198,6 +201,8 @@ class TextBlogViewModel(private val repo: LologRepository) : ViewModel() {
             try {
                 val blog = repo.updateBlogCategories(id, e.options.filter { it in e.picked })
                 _state.update { s -> s.copy(busy = false, editing = null, blogs = s.blogs.map { if (it.id == id) blog else it }, toast = "카테고리를 바꿨어요") }
+                // 카테고리를 더하면 서버가 그 카테고리의 최근 글 3개를 바로 가져와서 목록을 다시 받아요
+                if (_state.value.selected?.id == id) loadPosts(id)
             } catch (ex: LologException) {
                 _state.update { it.copy(busy = false, toast = textErrorText(ex)) }
             }
@@ -222,14 +227,22 @@ class TextBlogViewModel(private val repo: LologRepository) : ViewModel() {
     fun toastShown() = _state.update { it.copy(toast = null) }
 }
 
-private fun BlogForm.toggled(c: String) = copy(picked = if (c in picked) picked - c else picked + c)
+/** 고르기·빼기. 이미 3개를 골랐으면 더 고르지 않고 안내해요(서버도 400) */
+internal fun BlogForm.toggled(c: String) = when {
+    c in picked -> copy(picked = picked - c, customError = null)
+    picked.size >= BLOG_CATEGORY_COUNT_MAX -> copy(customError = CATEGORY_COUNT_TEXT)
+    else -> copy(picked = picked + c, customError = null)
+}
 
-/** 직접 적은 카테고리를 알약으로 더해요(1~30자, 같은 이름은 막기). 더하면 바로 골라져요 */
-private fun BlogForm.withCustom(): BlogForm {
+private const val CATEGORY_COUNT_TEXT = "카테고리는 ${BLOG_CATEGORY_COUNT_MAX}개까지 골라요"
+
+/** 직접 적은 카테고리를 알약으로 더해요(1~30자, 같은 이름은 막기, 3개까지). 더하면 바로 골라져요 */
+internal fun BlogForm.withCustom(): BlogForm {
     val name = custom.trim()
     return when {
         name.isEmpty() || name.length > BLOG_CATEGORY_MAX -> copy(customError = "1~${BLOG_CATEGORY_MAX}자로 적어 주세요")
         options.any { it.equals(name, ignoreCase = true) } -> copy(customError = "이미 있는 카테고리예요")
+        picked.size >= BLOG_CATEGORY_COUNT_MAX -> copy(customError = CATEGORY_COUNT_TEXT)
         else -> copy(options = options + name, picked = picked + name, custom = "", customError = null)
     }
 }
@@ -237,6 +250,9 @@ private fun BlogForm.withCustom(): BlogForm {
 private fun platformLabel(platform: BlogPlatform) = when (platform) {
     BlogPlatform.NAVER -> "네이버 블로그"
     BlogPlatform.TISTORY -> "티스토리"
+    BlogPlatform.VELOG -> "velog"
+    BlogPlatform.MEDIUM -> "Medium"
+    BlogPlatform.WORDPRESS -> "WordPress"
     BlogPlatform.OTHER -> "블로그"
 }
 
@@ -315,7 +331,10 @@ fun BlogTab(vm: TextBlogViewModel, onCard: (Long) -> Unit, modifier: Modifier = 
         LologSheet(onDismiss = { menuFor = null }) {
             Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 24.dp)) {
                 Text(blog.title ?: blog.siteUrl, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(12.dp))
-                SheetRow("카테고리 바꾸기", LologColors.Ink) { menuFor = null; editFor = blog; vm.startEdit(blog) }
+                // Medium·velog는 카테고리가 없어 바꿀 것이 없어요
+                if (blogPlatform(blog.siteUrl).categorySelectable) {
+                    SheetRow("카테고리 바꾸기", LologColors.Ink) { menuFor = null; editFor = blog; vm.startEdit(blog) }
+                }
                 SheetRow("연결 끊기", LologColors.Rec) { menuFor = null; askDelete = blog }
             }
         }
@@ -381,7 +400,10 @@ private fun ConnectForm(form: BlogForm, vm: TextBlogViewModel, showEmpty: Boolea
     }
     Spacer(Modifier.height(6.dp))
     if (form.checkError != null) Text(form.checkError, fontSize = 12.sp, color = LologColors.Rec, modifier = Modifier.padding(start = 2.dp))
-    else Text("네이버 · 티스토리 블로그 주소를 넣고 \"확인\"을 눌러 주세요.", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(start = 2.dp))
+    else Text("블로그 주소를 넣고 \"확인\"을 눌러 주세요.", fontSize = 12.sp, color = LologColors.Muted, modifier = Modifier.padding(start = 2.dp))
+    // 따로 맞춘 플랫폼 안내(texts.md 4장 "앱 안내", 정함 11-14)
+    Spacer(Modifier.height(10.dp))
+    InfoBox(BLOG_PLATFORM_GUIDE)
 
     val check = form.check
     if (check == null) {
@@ -403,12 +425,12 @@ private fun ConnectForm(form: BlogForm, vm: TextBlogViewModel, showEmpty: Boolea
         return
     }
     Spacer(Modifier.height(14.dp))
+    val platform = blogPlatform(form.url).takeIf { it != BlogPlatform.OTHER } ?: blogPlatform(check.feedUrl)
     // 확인 응답에는 블로그 이름이 없어서 주소를 보여 줘요
     Row(
         Modifier.fillMaxWidth().clip(LologShape.sm).border(1.dp, LologColors.Line, LologShape.sm).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val platform = blogPlatform(form.url).takeIf { it != BlogPlatform.OTHER } ?: blogPlatform(check.feedUrl)
         PlatformDot(platform)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
@@ -416,10 +438,24 @@ private fun ConnectForm(form: BlogForm, vm: TextBlogViewModel, showEmpty: Boolea
             Text("${platformLabel(platform)} · RSS 찾음", fontSize = 11.5.sp, color = LologColors.Muted)
         }
     }
+    // 따로 맞추지 않은 블로그(Other)면 한 번 더 알려요(texts.md 4장 "앱 안내", optimized)
+    if (!check.optimized) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "이 블로그는 최적화되지 않았어요. 글이 일부만 들어올 수 있어요.",
+            fontSize = 12.sp, color = LologColors.Rec, modifier = Modifier.padding(start = 2.dp),
+        )
+    }
     Spacer(Modifier.height(16.dp))
-    CategoryPicker(form, vm::toggle, vm::setCustom, vm::addCustom)
+    if (platform.categorySelectable) {
+        CategoryPicker(form, vm::toggle, vm::setCustom, vm::addCustom)
+    } else {
+        Text("가져올 카테고리", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
+        Spacer(Modifier.height(6.dp))
+        Text("${platformLabel(platform)}에는 카테고리가 없어서 글을 전부 가져와요.", fontSize = 12.5.sp, color = LologColors.Muted)
+    }
     Spacer(Modifier.height(14.dp))
-    InfoBox("30분마다 새 글을 확인해요. 링크의 글을 긁지 않고 RSS에 담긴 글만 써요.\n내 블로그를 연결해 주세요.")
+    InfoBox("연결하면 카테고리마다 최근 글 3개를 바로 가져오고(안 고르면 블로그 전체에서 3개), 그 뒤로는 30분마다 새 글을 확인해요. 링크의 글을 긁지 않고 RSS에 담긴 글만 써요.")
 }
 
 /** "가져올 카테고리" + 알약 여러 개 고르기 + 직접 적기 칸 */
@@ -429,7 +465,7 @@ private fun CategoryPicker(form: BlogForm, onToggle: (String) -> Unit, onCustom:
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("가져올 카테고리", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink)
         Spacer(Modifier.weight(1f))
-        Text("안 고르면 전부 가져와요", fontSize = 11.sp, color = LologColors.Muted)
+        Text("${BLOG_CATEGORY_COUNT_MAX}개까지 · 안 고르면 전부 가져와요", fontSize = 11.sp, color = LologColors.Muted)
     }
     Spacer(Modifier.height(8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -466,12 +502,15 @@ private fun CategoryPill(text: String, on: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 플랫폼 동그라미: 네이버 N(초록), 티스토리 T(코랄), 그 밖 B */
+/** 플랫폼 동그라미: 네이버 N(초록), 티스토리 T(코랄), velog V·Medium M·WordPress W(진한 회색), 그 밖 B */
 @Composable
 private fun PlatformDot(platform: BlogPlatform) {
     val (label, color) = when (platform) {
         BlogPlatform.NAVER -> "N" to LologColors.Naver
         BlogPlatform.TISTORY -> "T" to LologColors.Accent
+        BlogPlatform.VELOG -> "V" to LologColors.Ink
+        BlogPlatform.MEDIUM -> "M" to LologColors.Ink
+        BlogPlatform.WORDPRESS -> "W" to LologColors.Ink
         BlogPlatform.OTHER -> "B" to LologColors.Muted
     }
     Box(Modifier.size(32.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {

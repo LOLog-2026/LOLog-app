@@ -128,8 +128,8 @@ object ApiMapper {
         link = link?.ifBlank { null }, truncated = truncated, createdAt = createdAt, blogTitle = blogTitle?.ifBlank { null },
     )
 
-    fun BlogCheckDto.toModel() = BlogCheck(feedUrl, categories)
-    fun BlogDto.toModel() = Blog(id, siteUrl, title?.ifBlank { null }, categories)
+    fun BlogCheckDto.toModel() = BlogCheck(feedUrl, categories, optimized)
+    fun BlogDto.toModel() = Blog(id, siteUrl, title?.ifBlank { null }, categories, optimized)
     fun BlogPostDto.toModel() = BlogPost(title, link, category?.ifBlank { null }, publishedAt, cardId, textStatus(status))
     fun BlogPostPageDto.toModel() = BlogPostPage(posts.map { it.toModel() }, nextCursor?.takeIf { it.isNotBlank() })
 

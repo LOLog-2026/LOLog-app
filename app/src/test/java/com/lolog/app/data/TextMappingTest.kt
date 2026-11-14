@@ -72,6 +72,16 @@ class TextMappingTest {
         assertEquals(3L, b.id)
         assertEquals("내 블로그", b.title)
         assertEquals(listOf("일상"), b.categories)
+        // optimized가 안 오면(예전 서버) 안내를 띄우지 않게 true로 봐요
+        assertTrue(b.optimized)
+        val other = LologJson.decodeFromString(
+            BlogDto.serializer(), """{"id":4,"siteUrl":"https://a.blogspot.com","categories":[],"optimized":false}""",
+        ).toModel()
+        assertEquals(false, other.optimized)
+        val check = LologJson.decodeFromString(
+            com.lolog.app.data.remote.BlogCheckDto.serializer(), """{"feedUrl":"https://a/rss","categories":["일상"],"optimized":false}""",
+        ).toModel()
+        assertEquals(false, check.optimized)
     }
 
     @Test

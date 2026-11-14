@@ -476,9 +476,9 @@ data class TextDto(
 @Serializable
 data class BlogCheckRequestDto(val url: String)
 
-/** POST /api/blogs/check → { feedUrl, categories[] } */
+/** POST /api/blogs/check → { feedUrl, categories[], optimized }. optimized가 안 오면 true로 봐요 */
 @Serializable
-data class BlogCheckDto(val feedUrl: String = "", val categories: List<String> = emptyList())
+data class BlogCheckDto(val feedUrl: String = "", val categories: List<String> = emptyList(), val optimized: Boolean = true)
 
 @Serializable
 data class BlogCreateDto(val url: String, val categories: List<String>)
@@ -486,9 +486,15 @@ data class BlogCreateDto(val url: String, val categories: List<String>)
 @Serializable
 data class BlogUpdateDto(val categories: List<String>)
 
-/** 블로그 응답 { id, siteUrl, title, categories } */
+/** 블로그 응답 { id, siteUrl, title, categories, optimized } */
 @Serializable
-data class BlogDto(val id: Long, val siteUrl: String = "", val title: String? = null, val categories: List<String> = emptyList())
+data class BlogDto(
+    val id: Long,
+    val siteUrl: String = "",
+    val title: String? = null,
+    val categories: List<String> = emptyList(),
+    val optimized: Boolean = true,
+)
 
 @Serializable
 data class BlogListDto(val blogs: List<BlogDto> = emptyList())
