@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 /*
  * 글로 만들기(글로 카드 만들기 시안 2·3·6·7·8번, LOLog-docs PR #62 texts.md 초안). 에피소드의 "글로 만들기"로 들어와요.
@@ -178,11 +180,15 @@ fun TextWriteScreen(initialTab: Int, onBack: () -> Unit, onCreated: (Long) -> Un
     }
 }
 
-/** 직접 쓰기 탭(시안 2·3번): 안내 · 제목 · 본문(남은 높이) · 장소 · 상황 · 카드 만들기 */
+/**
+ * 직접 쓰기 탭(시안 2·3번): 안내 · 제목 · 본문 · 장소 · 상황 · 카드 만들기.
+ * 키보드가 올라오면 남는 높이가 줄어서, 입력 영역은 스크롤되게 하고 본문 칸은 정해진 높이로 둬요.
+ * 그래야 쓰고 있는 줄로 화면이 따라가요(#142, 예전에는 본문이 남은 높이를 차지해 키보드에 가려졌어요)
+ */
 @Composable
 private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, modifier: Modifier) {
     Column(modifier.fillMaxWidth().imePadding()) {
-        Column(Modifier.weight(1f).padding(horizontal = 16.dp).padding(top = 14.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 14.dp, bottom = 8.dp)) {
             // 안내 문구는 명세(texts.md 3장) 그대로
             InfoBox("직접 겪은 일을 적어 보세요. 일기, 일지, 기억나는 일화를 만화와 쇼츠로 만들어 드려요.")
             Spacer(Modifier.height(14.dp))
@@ -196,7 +202,7 @@ private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, mo
                 singleLine = false, enabled = !state.sending,
                 counter = "%,d / %,d".format(textLength(state.body), TEXT_BODY_MAX),
                 error = state.tooLong,
-                modifier = Modifier.weight(1f).heightIn(min = 120.dp),
+                modifier = Modifier.fillMaxWidth().height(BODY_HEIGHT),
             )
             Spacer(Modifier.height(12.dp))
             FieldLabel("장소", note = "선택")
@@ -223,6 +229,9 @@ private fun WriteTab(state: TextWriteViewModel.State, vm: TextWriteViewModel, mo
         }
     }
 }
+
+/** 본문 칸 높이. 글이 더 길면 칸 안에서 스크롤돼요 */
+private val BODY_HEIGHT = 220.dp
 
 /** 칸 아래 빨간 글(블로그 탭의 직접 적기 오류와 같은 모양) */
 @Composable
