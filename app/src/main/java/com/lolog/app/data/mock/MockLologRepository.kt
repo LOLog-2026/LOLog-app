@@ -601,10 +601,10 @@ class MockLologRepository(private val tokens: TokenStore) : LologRepository {
         voiceClone.get().also { if (it?.status == VoiceCloneStatus.FAILED) friendBook.clearMyVoice() }
 
     override suspend fun getVoiceClone(): VoiceClone? = lock.withLock { net(150); currentVoiceClone() }
-    override suspend fun uploadVoiceClone(file: java.io.File, text: String, shareWithFriends: Boolean) = lock.withLock {
+    override suspend fun uploadVoiceClone(file: java.io.File, shareWithFriends: Boolean) = lock.withLock {
         net(500)
         if (friendBook.profile().character == null) throw LologException(ErrorCodes.CHARACTER_NOT_FOUND, "프로필 캐릭터가 없어요")
-        voiceClone.upload(file.length(), text, shareWithFriends)
+        voiceClone.upload(file.length(), shareWithFriends)
     }
     override suspend fun setVoiceCloneShare(shareWithFriends: Boolean) = lock.withLock { net(); voiceClone.setShare(shareWithFriends) }
     override suspend fun deleteVoiceClone() = lock.withLock { net(); voiceClone.delete(); friendBook.clearMyVoice() }

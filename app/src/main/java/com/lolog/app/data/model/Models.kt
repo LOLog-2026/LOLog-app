@@ -544,6 +544,8 @@ enum class PushType {
     ROOM_INVITE, ROOM_COMMENT, ROOM_DISBANDED,
     // 쇼츠(video.md 2장): 완성·실패
     VIDEO_DONE, VIDEO_FAILED,
+    // 내 목소리(characters.md 푸시): 미리 듣기를 받음·만들지 못함
+    VOICE_CLONE_READY, VOICE_CLONE_FAILED,
 }
 
 data class PushPayload(

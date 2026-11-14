@@ -191,7 +191,7 @@ class VoiceCloneViewModel(private val repo: LologRepository, private val app: Co
         if (s.uploading || s.step != Step.REVIEW) return@launch
         _state.update { it.copy(uploading = true) }
         try {
-            repo.uploadVoiceClone(file, VOICE_CLONE_SENTENCE, s.shareWithFriends)
+            repo.uploadVoiceClone(file, s.shareWithFriends)
             clearFiles()
             _state.update { it.copy(uploading = false, step = Step.MAKING) }
         } catch (e: LologException) {

@@ -30,11 +30,13 @@ import com.lolog.app.data.model.DefaultCharacter
 import com.lolog.app.data.model.ErrorCodes
 import com.lolog.app.data.model.Gender
 import com.lolog.app.data.model.MY_VOICE_ID
+import com.lolog.app.data.model.PushType
 import com.lolog.app.data.model.VoiceClone
 import com.lolog.app.data.model.VoiceCloneStatus
 import com.lolog.app.data.model.defaultCharacterCacheKey
 import com.lolog.app.data.repo.LologException
 import com.lolog.app.data.repo.LologRepository
+import com.lolog.app.ui.badges.OnPush
 import com.lolog.app.ui.components.*
 import com.lolog.app.ui.navigation.LocalContainer
 import com.lolog.app.ui.theme.LologColors
@@ -220,6 +222,8 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
             }
         }
     }
+    // 다 만듦·실패 푸시가 오면 5초를 기다리지 않고 바로 다시 받아요(푸시는 화면 밖을 위한 보조, characters.md 흐름 4)
+    OnPush(PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED) { vm.refreshClone() }
     LaunchedEffect(state.done) { if (state.done) onDone() }
     LaunchedEffect(state.toast) {
         val msg = state.toast ?: return@LaunchedEffect
@@ -267,6 +271,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
                             MyVoiceRowKind.MAKE, MyVoiceRowKind.FAILED, MyVoiceRowKind.DISABLED -> Column {
                                 MakeMyVoiceRow(
                                     failed = state.clone?.status == VoiceCloneStatus.FAILED,
+                                    failReason = state.clone?.failReason,
                                     enabled = !voice.recording,
                                     onClick = {
                                         if (state.cloneNotReady) scope.launch { snackbar.showSnackbar(VOICE_CLONE_NOT_READY) }

@@ -247,6 +247,12 @@ object ApiMapper {
         if (v == null) put("voice", JsonNull) else put("voice", v)
     }
 
+    /** 모르는 상태 값이면 null(없는 것으로 봐요) */
+    fun VoiceCloneDto.toModel(): VoiceClone? {
+        val s = runCatching { VoiceCloneStatus.valueOf(status?.trim()?.uppercase().orEmpty()) }.getOrNull() ?: return null
+        return VoiceClone(s, previewUrl?.ifBlank { null }, failReason?.ifBlank { null }, shareWithFriends)
+    }
+
     fun ProfileCharacterDto.toModel() =
         ProfileCharacter(profileCharacterStatus(status), thumbnailUrl?.ifBlank { null }, updatedAt, voice?.ifBlank { null })
 
