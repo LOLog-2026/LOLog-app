@@ -1,5 +1,7 @@
 package com.lolog.app.ui.screens.text
 
+import com.lolog.app.data.model.ErrorCodes
+import com.lolog.app.data.repo.LologException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -29,5 +31,13 @@ class BlogCategoryPickTest {
         assertEquals(three.picked, added.picked)
         assertEquals("카테고리는 3개까지 골라요", added.customError)
         assertEquals(setOf("여행", "독서"), form.toggled("여행").copy(custom = "독서").withCustom().picked)
+    }
+
+    @Test
+    fun 서버가_카테고리_목록을_거절하면_까닭에_맞는_문구다() {
+        fun text(message: String, field: String) = textErrorText(LologException(ErrorCodes.INVALID_REQUEST, message, field))
+        assertEquals("카테고리는 3개까지 골라요", text("카테고리는 3개까지 골라요.", "categories"))
+        assertEquals("이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요", text("이 블로그는 카테고리를 고를 수 없어요.", "categories"))
+        assertEquals("카테고리는 1~30자, 같은 이름은 한 번만 고를 수 있어요", text("카테고리는 1~30자예요.", "categories[1]"))
     }
 }
