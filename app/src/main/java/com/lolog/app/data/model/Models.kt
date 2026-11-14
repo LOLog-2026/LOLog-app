@@ -381,20 +381,40 @@ data class TextDetail(
     val blogTitle: String? = null,
 )
 
-/** POST /api/blogs/check: 링크로 찾은 RSS 주소와 피드에 나온 카테고리(저장 안 함) */
-data class BlogCheck(val feedUrl: String, val categories: List<String>)
+/**
+ * POST /api/blogs/check: 링크로 찾은 RSS 주소와 그 플랫폼 방식으로 읽은 카테고리(저장 안 함).
+ * optimized는 따로 맞춘 플랫폼(5개)이면 true, 그 밖 블로그(Other)면 false(texts.md 4장 "앱 안내"). 안 오면 true로 봐요
+ */
+data class BlogCheck(val feedUrl: String, val categories: List<String>, val optimized: Boolean = true)
 
 /** 연결한 블로그(texts.md 6장 블로그 응답). title은 RSS의 블로그 이름. categories가 비면 전부 가져와요 */
-data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>)
+data class Blog(val id: Long, val siteUrl: String, val title: String?, val categories: List<String>, val optimized: Boolean = true)
 
-/** 화면의 플랫폼 표시(N·T 동그라미)용. 서버는 플랫폼을 저장·응답하지 않아서(texts.md 4장) 앱이 주소로 정해요 */
-enum class BlogPlatform { NAVER, TISTORY, OTHER }
+/** 블로그 하나에 고르는 카테고리 수(texts.md 4장 "카테고리 고르기", 정함 11-14). 넘으면 서버가 400(field categories) */
+const val BLOG_CATEGORY_COUNT_MAX = 3
+
+/** 블로그 연결 화면 안내 문구(texts.md 4장 "앱 안내", 정함 11-14). 플랫폼 목록은 앱에 박아 둬요 */
+const val BLOG_PLATFORM_GUIDE = "네이버 블로그, 티스토리, velog, Medium, WordPress 블로그를 잘 가져와요. 다른 블로그는 연결되지 않거나 글이 일부만 들어올 수 있어요."
+
+/**
+ * 화면의 플랫폼 표시(동그라미)와 카테고리 고르기용. 서버는 플랫폼을 저장하지만 응답에 넣지 않아서(texts.md 4장) 앱이 주소로 정해요.
+ * 자기 도메인을 붙인 블로그는 서버만 알아서(피드 generator) 앱에서는 OTHER로 보여요
+ */
+enum class BlogPlatform {
+    NAVER, TISTORY, VELOG, MEDIUM, WORDPRESS, OTHER;
+
+    /** Medium·velog에는 카테고리가 없어 고를 수 없고 글을 전부 가져와요(texts.md 4장 "플랫폼별 카테고리") */
+    val categorySelectable: Boolean get() = this != VELOG && this != MEDIUM
+}
 
 fun blogPlatform(url: String): BlogPlatform {
     val host = url.trim().lowercase().substringAfter("://").substringBefore('/').substringBefore('?')
     return when {
         host == "naver.com" || host.endsWith(".naver.com") -> BlogPlatform.NAVER
         host.endsWith(".tistory.com") -> BlogPlatform.TISTORY
+        host == "velog.io" || host.endsWith(".velog.io") -> BlogPlatform.VELOG
+        host == "medium.com" || host.endsWith(".medium.com") -> BlogPlatform.MEDIUM
+        host.endsWith(".wordpress.com") -> BlogPlatform.WORDPRESS
         else -> BlogPlatform.OTHER
     }
 }
