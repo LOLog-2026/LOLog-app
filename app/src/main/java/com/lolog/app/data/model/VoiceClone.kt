@@ -11,7 +11,7 @@ enum class VoiceCloneStatus { PROCESSING, READY, FAILED }
 
 /**
  * 프로필 캐릭터 응답의 voiceClone. previewUrl은 READY일 때 미리 듣기 주소,
- * failReason은 FAILED일 때 까닭(앱은 받아도 화면에 쓰지 않아요), shareWithFriends는 친구 쇼츠 동의(선택)
+ * failReason은 FAILED일 때 까닭 코드(VOICE_TOO_SHORT 등, 실패 칸의 안내 글을 고를 때 써요), shareWithFriends는 친구 쇼츠 동의(선택)
  */
 data class VoiceClone(
     val status: VoiceCloneStatus,

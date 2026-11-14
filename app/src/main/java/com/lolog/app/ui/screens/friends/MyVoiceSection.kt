@@ -38,7 +38,7 @@ import com.lolog.app.ui.theme.LologShape
 /*
  * 목소리 고르기 맨 위 "내 목소리" 칸(내 목소리 만들기 시안 2판 1·8·9·10·11·12, 기준 LOLog-docs PR #70 병합 전)
  *  - 없음(null): 코랄 점선 "내 목소리 만들기 … 시작 ›"
- *  - 실패: 같은 모양에 이유를 나누지 않은 문구 하나 + "다시 ›"(failReason은 받아도 쓰지 않아요)
+ *  - 실패: 같은 모양에 실패 문구 + "다시 ›". 아래 글은 failReason 코드(characters.md "내 목소리" 워커 표)로 골라요
  *  - 만드는 중: 시계 줄, 고를 수 없음
  *  - 다 됨: 내 캐릭터 그림 + "내 목소리" + 꼬리표 "내 녹음" + 작은 글(친구 쇼츠 동의) + 들어 보기 + ⋮ + 라디오
  *  - 대화 녹음 중이면 만들기 칸을 끄고 회색 안내
@@ -66,9 +66,21 @@ const val VOICE_CLONE_RECORDING_NOTE = "대화를 녹음하는 중에는 내 목
 /** 서버가 아직 없을 때(Remote NOT_READY) 스낵바 */
 const val VOICE_CLONE_NOT_READY = "아직 서버 준비 중이에요"
 
-/** 실패 문구(이유를 나누지 않아요). 칸에서는 마침표에서 두 줄로 나눠 보여요 */
+/** 실패 문구. 제목은 하나이고, 아래 글은 까닭(failReason)마다 달라요. 모르는 까닭(서버·모델 오류 등)은 [VOICE_CLONE_FAILED_BODY] */
 const val VOICE_CLONE_FAILED_TITLE = "내 목소리를 만들지 못했어요"
 const val VOICE_CLONE_FAILED_BODY = "조용한 곳에서 다시 녹음해 주세요"
+
+/**
+ * 워커가 fail reason에 넣는 코드(characters.md "내 목소리" 워커, ai #44)마다 안내 글. 문구는 명세에 없어서 정했어요(초안).
+ * VOICE_TEXT_MISSING·VOICE_UNREADABLE은 사용자가 고칠 수 없는 까닭이라 "다시 녹음" 안내만 해요
+ */
+internal fun voiceCloneFailBody(failReason: String?): String = when (failReason?.trim()) {
+    "VOICE_TOO_SHORT" -> "말한 길이가 짧았어요. 문장을 끝까지 읽어 주세요"
+    "VOICE_TOO_LONG" -> "녹음이 너무 길었어요. 문장만 읽고 바로 멈춰 주세요"
+    "VOICE_TOO_QUIET" -> "소리가 작았어요. 조용한 곳에서 조금 더 크게 읽어 주세요"
+    "VOICE_UNREADABLE" -> "녹음 파일을 읽지 못했어요. 다시 녹음해 주세요"
+    else -> VOICE_CLONE_FAILED_BODY
+}
 
 /** 지우기 안내(⋮ 시트·확인 창) */
 const val VOICE_CLONE_DELETE_NOTE = "지우면 녹음 파일도 같이 지워져요. 내 목소리를 골라 뒀다면 \"고르지 않기\"로 바뀌어요."
@@ -88,9 +100,9 @@ internal fun VoiceCloneRecordingNote(modifier: Modifier = Modifier) {
     )
 }
 
-/** 만들기 칸: 코랄 점선 + 연한 코랄 바탕. [failed]면 실패 문구와 "다시 ›", [enabled]가 false면 회색(대화 녹음 중) */
+/** 만들기 칸: 코랄 점선 + 연한 코랄 바탕. [failed]면 실패 문구([failReason]으로 고름)와 "다시 ›", [enabled]가 false면 회색(대화 녹음 중) */
 @Composable
-internal fun MakeMyVoiceRow(failed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun MakeMyVoiceRow(failed: Boolean, enabled: Boolean, onClick: () -> Unit, failReason: String? = null) {
     val color = if (enabled) LologColors.Accent else LologColors.Line
     Row(
         Modifier.fillMaxWidth().clip(LologShape.md)
@@ -115,7 +127,7 @@ internal fun MakeMyVoiceRow(failed: Boolean, enabled: Boolean, onClick: () -> Un
                 fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (enabled) LologColors.Ink else LologColors.Muted,
             )
             Text(
-                if (failed) VOICE_CLONE_FAILED_BODY else "문장 하나를 읽으면 내 캐릭터가 내 목소리로 말해요",
+                if (failed) voiceCloneFailBody(failReason) else "문장 하나를 읽으면 내 캐릭터가 내 목소리로 말해요",
                 fontSize = 12.sp, color = LologColors.Muted, lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp),
             )
         }

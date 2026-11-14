@@ -10,6 +10,8 @@ import com.lolog.app.ui.screens.friends.introReady
 import com.lolog.app.ui.screens.friends.longEnough
 import com.lolog.app.ui.screens.friends.myVoiceRow
 import com.lolog.app.ui.screens.friends.shareNote
+import com.lolog.app.ui.screens.friends.VOICE_CLONE_FAILED_BODY
+import com.lolog.app.ui.screens.friends.voiceCloneFailBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,5 +62,16 @@ class VoiceCloneTest {
         // 서버·ai의 RECORD_SENTENCE와 글자가 같아야 해요(띄어쓰기·문장부호까지)
         assertEquals("오늘 친구랑 카페에 갔는데, 주문을 잘못해서 둘이 한참 웃었어요. 그래도 덕분에 즐거운 하루였어요.", VOICE_CLONE_SENTENCE)
         assertFalse(VOICE_CLONE_MAKING.contains("분"))
+    }
+
+    @Test
+    fun 실패_까닭_코드마다_안내_글이_다르고_모르는_까닭은_기본_글이다() {
+        assertEquals("말한 길이가 짧았어요. 문장을 끝까지 읽어 주세요", voiceCloneFailBody("VOICE_TOO_SHORT"))
+        assertEquals("소리가 작았어요. 조용한 곳에서 조금 더 크게 읽어 주세요", voiceCloneFailBody("VOICE_TOO_QUIET"))
+        assertEquals("녹음이 너무 길었어요. 문장만 읽고 바로 멈춰 주세요", voiceCloneFailBody("VOICE_TOO_LONG"))
+        assertEquals("녹음 파일을 읽지 못했어요. 다시 녹음해 주세요", voiceCloneFailBody("VOICE_UNREADABLE"))
+        assertEquals(VOICE_CLONE_FAILED_BODY, voiceCloneFailBody("VOICE_TEXT_MISSING"))
+        assertEquals(VOICE_CLONE_FAILED_BODY, voiceCloneFailBody("RuntimeError: CUDA out of memory"))
+        assertEquals(VOICE_CLONE_FAILED_BODY, voiceCloneFailBody(null))
     }
 }

@@ -271,6 +271,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
                             MyVoiceRowKind.MAKE, MyVoiceRowKind.FAILED, MyVoiceRowKind.DISABLED -> Column {
                                 MakeMyVoiceRow(
                                     failed = state.clone?.status == VoiceCloneStatus.FAILED,
+                                    failReason = state.clone?.failReason,
                                     enabled = !voice.recording,
                                     onClick = {
                                         if (state.cloneNotReady) scope.launch { snackbar.showSnackbar(VOICE_CLONE_NOT_READY) }
