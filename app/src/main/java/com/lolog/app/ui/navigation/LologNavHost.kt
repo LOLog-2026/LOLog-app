@@ -42,6 +42,7 @@ import com.lolog.app.ui.screens.friends.BlockedScreen
 import com.lolog.app.ui.screens.friends.NicknameScreen
 import com.lolog.app.ui.screens.friends.ProfileCharacterScreen
 import com.lolog.app.ui.screens.friends.VOICE_PICKED
+import com.lolog.app.ui.screens.friends.VoiceCloneScreen
 import com.lolog.app.ui.screens.friends.VoicePickScreen
 import com.lolog.app.ui.screens.friends.FriendRequestsScreen
 import com.lolog.app.ui.screens.friends.FriendsScreen
@@ -119,6 +120,7 @@ object Routes {
     const val NICKNAME = "nickname"
     const val PROFILE_CHARACTER = "profile/character"
     const val VOICE_PICK = "profile/character/voice"
+    const val VOICE_CLONE = "profile/character/voice/clone"
     const val BLOCKED = "blocked"
     const val OSS_LICENSES = "ossLicenses"
     const val SETTINGS = "settings"
@@ -651,7 +653,12 @@ fun LologNavHost(pendingPush: PushPayload?, onPushHandled: () -> Unit) {
                         nav.previousBackStackEntry?.savedStateHandle?.set(VOICE_MESSAGE, VOICE_PICKED)
                         nav.popBackStack()
                     },
+                    onMakeVoice = { nav.navigate(Routes.VOICE_CLONE) { launchSingleTop = true } },
                 )
+            }
+            // 내 목소리 만들기: 나가기·만드는 중 뒤로는 목소리 고르기로 돌아가요(만드는 중 줄이 보여요)
+            composable(Routes.VOICE_CLONE) {
+                VoiceCloneScreen(onBack = { nav.popBackStack() }, onDone = { nav.popBackStack() })
             }
             composable(Routes.NICKNAME) {
                 NicknameScreen(

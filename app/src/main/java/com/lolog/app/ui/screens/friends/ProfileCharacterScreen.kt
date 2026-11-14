@@ -34,6 +34,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.lolog.app.data.model.DefaultCharacter
+import com.lolog.app.data.model.MY_VOICE_ID
 import com.lolog.app.data.model.ProfileCharacter
 import com.lolog.app.data.model.ProfileCharacterStatus
 import com.lolog.app.data.repo.LologException
@@ -309,6 +310,7 @@ private fun MyVoiceRow(
             Text(
                 when {
                     voiceId == null -> "아직 안 골랐어요. 쇼츠에서 알아서 골라 읽어요."
+                    voiceId == MY_VOICE_ID -> "내 녹음으로 만든 목소리"
                     else -> picked?.label ?: "고른 목소리가 있어요"
                 },
                 fontSize = 12.sp, color = LologColors.Muted, lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp),

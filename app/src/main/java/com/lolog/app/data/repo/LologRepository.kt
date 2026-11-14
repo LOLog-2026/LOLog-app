@@ -95,6 +95,20 @@ interface LologRepository {
      * 없거나 목소리가 없는 기본 화자 id → 400 UNKNOWN_CHARACTER, 프로필 캐릭터가 없음 → 404 CHARACTER_NOT_FOUND
      */
     suspend fun setProfileCharacterVoice(voice: String?)
+
+    // 내 목소리(FR-CHAR-05, LOLog-docs PR #70 병합 전). 서버가 아직 없어 Remote는 NOT_READY
+    /** 프로필 캐릭터 응답의 voiceClone. 만든 적이 없으면 null */
+    suspend fun getVoiceClone(): VoiceClone?
+    /**
+     * PUT .../voice-clone multipart { audio, consent=true, shareWithFriends, text } → 202 PROCESSING. 다시 올리면 바꿔요.
+     * file은 m4a, text는 읽은 문장(워커의 ref_text). 만드는 중이면 409 VOICE_CLONE_IN_PROGRESS,
+     * 대화 녹음 중이면 409 RECORDING_IN_PROGRESS, 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND
+     */
+    suspend fun uploadVoiceClone(file: java.io.File, text: String, shareWithFriends: Boolean)
+    /** PATCH .../voice-clone { shareWithFriends }: 친구 쇼츠 동의만 바꿔요. 내 목소리가 없으면 404 VOICE_CLONE_NOT_FOUND */
+    suspend fun setVoiceCloneShare(shareWithFriends: Boolean)
+    /** DELETE .../voice-clone: 녹음도 같이 지워요. 프로필 캐릭터 목소리가 "self"였으면 안 고름(null)으로 돌아가요 */
+    suspend fun deleteVoiceClone()
     /** 친구 코드는 앞뒤 공백을 빼고 대문자로 보내요. 상대가 이미 나에게 요청했으면 status가 ACCEPTED */
     suspend fun sendFriendRequest(code: String): FriendRequest
     /**
