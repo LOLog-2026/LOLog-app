@@ -162,8 +162,9 @@ fun ProfileCharacterScreen(
 
     // 푸시(완성·실패)가 오면 이 화면도 바로 새로 불러요
     LaunchedEffect(Unit) { vm.load() }
-    // 다 만듦·실패 푸시가 오면 다시 받고, 내 캐릭터 새 소식 점을 꺼요(inbox.md 4장)
-    OnPush(PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED) { vm.load() }
+    // 캐릭터·내 목소리의 다 만듦·실패 푸시가 오면 다시 받고, 내 캐릭터 새 소식 점을 꺼요(inbox.md 4장).
+    // 내 목소리가 실패하면 서버가 골랐던 "self"를 비워서, 이 화면의 "내 목소리" 줄도 새로 받아야 해요
+    OnPush(*PROFILE_CHARACTER_SCREEN_PUSHES) { vm.load() }
     SeenBadge(BadgeKind.PROFILE_CHARACTER)
     LaunchedEffect(state.toast) {
         val msg = state.toast ?: return@LaunchedEffect
@@ -292,6 +293,12 @@ fun ProfileCharacterScreen(
 }
 
 /** "내 목소리" 줄(시안 5·8). 안 골랐으면 "고르기 ›", 골랐으면 label + 들어 보기 + "바꾸기 ›" */
+/** 내 캐릭터 화면이 다시 받는 푸시. 같은 점(profileCharacter)에 들어가는 푸시와 같아요 */
+internal val PROFILE_CHARACTER_SCREEN_PUSHES = arrayOf(
+    PushType.PROFILE_CHARACTER_READY, PushType.PROFILE_CHARACTER_FAILED,
+    PushType.VOICE_CLONE_READY, PushType.VOICE_CLONE_FAILED,
+)
+
 @Composable
 private fun MyVoiceRow(
     voiceId: String?,
