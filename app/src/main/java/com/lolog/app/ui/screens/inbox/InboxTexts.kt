@@ -44,7 +44,7 @@ fun InboxItem.badge(): InboxBadge = when (this) {
     is InboxItem.Notification -> when (type) {
         "CARDS_CREATED" -> InboxBadge.CARDS
         "COMIC_DONE", "COMIC_FAILED", "VIDEO_DONE", "VIDEO_FAILED" -> InboxBadge.COMIC
-        "PROFILE_CHARACTER_READY", "PROFILE_CHARACTER_FAILED" -> InboxBadge.CHARACTER
+        "PROFILE_CHARACTER_READY", "PROFILE_CHARACTER_FAILED", "VOICE_CLONE_READY", "VOICE_CLONE_FAILED" -> InboxBadge.CHARACTER
         "FRIEND_REQUEST" -> InboxBadge.FRIEND
         "ROOM_INVITE", "ROOM_COMMENT", "ROOM_DISBANDED" -> InboxBadge.ROOM
         else -> InboxBadge.OTHER
@@ -65,6 +65,8 @@ fun InboxItem.line(): InboxLine = when (this) {
         "VIDEO_FAILED" -> InboxLine("쇼츠를 만들지 못했어요", "에피소드에서 다시 만들 수 있어요")
         "PROFILE_CHARACTER_READY" -> InboxLine("내 캐릭터 그림이 생겼어요", "친구들이 화자 그림으로 쓸 수 있어요")
         "PROFILE_CHARACTER_FAILED" -> InboxLine("내 캐릭터를 만들지 못했어요", "사진을 다시 골라 주세요")
+        "VOICE_CLONE_READY" -> InboxLine("내 목소리가 만들어졌어요", "미리 들어 보고 고를 수 있어요")
+        "VOICE_CLONE_FAILED" -> InboxLine("내 목소리를 만들지 못했어요", "조용한 곳에서 다시 녹음해 주세요")
         "FRIEND_REQUEST" -> InboxLine(
             data["nickname"]?.takeIf { it.isNotBlank() }?.let { "${it}님이 친구 요청을 보냈어요" } ?: "친구 요청이 왔어요",
             "받은 요청에서 수락할 수 있어요",

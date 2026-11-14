@@ -2,8 +2,8 @@ package com.lolog.app.data.model
 
 /*
  * 내 목소리(FR-CHAR-05). 녹음 하나를 올리면 우리 서버(Jetson)가 내 목소리를 만들어 쇼츠에서 내 캐릭터가 내 목소리로 말해요.
- * 기준: LOLog-docs PR #70(병합 전) spec/characters.md "내 목소리". 서버가 아직 없어 목업만 동작해요.
- * 푸시 VOICE_CLONE_READY·VOICE_CLONE_FAILED는 이름만 정해졌고, 받는 코드는 아직 없어요.
+ * 기준: LOLog-docs spec/characters.md "내 목소리", 서버는 LOLog-api #86.
+ * 푸시 VOICE_CLONE_READY·VOICE_CLONE_FAILED는 알림·알림 목록·목소리 고르기 새로고침으로 받아요.
  */
 
 /** PROCESSING 만드는 중 → READY 다 됨 / FAILED 실패. 만든 적이 없으면 VoiceClone 자체가 null */

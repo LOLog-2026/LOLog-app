@@ -96,11 +96,12 @@ interface LologRepository {
      */
     suspend fun setProfileCharacterVoice(voice: String?)
 
-    // 내 목소리(FR-CHAR-05, LOLog-docs PR #70 병합 전). 서버가 아직 없어 Remote는 NOT_READY
+    // 내 목소리(FR-CHAR-05, LOLog-docs characters.md "내 목소리", LOLog-api #86)
     /** 프로필 캐릭터 응답의 voiceClone. 만든 적이 없으면 null */
     suspend fun getVoiceClone(): VoiceClone?
     /**
-     * PUT .../voice-clone multipart { audio, consent=true, shareWithFriends, text } → 202 PROCESSING. 다시 올리면 바꿔요.
+     * PUT .../voice-clone multipart { audio, text, consent=true } → 202 PROCESSING. 다시 올리면 바꿔요.
+     * 명세의 PUT에는 친구 쇼츠 동의가 없어서, shareWithFriends는 올린 뒤 서버 값과 다를 때 PATCH로 맞춰요.
      * file은 m4a, text는 읽은 문장(워커의 ref_text). 만드는 중이면 409 VOICE_CLONE_IN_PROGRESS,
      * 대화 녹음 중이면 409 RECORDING_IN_PROGRESS, 프로필 캐릭터가 없으면 404 CHARACTER_NOT_FOUND
      */

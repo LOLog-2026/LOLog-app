@@ -289,7 +289,27 @@ data class ProfileResponse(
  * voice는 고른 목소리(기본 화자 id). 안 골랐으면 null (FR-CHAR-04, docs PR #59)
  */
 @Serializable
-data class ProfileCharacterDto(val status: String? = null, val thumbnailUrl: String? = null, val updatedAt: String = "", val voice: String? = null)
+data class ProfileCharacterDto(
+    val status: String? = null,
+    val thumbnailUrl: String? = null,
+    val updatedAt: String = "",
+    val voice: String? = null,
+    /** 내 목소리(FR-CHAR-05). 만든 적이 없으면 null (characters.md "내 목소리", LOLog-api #86) */
+    val voiceClone: VoiceCloneDto? = null,
+)
+
+/** status PROCESSING·READY·FAILED. previewUrl은 미리 듣기 wav의 10분 서명 주소, failReason은 실패 까닭 */
+@Serializable
+data class VoiceCloneDto(
+    val status: String? = null,
+    val previewUrl: String? = null,
+    val failReason: String? = null,
+    val shareWithFriends: Boolean = false,
+)
+
+/** PATCH /api/me/profile/character/voice-clone { shareWithFriends } */
+@Serializable
+data class VoiceCloneShareDto(val shareWithFriends: Boolean)
 
 // PATCH /api/me/profile/character/voice 본문 { "voice": "young-f-02" | null }은 null을 꼭 보내야 해서
 // DTO 대신 ApiMapper.voiceBody()가 JsonObject로 직접 만들어요.

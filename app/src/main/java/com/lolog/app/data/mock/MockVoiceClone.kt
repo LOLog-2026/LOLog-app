@@ -4,7 +4,7 @@ import com.lolog.app.data.model.*
 import com.lolog.app.data.repo.LologException
 
 /**
- * 내 목소리 목업(LOLog-docs PR #70 병합 전). 서버가 아직 없어 앱 목업에서만 동작해요.
+ * 내 목소리 목업(LOLog-docs characters.md "내 목소리"). 실서버는 RemoteLologRepository가 LOLog-api #86에 연결해요.
  *  - 처음엔 null(만든 적 없음). 녹음을 올리면 PROCESSING, 약 5초 뒤 READY(previewUrl은 기본 화자 young-f-01의 목소리를 빌려 씀)
  *  - 목업 전용: 녹음 파일이 72KB(96kbps로 약 6초)보다 작으면 5초 뒤 FAILED(실패 칸을 보려고)
  *  - 만드는 중에 또 올리면 409 VOICE_CLONE_IN_PROGRESS, 4MB를 넘으면 413 PAYLOAD_TOO_LARGE
