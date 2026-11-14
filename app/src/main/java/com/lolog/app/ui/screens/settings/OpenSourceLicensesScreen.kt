@@ -63,6 +63,35 @@ internal val OSS_ITEMS = listOf(
     ),
 )
 
+/**
+ * 서버에서 그림·글·목소리를 만드는 AI 모델과 자료(#139). 앱 파일에는 들어 있지 않지만, 앱에 나오는 결과물을 만드는 데 써서 출처를 적어요.
+ * 모델을 바꾸면 이 목록도 같이 고쳐요(LOLog-ai worker, LOLog-infra jetson 설정).
+ */
+internal val SERVER_OSS_ITEMS = listOf(
+    OssItem(
+        "FLUX.2 [klein] 4B", "Black Forest Labs",
+        "4컷만화, 프로필 캐릭터, 쇼츠 장면, 기본 화자 그림", "Apache License 2.0",
+        "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B", "apache-2.0.txt",
+    ),
+    OssItem(
+        "Qwen3.5-4B", "Alibaba Qwen",
+        "대화에서 이야기 찾기, 만화·쇼츠 콘티, 글로 만든 에피소드", "Apache License 2.0",
+        "https://huggingface.co/Qwen/Qwen3.5-4B", "apache-2.0.txt",
+    ),
+    OssItem(
+        "Qwen3-TTS 0.6B Base · 1.7B VoiceDesign", "Alibaba Qwen",
+        "쇼츠 대사와 내 목소리, 기본 화자 목소리", "Apache License 2.0",
+        "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base", "apache-2.0.txt",
+    ),
+    OssItem(
+        "anime_face_detection", "DeepGHS",
+        "만화 말풍선 자리 찾기", "MIT License",
+        "https://huggingface.co/deepghs/anime_face_detection", "mit-anime-face-detection.txt",
+    ),
+    OssItem("Jua", "The Jua Project Authors", "만화 말풍선·쇼츠 자막 글꼴", "SIL Open Font License 1.1", "https://fonts.google.com/specimen/Jua", "ofl-jua.txt"),
+    OssItem("Freesound 효과음·배경음", "Freesound 올린 사람들", "쇼츠 효과음·배경음(CC0만 씀)", "CC0 1.0 Universal", "https://freesound.org", "cc0-1.0.txt"),
+)
+
 @Composable
 fun OpenSourceLicensesScreen(onBack: () -> Unit) {
     var open by remember { mutableStateOf<OssItem?>(null) }
@@ -87,22 +116,38 @@ fun OpenSourceLicensesScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            items(OSS_ITEMS, key = { it.name }) { o ->
-                Column(
-                    Modifier.fillMaxWidth().clickable { open = o }.padding(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(o.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink, modifier = Modifier.weight(1f))
-                        Text("›", fontSize = 15.sp, color = LologColors.Muted)
-                    }
-                    Text("${o.author} · ${o.use}", fontSize = 12.5.sp, color = LologColors.Muted, lineHeight = 18.sp)
-                    Text(o.license, fontSize = 12.5.sp, color = LologColors.Accent, fontWeight = FontWeight.SemiBold)
-                }
-                HorizontalDivider(color = LologColors.Line)
+            items(OSS_ITEMS, key = { it.name }) { o -> OssRow(o) { open = o } }
+            item {
+                Text(
+                    "서버 AI 모델", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LologColors.Ink,
+                    modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
+                )
+                Text(
+                    "앱에는 들어 있지 않고, LOLog 서버에서 만화·쇼츠·목소리를 만들 때 써요. 대화는 외부 회사로 보내지 않아요.",
+                    fontSize = 13.sp, color = LologColors.Muted, lineHeight = 19.sp,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
             }
+            items(SERVER_OSS_ITEMS, key = { "server-" + it.name }) { o -> OssRow(o) { open = o } }
         }
     }
+}
+
+/** 목록 한 줄: 이름 · 만든 곳과 쓰는 곳 · 라이선스. 누르면 원문 */
+@Composable
+private fun OssRow(o: OssItem, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(o.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = LologColors.Ink, modifier = Modifier.weight(1f))
+            Text("›", fontSize = 15.sp, color = LologColors.Muted)
+        }
+        Text("${o.author} · ${o.use}", fontSize = 12.5.sp, color = LologColors.Muted, lineHeight = 18.sp)
+        Text(o.license, fontSize = 12.5.sp, color = LologColors.Accent, fontWeight = FontWeight.SemiBold)
+    }
+    HorizontalDivider(color = LologColors.Line)
 }
 
 /** 라이선스 원문. 원문 파일이 없는 항목(Google 서비스)은 약관 주소만 보여요 */
