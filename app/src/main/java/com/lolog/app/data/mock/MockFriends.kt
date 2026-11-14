@@ -56,7 +56,7 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
 
     /**
      * 사진을 올려 만들기(characters.md 3장). 만드는 중이면 409 CHARACTER_IN_PROGRESS, 오늘 3번 받았으면 409 CHARACTER_LIMIT,
-     * 10MB 넘으면 413. 다시 만드는 동안은 예전 그림을 그대로 둬요
+     * 5MB 넘으면 413. 다시 만드는 동안은 예전 그림을 그대로 둬요
      */
     fun uploadCharacter(bytes: Int): ProfileCharacter {
         if (bytes > PHOTO_MAX_BYTES) fail(ErrorCodes.PAYLOAD_TOO_LARGE, "사진이 너무 큽니다")
@@ -241,7 +241,7 @@ internal class MockFriends(private val nowMs: () -> Long = System::currentTimeMi
 
     companion object {
         const val MY_USER_ID = 1L
-        const val PHOTO_MAX_BYTES = 10 * 1024 * 1024
+        const val PHOTO_MAX_BYTES = 5 * 1024 * 1024
         const val CHARACTER_DAILY_LIMIT = 3
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val MY_CODE = "A7K3QX2M"
