@@ -7,29 +7,19 @@ import android.util.Log
 import java.io.File
 
 /*
- * 내 목소리 만들기 문장 녹음 도우미. 대화 녹음(recording/)과 따로, 화면 안에서만 써요.
+ * 내 목소리 녹음 도우미. 대화 녹음(recording/)과 따로, 화면 안에서만 써요.
  *  - MediaRecorder로 AAC(m4a) 한 파일. 파일은 앱 cacheDir/voice_clone 안에만 둬요
  *  - 녹음 파일은 만들기를 시작했거나 화면을 나가면 지워요(VoiceCloneViewModel)
  */
 
-/** 문장 하나 최대 길이. 넘으면 저절로 끝나요(임시, 팀 확인 필요) */
-const val VOICE_SAMPLE_MAX_MS = 15_000L
+/** 녹음 최대 길이. 넘으면 저절로 끝나요(명세 #70: 5~10초 권장, 길수록 쇼츠 대사를 읽는 시간이 늘어요) */
+const val VOICE_SAMPLE_MAX_MS = 10_000L
 
-/** 이보다 짧으면 "조금 더 길게 읽어 주세요" */
-const val VOICE_SAMPLE_MIN_MS = 1_000L
+/** 녹음 하한(명세 #70). 이보다 짧으면 다시 녹음해요. 소리 크기는 워커가 검사해요 */
+const val VOICE_SAMPLE_MIN_MS = 5_000L
 
-/** 녹음 중 가장 큰 소리(maxAmplitude, 0~32767)가 이보다 작으면 "소리가 작아요"(임시 값) */
-const val VOICE_SAMPLE_QUIET_AMPLITUDE = 1_500
-
-/** 문장 녹음 판정 */
-enum class TakeCheck { TOO_SHORT, TOO_QUIET, OK }
-
-/** 녹음 길이와 가장 큰 소리로 판정해요. 짧은 것을 먼저 봐요 */
-internal fun checkTake(durationMs: Long, peakAmplitude: Int): TakeCheck = when {
-    durationMs < VOICE_SAMPLE_MIN_MS -> TakeCheck.TOO_SHORT
-    peakAmplitude < VOICE_SAMPLE_QUIET_AMPLITUDE -> TakeCheck.TOO_QUIET
-    else -> TakeCheck.OK
-}
+/** 하한을 넘었는지 */
+internal fun longEnough(durationMs: Long): Boolean = durationMs >= VOICE_SAMPLE_MIN_MS
 
 /** 녹음 파일을 두는 곳 */
 internal fun voiceCloneDir(context: Context) = File(context.cacheDir, "voice_clone")
@@ -61,7 +51,7 @@ internal class VoiceSampleRecorder(private val context: Context) {
         }
     }
 
-    /** 지난번 부른 뒤로 가장 큰 소리(0~32767) */
+    /** 지난번 부른 뒤로 가장 큰 소리(0~32767). 물결 그리기에만 써요 */
     fun amplitude(): Int = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
 
     /** 녹음 끝. 너무 짧아 파일이 안 생기면 false */

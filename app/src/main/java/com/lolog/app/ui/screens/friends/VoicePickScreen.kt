@@ -142,7 +142,18 @@ class VoicePickViewModel(private val repo: LologRepository) : ViewModel() {
         return _state.value.clone?.previewUrl
     }
 
-    /** 내 목소리 지우기. 고른 목소리가 내 목소리였으면 서버(목업)가 안 고름으로 돌려요 */
+    /** ⋮ 시트의 친구 쇼츠 스위치. 먼저 바꿔 보여 주고, 실패하면 되돌려요 */
+    fun setShare(share: Boolean) = viewModelScope.launch {
+        val before = _state.value.clone ?: return@launch
+        _state.update { it.copy(clone = before.copy(shareWithFriends = share)) }
+        try {
+            repo.setVoiceCloneShare(share)
+        } catch (e: LologException) {
+            _state.update { it.copy(clone = it.clone?.copy(shareWithFriends = before.shareWithFriends), toast = errorText(e)) }
+        }
+    }
+
+    /** 내 목소리 지우기. 고른 목소리가 "self"였으면 서버(목업)가 안 고름으로 돌려요 */
     fun deleteClone() = viewModelScope.launch {
         if (_state.value.deleting) return@launch
         _state.update { it.copy(deleting = true) }
@@ -253,9 +264,9 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
                     }
                     if (state.cloneLoaded) item(key = "mine") {
                         when (myVoiceRow(state.clone?.status, voice.recording)) {
-                            MyVoiceRowKind.MAKE, MyVoiceRowKind.DISABLED -> Column {
+                            MyVoiceRowKind.MAKE, MyVoiceRowKind.FAILED, MyVoiceRowKind.DISABLED -> Column {
                                 MakeMyVoiceRow(
-                                    failedBefore = state.clone?.status == VoiceCloneStatus.FAILED,
+                                    failed = state.clone?.status == VoiceCloneStatus.FAILED,
                                     enabled = !voice.recording,
                                     onClick = {
                                         if (state.cloneNotReady) scope.launch { snackbar.showSnackbar(VOICE_CLONE_NOT_READY) }
@@ -269,7 +280,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
                                 selected = state.selected == MY_VOICE_ID, onClick = { vm.select(MY_VOICE_ID) },
                                 image = { MyVoiceImage(state.myThumbnail) },
                                 title = "내 목소리", titleTag = { MyRecordingTag() },
-                                subtitle = if (voice.playingId == MY_VOICE_ID) "듣는 중" else "내 녹음으로 만든 목소리",
+                                subtitle = if (voice.playingId == MY_VOICE_ID) "듣는 중" else shareNote(state.clone?.shareWithFriends == true),
                             ) {
                                 VoicePreviewButton(state.clone?.previewUrl, MY_VOICE_ID, voice, freshUrl = { vm.freshMyVoiceUrl() }, compact = true)
                                 MyVoiceMoreButton { voiceSheet = true }
@@ -325,6 +336,8 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
 
     if (voiceSheet) {
         MyVoiceSheet(
+            shareWithFriends = state.clone?.shareWithFriends == true,
+            onShareChange = vm::setShare,
             onDismiss = { voiceSheet = false },
             onRerecord = { voiceSheet = false; voice.stop(); onMakeVoice() },
             onDelete = { voiceSheet = false; askDelete = true },
@@ -333,7 +346,7 @@ fun VoicePickScreen(onBack: () -> Unit, onDone: () -> Unit, onMakeVoice: () -> U
     if (askDelete) {
         LologDialog(
             title = "내 목소리를 지울까요?",
-            body = "앞으로 만들 쇼츠는 기본 목소리로 읽어요",
+            body = VOICE_CLONE_DELETE_NOTE,
             confirmText = "지우기", danger = true, loading = state.deleting,
             onConfirm = { voice.stop(); vm.deleteClone(); askDelete = false },
             onDismiss = { askDelete = false },
