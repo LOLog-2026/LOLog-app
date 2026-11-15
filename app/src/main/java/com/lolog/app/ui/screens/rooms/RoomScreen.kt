@@ -366,7 +366,7 @@ internal data class Pressed(val post: RoomPost, val bounds: Rect)
 @Composable
 fun RoomScreen(
     roomId: Long,
-    /** 처음 열 탭(0 = 4컷, 2 = 대화). 알림함의 방 댓글 알림은 대화 탭으로 */
+    /** 처음 열 탭(0 = 4컷, 1 = 대화). 알림함의 방 댓글 알림은 대화 탭으로 */
     initialTab: Int = 0,
     onBack: () -> Unit,
     /** 방을 떠남(나가기·해산·방이 없어짐). 방 목록으로 돌아가 [message]를 스낵바로 띄워요 */
@@ -387,8 +387,8 @@ fun RoomScreen(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
-    // 위 탭: 0 = 4컷, 1 = 미디어(쇼츠), 2 = 대화
-    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
+    // 위 탭: 0 = 4컷, 1 = 대화
+    var tab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
     var zoom by remember { mutableStateOf<RoomPost?>(null) }
     var pressed by remember { mutableStateOf<Pressed?>(null) }
     var replyTo by remember { mutableStateOf<RoomPost?>(null) }
@@ -417,7 +417,7 @@ fun RoomScreen(
     LaunchedEffect(state.snackbar) {
         state.snackbar?.let { (if (commentPost != null) sheetSnackbar else snackbar).showSnackbar(it); vm.toast(null) }
     }
-    LaunchedEffect(tab) { if (tab == 2) vm.chatSeen() }
+    LaunchedEffect(tab) { if (tab == 1) vm.chatSeen() }
     BackHandler(enabled = pressed != null) { pressed = null }
 
     // 최신 좋아요·댓글 수로 보여 주려고 id로 다시 찾아요
@@ -466,7 +466,7 @@ fun RoomScreen(
                 room == null && state.error != null -> ErrorBox(state.error!!, onRetry = { vm.load() }, modifier = Modifier.padding(pad))
                 room == null -> LoadingBox(Modifier.padding(pad))
                 else -> Column(Modifier.padding(pad).fillMaxSize()) {
-                    ContentTabs(listOf("4컷", "미디어", "대화"), tab, { tab = it }, dotAt = if (state.chatDot) 2 else null)
+                    ContentTabs(listOf("4컷", "대화"), tab, { tab = it }, dotAt = if (state.chatDot) 1 else null)
                     Box(Modifier.weight(1f)) {
                         when (tab) {
                             0 -> {
@@ -485,8 +485,6 @@ fun RoomScreen(
                                     leading = { Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp)) },
                                 )
                             }
-                            // 쇼츠 API는 명세 대기라 지금은 안내만 있는 임시 탭
-                            1 -> ShortsComingSoon("쇼츠는 아직 방에 올릴 수 없어요. 컨텐츠 › 미디어에서 볼 수 있어요.")
                             else -> RoomChat(
                                 room = room,
                                 messages = state.messages,
