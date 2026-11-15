@@ -150,7 +150,7 @@ object Routes {
     /** 글로 카드 만드는 중 */
     const val TEXT_MAKING = "text/{textId}"
     /** 친구 방(목업에서만) */
-    /** tab은 처음 열 탭(0 = 4컷, 2 = 대화). 없으면 4컷 */
+    /** tab은 처음 열 탭(0 = 4컷, 1 = 대화). 없으면 4컷 */
     const val ROOM = "room/{id}?tab={tab}"
     const val ROOM_CREATE = "rooms/create"
     /** 방장: 친구 초대 */
@@ -164,7 +164,7 @@ object Routes {
     fun textWrite(tab: Int = 0) = "text/write?tab=$tab"
     fun textMaking(id: Long) = "text/$id"
     fun room(id: Long) = "room/$id"
-    fun roomChat(id: Long) = "room/$id?tab=2"
+    fun roomChat(id: Long) = "room/$id?tab=1"
     fun roomInvite(id: Long) = "rooms/$id/invite"
     fun notice(id: Long) = "notice/$id"
 }
