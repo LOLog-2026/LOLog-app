@@ -76,6 +76,7 @@ object ErrorCodes {
     const val TEXT_NOT_FOUND = "TEXT_NOT_FOUND" // 404 없는 글, 내 글이 아님(카드를 지우면 글도 지워져요)
     const val BLOG_NOT_FOUND = "BLOG_NOT_FOUND" // 404 없는 블로그, 내 블로그가 아님
     const val BLOG_EXISTS = "BLOG_EXISTS"       // 409 같은 RSS 주소를 이미 연결함
+    const val CATEGORY_NOT_SELECTABLE = "CATEGORY_NOT_SELECTABLE" // 400 Medium·velog 블로그에 카테고리를 보냄(LOLog-api #105)
     const val NOT_READY = "NOT_READY"         // 앱 내부용: 서버에 아직 없는 기능(글 카드·블로그·내 목소리 만들기)
     const val NETWORK = "NETWORK" // 앱 내부용: 서버에 닿지 못함
     /** 옛 이름(11/5 제안). 명세는 INVALID_REQUEST라 같은 뜻으로 받아요 */

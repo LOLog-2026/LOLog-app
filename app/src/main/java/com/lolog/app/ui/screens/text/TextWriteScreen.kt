@@ -121,15 +121,15 @@ internal fun textErrorText(e: Throwable): String {
     ErrorCodes.INVALID_BLOG -> "블로그를 찾지 못했어요. 주소를 확인해 주세요"
     ErrorCodes.BLOG_EXISTS -> "이미 연결한 블로그예요"
     ErrorCodes.BLOG_NOT_FOUND -> "블로그를 찾지 못했어요. 이미 연결을 끊었을 수 있어요"
+    ErrorCodes.CATEGORY_NOT_SELECTABLE -> "이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요"
     ErrorCodes.TEXT_NOT_FOUND -> "글을 찾지 못했어요. 에피소드를 지웠을 수 있어요"
     ErrorCodes.INVALID_REQUEST -> when (ex.field) {
         "title" -> "제목을 써 주세요"
         "body" -> "본문을 써 주세요"
         "place" -> "장소는 ${TextLimits.PLACE}자까지 쓸 수 있어요"
         "situation" -> "상황이 너무 길어요"
-        // field가 categories 하나면 목록 전체 문제예요(3개 넘음, 카테고리가 없는 블로그. LOLog-api #85)
-        "categories" -> if (ex.message.contains("고를 수 없")) "이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요"
-        else "카테고리는 ${BLOG_CATEGORY_COUNT_MAX}개까지 골라요"
+        // field가 categories 하나면 목록 전체 문제예요(3개 넘음)
+        "categories" -> "카테고리는 ${BLOG_CATEGORY_COUNT_MAX}개까지 골라요"
         else -> if (ex.field?.startsWith("categories") == true) "카테고리는 1~${BLOG_CATEGORY_MAX}자, 같은 이름은 한 번만 고를 수 있어요"
         else "입력한 내용을 확인해 주세요"
     }
