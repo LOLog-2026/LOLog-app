@@ -142,7 +142,7 @@ internal class MockTexts(
         val c = check(url)
         val picked = checkCategories(categories)
         if (picked.isNotEmpty() && !blogPlatform(url).categorySelectable) {
-            throw LologException(ErrorCodes.INVALID_REQUEST, "이 블로그는 카테고리를 고를 수 없어요", "categories")
+            throw LologException(ErrorCodes.CATEGORY_NOT_SELECTABLE, "이 블로그는 카테고리를 고를 수 없어요", "categories")
         }
         if (c.feedUrl in feeds.values) throw LologException(ErrorCodes.BLOG_EXISTS, "이미 연결한 블로그예요")
         val title = if ("naver" in c.feedUrl) "민지의 여행일기" else "하루 기록"
