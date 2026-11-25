@@ -34,10 +34,13 @@ class BlogCategoryPickTest {
     }
 
     @Test
-    fun 서버가_카테고리_목록을_거절하면_까닭에_맞는_문구다() {
-        fun text(message: String, field: String) = textErrorText(LologException(ErrorCodes.INVALID_REQUEST, message, field))
-        assertEquals("카테고리는 3개까지 골라요", text("카테고리는 3개까지 골라요.", "categories"))
-        assertEquals("이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요", text("이 블로그는 카테고리를 고를 수 없어요.", "categories"))
-        assertEquals("카테고리는 1~30자, 같은 이름은 한 번만 고를 수 있어요", text("카테고리는 1~30자예요.", "categories[1]"))
+    fun 서버가_카테고리_목록을_거절하면_코드에_맞는_문구다() {
+        fun text(code: String, message: String, field: String) = textErrorText(LologException(code, message, field))
+        assertEquals("이 블로그는 카테고리를 고를 수 없어요. 고르지 않으면 전부 가져와요",
+            text(ErrorCodes.CATEGORY_NOT_SELECTABLE, "category not selectable", "categories"))
+        // message 글자와 상관없이 코드·field로 가르는지 보려고 엉뚱한 message를 넣어요
+        assertEquals("카테고리는 3개까지 골라요", text(ErrorCodes.INVALID_REQUEST, "이 블로그는 카테고리를 고를 수 없어요.", "categories"))
+        assertEquals("카테고리는 3개까지 골라요", text(ErrorCodes.INVALID_REQUEST, "too many", "categories"))
+        assertEquals("카테고리는 1~30자, 같은 이름은 한 번만 고를 수 있어요", text(ErrorCodes.INVALID_REQUEST, "카테고리는 1~30자예요.", "categories[1]"))
     }
 }
